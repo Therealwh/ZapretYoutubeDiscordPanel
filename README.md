@@ -12,6 +12,14 @@
 
 *RU / EN · Тёмная и светлая темы · Автообновление панели*
 
+<br>
+
+[![🌐 Официальный сайт](https://img.shields.io/badge/🌐_Официальный_сайт-zapretyoutubediscordpanel.top-7c6cff?style=for-the-badge&logo=googlechrome&logoColor=white)](https://zapretyoutubediscordpanel.top/)
+
+> ✨ **Загляните на [zapretyoutubediscordpanel.top](https://zapretyoutubediscordpanel.top/)** —
+> там скриншоты всех экранов панели, пошаговые инструкции, ответы на частые вопросы
+> и скачивание последней версии в один клик.
+
 </div>
 
 ---
