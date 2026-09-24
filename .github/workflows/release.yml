@@ -30,3 +30,13 @@ jobs:
         run: npx electron-builder --win --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Upload fixed-name latest aliases
+        shell: pwsh
+        run: |
+          $v = (Get-Content package.json | ConvertFrom-Json).version
+          Copy-Item "dist/YoutubeDiscordPanel Setup $v.exe" "dist/YoutubeDiscordPanel-Setup-latest.exe"
+          Copy-Item "dist/YoutubeDiscordPanel $v.exe" "dist/YoutubeDiscordPanel-latest.exe"
+          gh release upload "v$v" "dist/YoutubeDiscordPanel-Setup-latest.exe" "dist/YoutubeDiscordPanel-latest.exe" --clobber --repo ${{ github.repository }}
+        env:
+          GH_TOKEN: ${{ github.token }}
