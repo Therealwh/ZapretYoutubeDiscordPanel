@@ -1,0 +1,56 @@
+{
+  "name": "youtube-discord-panel",
+  "productName": "YoutubeDiscordPanel",
+  "version": "1.1.0",
+  "description": "Beautiful control panel for zapret-discord-youtube (RU/EN, dark/light themes)",
+  "author": "Therealwh",
+  "license": "MIT",
+  "main": "src/main/main.js",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Therealwh/ZapretYoutubeDiscordPanel.git"
+  },
+  "scripts": {
+    "start": "electron .",
+    "test": "node --test test/strategy.test.js test/security.test.js test/tester.test.js",
+    "dist": "electron-builder --win",
+    "dist:portable": "electron-builder --win portable"
+  },
+  "devDependencies": {
+    "electron": "^44.4.5",
+    "electron-builder": "^26.15.3"
+  },
+  "build": {
+    "appId": "com.ydp.zapretpanel",
+    "productName": "YoutubeDiscordPanel",
+    "directories": {
+      "output": "dist"
+    },
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "publish": {
+      "provider": "github",
+      "owner": "Therealwh",
+      "repo": "ZapretYoutubeDiscordPanel",
+      "releaseType": "release"
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "icon": "src/assets/icon.ico",
+      "requestedExecutionLevel": "requireAdministrator"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true
+    }
+  },
+  "dependencies": {
+    "electron-updater": "^6.3.9"
+  }
+}

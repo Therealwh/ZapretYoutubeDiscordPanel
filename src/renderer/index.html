@@ -1,0 +1,395 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;" />
+  <title>YoutubeDiscordPanel</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <div id="app">
+    <!-- Setup overlay (first run) -->
+    <section id="setup-view" class="setup hidden" aria-labelledby="setup-title">
+      <div class="setup-card">
+        <div class="setup-logo" aria-hidden="true"></div>
+        <h1 id="setup-title" data-i18n="setup_title">Добро пожаловать</h1>
+        <p class="muted" data-i18n="setup_intro"></p>
+        <div id="setup-found" class="setup-found hidden">
+          <span data-i18n="setup_found"></span> <strong id="setup-found-path"></strong>
+        </div>
+        <div id="setup-notfound" class="muted" data-i18n="setup_not_found"></div>
+        <div id="setup-running" class="setup-running hidden">
+          <strong data-i18n="setup_running_title"></strong>
+          <p id="setup-running-path" class="muted mono"></p>
+          <div class="setup-actions">
+            <button id="setup-running-use" class="btn btn-primary" data-i18n="setup_running_use"></button>
+            <button id="setup-running-stop" class="btn btn-secondary" data-i18n="setup_running_stop"></button>
+        </div>
+        </div>
+        <div class="setup-actions">
+          <button id="setup-use-existing" class="btn btn-primary hidden" data-i18n="setup_use_existing"></button>
+          <button id="setup-install-new" class="btn btn-secondary" data-i18n="setup_install_new"></button>
+        </div>
+        <div id="setup-install-form" class="setup-form hidden">
+          <label for="setup-path" data-i18n="setup_path_label"></label>
+          <div class="path-row">
+            <input id="setup-path" type="text" value="C:\zapret" spellcheck="false" autocomplete="off" />
+            <button id="setup-browse" class="btn btn-ghost" data-i18n="setup_choose_dir"></button>
+          </div>
+          <div id="setup-warn" class="setup-warn hidden"></div>
+          <div class="setup-actions">
+            <button id="setup-download" class="btn btn-primary" data-i18n="setup_download"></button>
+          </div>
+          <div id="setup-progress-wrap" class="hidden">
+            <div id="setup-stage" class="muted" role="status" aria-live="polite"></div>
+            <div class="progress"><div id="setup-progress" class="progress-bar"></div></div>
+          </div>
+          <div id="setup-security" class="setup-security hidden">
+            <strong data-i18n="setup_sec_title"></strong>
+            <ul id="setup-sec-list" class="sec-list"></ul>
+            <p id="setup-sec-verdict" class="sec-verdict"></p>
+          </div>
+        </div>
+        <div class="setup-note muted" data-i18n="setup_warn_av"></div>
+        <button id="setup-done" class="btn btn-primary hidden" data-i18n="setup_done"></button>
+      </div>
+    </section>
+
+    <!-- Main app -->
+    <main id="main-view" class="hidden">
+      <header class="titlebar">
+        <div class="titlebar-drag">
+          <span class="titlebar-name" data-i18n="appName"></span>
+        </div>
+        <div class="titlebar-controls">
+          <button id="theme-toggle" class="tb-btn tb-glyph theme-btn" aria-label="Toggle theme">&#xE706;</button>
+          <button id="lang-toggle" class="tb-btn lang-btn" aria-label="Toggle language">RU</button>
+          <button id="btn-min" class="tb-btn tb-glyph" aria-label="Minimize">&#xE921;</button>
+          <button id="btn-max" class="tb-btn tb-glyph" aria-label="Maximize">&#xE922;</button>
+          <button id="btn-close" class="tb-btn tb-close tb-glyph" aria-label="Close">&#xE8BB;</button>
+        </div>
+      </header>
+
+      <div class="layout">
+        <nav class="sidebar" aria-label="Main navigation">
+          <div class="side-logo" aria-hidden="true"></div>
+          <button class="nav-item active" data-page="dashboard"><span class="nav-ico" aria-hidden="true">&#xE7E8;</span><span data-i18n="nav_dashboard"></span></button>
+          <button class="nav-item" data-page="strategies"><span class="nav-ico" aria-hidden="true">&#xE8FD;</span><span data-i18n="nav_strategies"></span></button>
+          <button class="nav-item" data-page="filters"><span class="nav-ico" aria-hidden="true">&#xE71D;</span><span data-i18n="nav_filters"></span></button>
+          <button class="nav-item" data-page="lists"><span class="nav-ico" aria-hidden="true">&#xE8B7;</span><span data-i18n="nav_lists"></span></button>
+          <button class="nav-item" data-page="updates"><span class="nav-ico" aria-hidden="true">&#xE895;</span><span data-i18n="nav_updates"></span></button>
+          <button class="nav-item" data-page="diagnostics"><span class="nav-ico" aria-hidden="true">&#xE90F;</span><span data-i18n="nav_diagnostics"></span></button>
+          <button class="nav-item" data-page="settings"><span class="nav-ico" aria-hidden="true">&#xE713;</span><span data-i18n="nav_settings"></span></button>
+        </nav>
+
+        <section class="content">
+          <!-- banners -->
+          <div id="banner-active" class="banner banner-warn hidden" role="status" aria-live="polite">
+            <div class="banner-text">
+              <strong data-i18n="banner_active_title"></strong>
+              <span id="banner-active-text"></span>
+            </div>
+            <div class="banner-actions">
+              <button id="banner-disable" class="btn btn-danger btn-sm" data-i18n="banner_disable"></button>
+              <button id="banner-dismiss" class="btn btn-ghost btn-sm" data-i18n="banner_dismiss"></button>
+            </div>
+          </div>
+          <div id="banner-admin" class="banner banner-info hidden" role="status" aria-live="polite">
+            <div class="banner-text">
+              <strong data-i18n="banner_admin_title"></strong>
+              <span data-i18n="banner_admin_text"></span>
+            </div>
+            <div class="banner-actions">
+              <button id="banner-admin-fix" class="btn btn-primary btn-sm" data-i18n="banner_admin_fix"></button>
+            </div>
+          </div>
+
+          <!-- DASHBOARD -->
+          <div id="page-dashboard" class="page">
+            <div class="power-card card">
+              <div class="power-switch-wrap">
+                <button id="power-switch" class="power-switch" role="switch" aria-checked="false">
+                  <span class="power-knob"><span class="power-glyph" aria-hidden="true">&#xE7E8;</span></span>
+                </button>
+                <div class="power-info">
+                  <h2 data-i18n="dash_toggle"></h2>
+                  <span id="power-state" class="power-state"></span>
+                </div>
+              </div>
+              <div class="power-actions">
+                <button id="btn-restart" class="btn btn-secondary" data-i18n="dash_restart"></button>
+              </div>
+            </div>
+            <div class="grid-2">
+              <div class="card stat-card">
+                <h3 data-i18n="dash_strategy"></h3>
+                <p id="stat-strategy" class="stat-value"></p>
+              </div>
+              <div class="card stat-card">
+                <h3 data-i18n="dash_mode"></h3>
+                <p id="stat-mode" class="stat-value"></p>
+              </div>
+              <div class="card stat-card">
+                <h3 data-i18n="dash_svc_zapret"></h3>
+                <p id="stat-zapret" class="stat-value"></p>
+              </div>
+              <div class="card stat-card">
+                <h3 data-i18n="dash_svc_windivert"></h3>
+                <p id="stat-windivert" class="stat-value"></p>
+              </div>
+              <div class="card stat-card">
+                <h3 data-i18n="dash_proc_winws"></h3>
+                <p id="stat-winws" class="stat-value"></p>
+                <p id="stat-winws-path" class="muted mono stat-path"></p>
+              </div>
+            </div>
+          </div>
+
+          <!-- STRATEGIES -->
+          <div id="page-strategies" class="page hidden">
+            <div class="page-head">
+              <h2 data-i18n="strat_title"></h2>
+              <div class="btn-row">
+                <button id="btn-test-stop" class="btn btn-danger hidden" data-i18n="test_stop"></button>
+                <button id="btn-find-working" class="btn btn-primary" data-i18n="strat_find_working"></button>
+              </div>
+            </div>
+            <p class="muted" data-i18n="strat_intro"></p>
+            <p id="testing-note" class="note hidden" data-i18n="strat_testing_note"></p>
+            <div id="test-progress" class="hidden">
+              <div class="progress"><div id="test-progress-bar" class="progress-bar indeterminate"></div></div>
+            </div>
+            <div id="strategy-list" class="card-list"></div>
+          </div>
+
+          <!-- FILTERS -->
+          <div id="page-filters" class="page hidden">
+            <h2 data-i18n="filters_title"></h2>
+            <div class="card">
+              <div class="card-row">
+                <div>
+                  <h3 data-i18n="filters_game"></h3>
+                  <p class="muted" data-i18n="filters_game_hint"></p>
+                </div>
+                <div class="seg" role="radiogroup" aria-label="Game filter mode">
+                  <button class="seg-btn" data-gf="disabled" data-i18n="dash_off_btn"></button>
+                  <button class="seg-btn" data-gf="tcp">TCP</button>
+                  <button class="seg-btn" data-gf="udp">UDP</button>
+                  <button class="seg-btn" data-gf="all">TCP+UDP</button>
+                </div>
+              </div>
+              <div class="port-row">
+                <label>
+                  <span data-i18n="filters_ports_tcp"></span>
+                  <input id="gf-tcp" type="text" spellcheck="false" autocomplete="off" />
+                </label>
+                <label>
+                  <span data-i18n="filters_ports_udp"></span>
+                  <input id="gf-udp" type="text" spellcheck="false" autocomplete="off" />
+                </label>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-row">
+                <div>
+                  <h3 data-i18n="filters_ipset"></h3>
+                  <p class="muted" data-i18n="filters_ipset_hint"></p>
+                  <p id="ipset-backup-note" class="note hidden" data-i18n="filters_ipset_no_backup"></p>
+                </div>
+                <div class="seg" role="radiogroup" aria-label="IPSet filter mode">
+                  <button class="seg-btn" data-ipset="none" data-i18n="filters_ipset_none"></button>
+                  <button class="seg-btn" data-ipset="loaded" data-i18n="filters_ipset_loaded"></button>
+                  <button class="seg-btn" data-ipset="any" data-i18n="filters_ipset_any"></button>
+                </div>
+              </div>
+            </div>
+            <p class="muted" data-i18n="filters_restart_hint"></p>
+          </div>
+
+          <!-- LISTS -->
+          <div id="page-lists" class="page hidden">
+            <h2 data-i18n="lists_title"></h2>
+            <div class="tabs" role="tablist">
+              <button class="tab active" data-list="general" role="tab" data-i18n="lists_general"></button>
+              <button class="tab" data-list="exclude" role="tab" data-i18n="lists_exclude"></button>
+              <button class="tab" data-list="ipsetExclude" role="tab" data-i18n="lists_ipset_exclude"></button>
+              <button class="tab" data-list="ipsetAll" role="tab" data-i18n="lists_ipset_view"></button>
+            </div>
+            <p id="lists-hint" class="muted"></p>
+            <textarea id="list-editor" class="list-editor" spellcheck="false" rows="16"></textarea>
+            <div class="editor-actions">
+              <button id="list-save" class="btn btn-primary" data-i18n="lists_save"></button>
+            </div>
+          </div>
+
+          <!-- UPDATES -->
+          <div id="page-updates" class="page hidden">
+            <h2 data-i18n="updates_title"></h2>
+            <div class="card">
+              <div class="set-head">
+                <span class="set-ico tb-glyph" aria-hidden="true">&#xE777;</span>
+                <div><h3 data-i18n="updates_panel"></h3><p class="muted set-sub" data-i18n="updates_panel_hint"></p></div>
+              </div>
+              <div class="ver-tiles">
+                <div class="ver-tile">
+                  <span class="ver-label" data-i18n="panel_current"></span>
+                  <span id="panel-current" class="ver-value">—</span>
+                </div>
+                <div class="ver-arrow tb-glyph" aria-hidden="true">&#xE72A;</div>
+                <div class="ver-tile">
+                  <span class="ver-label" data-i18n="panel_latest"></span>
+                  <span id="panel-latest" class="ver-value">—</span>
+                </div>
+              </div>
+              <div id="panel-status" class="ver-status"></div>
+              <div id="panel-progress-wrap" class="hidden">
+                <div class="progress"><div id="panel-progress" class="progress-bar"></div></div>
+              </div>
+              <div class="btn-row">
+                <button id="btn-panel-check" class="btn btn-secondary" data-i18n="panel_check"></button>
+                <button id="btn-panel-download" class="btn btn-primary hidden" data-i18n="panel_download"></button>
+                <button id="btn-panel-install" class="btn btn-primary hidden" data-i18n="panel_install"></button>
+                <button id="btn-panel-open" class="btn btn-ghost" data-i18n="panel_open_release"></button>
+              </div>
+              <p id="panel-portable-note" class="muted set-sub hidden" data-i18n="panel_portable"></p>
+            </div>
+            <div class="card">
+              <div class="set-head">
+                <span class="set-ico tb-glyph" aria-hidden="true">&#xE895;</span>
+                <div><h3 data-i18n="updates_zapret_section"></h3></div>
+              </div>
+              <div class="ver-tiles">
+                <div class="ver-tile">
+                  <span class="ver-label" data-i18n="updates_version_local"></span>
+                  <span id="ver-local" class="ver-value">—</span>
+                </div>
+                <div class="ver-arrow tb-glyph" aria-hidden="true">&#xE72A;</div>
+                <div class="ver-tile">
+                  <span class="ver-label" data-i18n="updates_version_remote"></span>
+                  <span id="ver-remote" class="ver-value">—</span>
+                </div>
+              </div>
+              <div id="ver-status" class="ver-status"></div>
+              <div id="install-stage" class="muted install-stage hidden" role="status" aria-live="polite"></div>
+              <div class="btn-row">
+                <button id="btn-ver-check" class="btn btn-secondary" data-i18n="updates_check"></button>
+                <button id="btn-ver-install" class="btn btn-primary hidden" data-i18n="updates_install"></button>
+                <button id="btn-ver-open" class="btn btn-ghost hidden" data-i18n="updates_open_release"></button>
+              </div>
+              <div id="install-progress-wrap" class="hidden">
+                <div class="progress"><div id="install-progress" class="progress-bar"></div></div>
+              </div>
+            </div>
+            <div class="card">
+              <div class="set-head">
+                <span class="set-ico tb-glyph" aria-hidden="true">&#xE8B7;</span>
+                <div><h3 data-i18n="updates_ipset"></h3></div>
+              </div>
+              <div class="set-actions-row">
+                <p class="muted set-sub" data-i18n="filters_ipset_hint"></p>
+                <button id="btn-ipset-update" class="btn btn-secondary btn-sm" data-i18n="updates_ipset_btn"></button>
+              </div>
+            </div>
+            <div class="card">
+              <div class="set-head">
+                <span class="set-ico tb-glyph" aria-hidden="true">&#xE8F1;</span>
+                <div><h3 data-i18n="updates_hosts"></h3></div>
+              </div>
+              <div id="hosts-status" class="ver-status"></div>
+              <div class="btn-row">
+                <button id="btn-hosts-check" class="btn btn-secondary" data-i18n="updates_hosts_check"></button>
+                <button id="btn-hosts-auto" class="btn btn-primary hidden" data-i18n="updates_hosts_auto"></button>
+                <button id="btn-hosts-manual" class="btn btn-ghost hidden" data-i18n="updates_hosts_manual"></button>
+              </div>
+            </div>
+          </div>
+
+          <!-- DIAGNOSTICS -->
+          <div id="page-diagnostics" class="page hidden">
+            <div class="page-head">
+              <h2 data-i18n="diag_title"></h2>
+              <div class="btn-row">
+                <button id="btn-diag-run" class="btn btn-primary" data-i18n="diag_run"></button>
+                <button id="btn-discord-cache" class="btn btn-secondary" data-i18n="diag_discord_cache"></button>
+              </div>
+            </div>
+            <div id="diag-list" class="card-list"></div>
+          </div>
+
+          <!-- SETTINGS -->
+          <div id="page-settings" class="page hidden">
+            <h2 data-i18n="settings_title"></h2>
+            <div class="set-grid">
+              <div class="card set-card">
+                <div class="set-head">
+                  <span class="set-ico tb-glyph" aria-hidden="true">&#xE7F3;</span>
+                  <div><h3 data-i18n="settings_lang"></h3></div>
+                </div>
+                <div class="seg" role="radiogroup" aria-label="Language">
+                  <button class="seg-btn" data-lang="ru">RU</button>
+                  <button class="seg-btn" data-lang="en">EN</button>
+                </div>
+              </div>
+              <div class="card set-card">
+                <div class="set-head">
+                  <span class="set-ico tb-glyph" aria-hidden="true">&#xE706;</span>
+                  <div><h3 data-i18n="settings_theme"></h3></div>
+                </div>
+                <div class="seg" role="radiogroup" aria-label="Theme">
+                  <button class="seg-btn" data-theme="dark" data-i18n="settings_theme_dark"></button>
+                  <button class="seg-btn" data-theme="light" data-i18n="settings_theme_light"></button>
+                </div>
+              </div>
+              <div class="card set-card set-wide">
+                <div class="set-head">
+                  <span class="set-ico tb-glyph" aria-hidden="true">&#xE7E8;</span>
+                  <div><h3 data-i18n="settings_behavior"></h3></div>
+                </div>
+                <div class="switch-list">
+                  <label class="switch-row" for="opt-close-tray">
+                    <span data-i18n="settings_close_to_tray"></span>
+                    <span class="sw-ctl"><input id="opt-close-tray" type="checkbox" /><span class="toggle" aria-hidden="true"></span></span>
+                  </label>
+                  <label class="switch-row" for="opt-autostart">
+                    <span data-i18n="settings_autostart"></span>
+                    <span class="sw-ctl"><input id="opt-autostart" type="checkbox" /><span class="toggle" aria-hidden="true"></span></span>
+                  </label>
+                  <label class="switch-row" for="opt-start-hidden">
+                    <span data-i18n="settings_start_hidden"></span>
+                    <span class="sw-ctl"><input id="opt-start-hidden" type="checkbox" /><span class="toggle" aria-hidden="true"></span></span>
+                  </label>
+                </div>
+              </div>
+              <div class="card set-card set-wide">
+                <div class="set-head">
+                  <span class="set-ico tb-glyph" aria-hidden="true">&#xE8B7;</span>
+                  <div><h3 data-i18n="settings_root"></h3><p id="set-root-path" class="muted mono set-sub"></p></div>
+                </div>
+                <div class="set-actions-row">
+                  <button id="btn-root-change" class="btn btn-secondary btn-sm" data-i18n="settings_root_change"></button>
+                  <div class="set-admin-row">
+                    <span class="muted set-sub" data-i18n="settings_admin_status"></span>
+                    <span id="set-admin" class="chip"></span>
+                  </div>
+                </div>
+              </div>
+              <div class="card set-card set-wide">
+                <div class="set-head">
+                  <span class="set-ico tb-glyph" aria-hidden="true">&#xE72E;</span>
+                  <div><h3 data-i18n="settings_vt_key"></h3><p class="muted set-sub" data-i18n="settings_vt_key_hint"></p></div>
+                </div>
+                <input id="opt-vt-key" type="text" spellcheck="false" autocomplete="off" placeholder="40 hex chars" />
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <div id="toasts" class="toasts" aria-live="polite"></div>
+  </div>
+  <script src="i18n.js"></script>
+  <script src="renderer.js"></script>
+</body>
+</html>
