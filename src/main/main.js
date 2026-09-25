@@ -211,6 +211,12 @@ function registerIpc() {
   ipcMain.handle('zapret:getStatus', async () => {
     const root = rootDir();
     const st = await status.getStatus(root);
+    // In process mode there is no registry hint — show the remembered name
+    // of the strategy that was last launched as a process.
+    if (st.activeMode === 'process' && !st.serviceStrategy) {
+      const procName = config.get('processStrategyName', null);
+      if (procName) st.serviceStrategy = procName;
+    }
     const banner = status.deriveBanner(st);
     setTrayStatus(st.activeMode !== 'off');
     return { status: st, banner };
@@ -230,6 +236,10 @@ function registerIpc() {
   ipcMain.handle('zapret:launchProcess', (_e, strategyFile) => {
     const root = rootDir();
     if (!root) return { ok: false, reason: 'no_root' };
+    // Remember which strategy runs as a process: the registry hint is only
+    // written for service installs, so the dashboard would otherwise show
+    // "no strategy" in process mode.
+    config.set('processStrategyName', path.basename(strategyFile, '.bat'));
     return service.launchStrategyProcess(root, strategyFile);
   });
 
@@ -330,6 +340,7 @@ function registerIpc() {
         await service.killWinws();
         res = await service.launchStrategyProcess(root, r.winnerFile);
       }
+      config.set('processStrategyName', r.winner);
       return { ok: !!res.ok, strategy: r.winner, mode: preferService ? 'service' : 'process', reason: res.reason };
     } catch (e) {
       return { ok: false, reason: e.code || e.message || 'error' };
