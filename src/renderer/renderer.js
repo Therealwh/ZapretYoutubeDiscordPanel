@@ -229,7 +229,14 @@ function bindSetup() {
       validateSetupPath(dir);
     }
   });
-  $('#setup-use-existing').addEventListener('click', () => enterApp());
+  $('#setup-use-existing').addEventListener('click', () => {
+    // Existing install found: the panel only works with a fresh zapret, so
+    // "use existing" actually means "update it to the latest version" —
+    // the install flow stops the running bypass and swaps the folder.
+    $('#setup-install-form').classList.remove('hidden');
+    $('#setup-install-form').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    validateSetupPath($('#setup-path').value);
+  });
   $('#setup-download').addEventListener('click', async () => {
     let dir = $('#setup-path').value.trim().replace(/[\\/]+$/, '');
     if (!/^[a-zA-Z]:\\.+/i.test(dir)) {

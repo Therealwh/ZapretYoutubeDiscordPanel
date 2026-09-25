@@ -519,3 +519,5 @@ input[type="text"]:focus, textarea:focus { outline: none; border-color: var(--ac
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 6px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--text-dim); }
 ::-webkit-scrollbar-track { background: transparent; }
+
+.strat-legend { font-size: 12.5px; line-height: 1.55; max-width: 720px; margin-bottom: 14px; }
