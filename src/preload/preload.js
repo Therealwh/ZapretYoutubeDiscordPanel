@@ -44,6 +44,7 @@ const api = {
 
   runTests: () => ipcRenderer.invoke('tester:run'),
   abortTests: () => ipcRenderer.invoke('tester:abort'),
+  autoConnect: () => ipcRenderer.invoke('autoconnect:run'),
 
   updaterState: () => ipcRenderer.invoke('updater:state'),
   updaterCheck: () => ipcRenderer.invoke('updater:check'),

@@ -149,7 +149,7 @@ function launchStrategyProcess(rootDir, strategyFile) {
   const argsStr = args.join(' ');
   const q = (s) => s.replace(/'/g, "''");
   const ps = [
-    `$p = Start-Process -FilePath '${q(winws)}' -ArgumentList '${q(argsStr)}' -WorkingDirectory '${q(bin)}' -WindowStyle Minimized${isAdminSync() ? '' : ' -Verb RunAs'} -PassThru`,
+    `$p = Start-Process -FilePath '${q(winws)}' -ArgumentList '${q(argsStr)}' -WorkingDirectory '${q(bin)}' -WindowStyle Hidden${isAdminSync() ? '' : ' -Verb RunAs'} -PassThru`,
     'if ($p) { exit 0 } else { exit 1 }',
   ].join('; ');
   return new Promise((resolve) => {

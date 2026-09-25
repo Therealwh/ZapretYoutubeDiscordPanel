@@ -942,6 +942,41 @@ function bindSettings() {
 }
 
 // ---------- power ----------
+let autoConnecting = false;
+
+function bindAutoConnect() {
+  const btn = $('#btn-auto');
+  const note = $('#auto-note');
+  btn.addEventListener('click', async () => {
+    if (autoConnecting) return;
+    if (!appInfo.admin) {
+      await window.api.setConfig({ pendingAction: 'run-tests' });
+      window.api.restartElevated();
+      toast(t('banner_admin_fix'), 'ok');
+      return;
+    }
+    autoConnecting = true;
+    btn.disabled = true;
+    note.classList.remove('hidden');
+    note.textContent = t('autoconnect_running');
+    const off = window.api.on('tester:event', (ev) => {
+      if (ev.type === 'strategy-start') note.textContent = `${t('autoconnect_running')} ${ev.name} (${(ev.index || 0) + 1}/${ev.total || '…'})`;
+      else if (ev.type === 'winner-found') note.textContent = t('autoconnect_found', { name: ev.name });
+    });
+    const r = await window.api.autoConnect();
+    off?.();
+    autoConnecting = false;
+    btn.disabled = false;
+    note.classList.add('hidden');
+    if (r && r.ok) toast(t('autoconnect_done', { name: r.strategy }), 'ok');
+    else if (r && r.reason === 'none_works') toast(t('autoconnect_none'), 'err');
+    else if (r && r.reason === 'admin_required') toast(t('test_need_admin'), 'err');
+    else if (r && r.reason === 'no_root') toast(t('toast_need_root'), 'err');
+    else if (r) actionToast(r);
+    refreshStatus();
+  });
+}
+
 function bindPower() {
   // One-UAC flow: save the intended action, restart elevated, auto-run it.
   const ensureAdminThen = (pendingAction) => {
@@ -1045,6 +1080,7 @@ function bindChrome() {
   bindPanelUpdater();
   bindDiagnostics();
   bindSettings();
+  bindAutoConnect();
 
   if (!cfg.zapretRoot) {
     await setupInit();

@@ -311,6 +311,30 @@ function registerIpc() {
       .then((r) => ({ ok: true, ...r }))
       .catch((e) => ({ ok: false, reason: e.code || 'error', message: e.message }));
   });
+
+  // One-click "connect working bypass": test strategies in order and connect
+  // the first one where Discord AND YouTube work.
+  ipcMain.handle('autoconnect:run', async () => {
+    const root = rootDir();
+    if (!root) return { ok: false, reason: 'no_root' };
+    if (!isAdminSync()) return { ok: false, reason: 'admin_required' };
+    try {
+      const r = await tester.runStrategyTests(root, (ev) => emitToWindow('tester:event', ev), { stopOnFirst: true });
+      if (!r.winner || !r.winnerFile) return { ok: false, reason: 'none_works' };
+      config.set('lastStrategyFile', r.winnerFile);
+      const preferService = config.get('preferServiceMode', true);
+      let res;
+      if (preferService) {
+        res = await service.installStrategyAsService(root, r.winnerFile);
+      } else {
+        await service.killWinws();
+        res = await service.launchStrategyProcess(root, r.winnerFile);
+      }
+      return { ok: !!res.ok, strategy: r.winner, mode: preferService ? 'service' : 'process', reason: res.reason };
+    } catch (e) {
+      return { ok: false, reason: e.code || e.message || 'error' };
+    }
+  });
   ipcMain.handle('tester:abort', () => {
     // Flag first: the loop checks it between steps, then kill winws.
     tester.abort.flagged = true;

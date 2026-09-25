@@ -1,4 +1,4 @@
-'use strict';
+﻿'use strict';
 // Strategy tester — port of utils/test zapret.ps1 (standard mode):
 // for each general*.bat: stop winws, start strategy, wait for winws.exe,
 // run parallel curl checks (HTTP/1.1, TLS1.2, TLS1.3) against targets.txt
@@ -265,7 +265,7 @@ function groupStats(targetResults) {
 // Abort flag shared with the IPC layer so "Stop" actually interrupts the loop.
 const abort = { flagged: false };
 
-async function runStrategyTests(rootDir, onEvent, { timeoutSec = 4 } = {}) {
+async function runStrategyTests(rootDir, onEvent, { timeoutSec = 4, stopOnFirst = false } = {}) {
   if (!isAdminSync()) {
     const err = new Error('admin_required');
     err.code = 'admin_required';
@@ -275,6 +275,7 @@ async function runStrategyTests(rootDir, onEvent, { timeoutSec = 4 } = {}) {
   const targets = loadTargets(rootDir);
   const targetList = Object.entries(targets);
   const results = [];
+  let winnerFile = null;
   abort.flagged = false;
   await killWinwsAll();
 
@@ -338,24 +339,36 @@ async function runStrategyTests(rootDir, onEvent, { timeoutSec = 4 } = {}) {
     const groups = groupStats(targetResults);
     results.push({ name: strat.name, file: strat.file, failed: false, score, groups, targets: targetResults });
     onEvent?.({ type: 'strategy-done', name: strat.name, score, groups });
+
+    // stopOnFirst: found a strategy where Discord AND YouTube work —
+    // keep it as the winner and stop searching immediately.
+    if (stopOnFirst && groups.discord.works && groups.youtube.state === 'ok') {
+      winnerFile = strat.file;
+      onEvent?.({ type: 'winner-found', name: strat.name, file: strat.file });
+      break;
+    }
   }
 
   if (abort.flagged) onEvent?.({ type: 'aborted' });
 
-  // Winner: max ok, tiebreak pingOk
-  const okResults = results.filter((r) => !r.failed);
+  // Winner: explicit stopOnFirst match, otherwise max ok with ping tiebreak
   let winner = null;
-  for (const r of okResults) {
-    if (
-      !winner ||
-      r.score.ok > winner.score.ok ||
-      (r.score.ok === winner.score.ok && r.score.pingOk > winner.score.pingOk)
-    ) {
-      winner = r;
+  if (winnerFile) {
+    winner = results.find((r) => r.file === winnerFile);
+  } else {
+    const okResults = results.filter((r) => !r.failed);
+    for (const r of okResults) {
+      if (
+        !winner ||
+        r.score.ok > winner.score.ok ||
+        (r.score.ok === winner.score.ok && r.score.pingOk > winner.score.pingOk)
+      ) {
+        winner = r;
+      }
     }
   }
   onEvent?.({ type: 'complete', winner: winner ? winner.name : null, results: results.map((r) => ({ name: r.name, failed: r.failed, score: r.score })) });
-  return { results, winner: winner ? winner.name : null, aborted: abort.flagged };
+  return { results, winner: winner ? winner.name : null, winnerFile: winner ? winner.file : null, aborted: abort.flagged };
 }
 
 module.exports = { runStrategyTests, loadTargets, scoreResults, groupStats, DEFAULT_TARGETS, abort };
