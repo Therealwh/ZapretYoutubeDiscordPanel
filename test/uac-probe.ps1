@@ -12,7 +12,7 @@ $f = Get-Item $exe
 $s = [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes($exe))
 $i = $s.IndexOf('requestedExecutionLevel')
 if ($i -ge 0) { "InstalledManifest: " + ($s.Substring($i, 80) -replace '[^\x20-\x7e]', '.') } else { "InstalledManifest: NOT FOUND (default asInvoker)" }
-$d = 'C:\Zapret_panel\YoutubeDiscordPanel\dist\win-unpacked\YoutubeDiscordPanel.exe'
+$d = Join-Path (Split-Path $PSScriptRoot -Parent) 'dist\win-unpacked\YoutubeDiscordPanel.exe'
 $df = Get-Item $d
 "Dist: $($df.LastWriteTime) / $($df.Length) bytes"
 $s2 = [Text.Encoding]::ASCII.GetString([IO.File]::ReadAllBytes($d))
