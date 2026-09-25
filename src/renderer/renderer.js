@@ -948,6 +948,40 @@ function bindSettings() {
   });
 }
 
+// ---------- update banner (panel + zapret, visible on every page) ----------
+let availPanel = null;
+let availZapret = null;
+function refreshUpdateBanner() {
+  const el = $('#banner-update');
+  if (!el) return;
+  const key = `${availPanel || ''}|${availZapret || ''}`;
+  let dismissed = '';
+  try { dismissed = sessionStorage.getItem('ydp-update-banner') || ''; } catch {}
+  if ((!availPanel && !availZapret) || dismissed === key) {
+    el.classList.add('hidden');
+    return;
+  }
+  const parts = [];
+  if (availPanel) parts.push(t('banner_update_panel', { version: availPanel }));
+  if (availZapret) parts.push(t('banner_update_zapret', { version: availZapret }));
+  $('#banner-update-text').textContent = parts.join(' · ');
+  el.classList.remove('hidden');
+}
+
+function bindUpdateBanner() {
+  $('#banner-update-go').addEventListener('click', () => showPage('updates'));
+  $('#banner-update-hide').addEventListener('click', () => {
+    try { sessionStorage.setItem('ydp-update-banner', `${availPanel || ''}|${availZapret || ''}`); } catch {}
+    $('#banner-update').classList.add('hidden');
+  });
+  window.api.on('zapret:update', (ev) => {
+    if (ev && ev.remote) { availZapret = ev.remote; refreshUpdateBanner(); }
+  });
+  window.api.on('updater:event', (ev) => {
+    if (ev && ev.type === 'available' && ev.version) { availPanel = ev.version; refreshUpdateBanner(); }
+  });
+}
+
 // ---------- power ----------
 let autoConnecting = false;
 
@@ -1085,9 +1119,18 @@ function bindChrome() {
   bindLists();
   bindUpdates();
   bindPanelUpdater();
+  bindUpdateBanner();
   bindDiagnostics();
   bindSettings();
   bindAutoConnect();
+  // The startup update check in main may have finished before we attached —
+  // pick up its result and light the banner if a panel update is waiting.
+  window.api.updaterState().then((st) => {
+    if (st && st.status === 'available' && st.version) {
+      availPanel = st.version;
+      refreshUpdateBanner();
+    }
+  }).catch(() => {});
 
   if (!cfg.zapretRoot) {
     await setupInit();

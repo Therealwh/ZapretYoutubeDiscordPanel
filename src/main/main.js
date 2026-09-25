@@ -401,6 +401,13 @@ app.whenReady().then(() => {
   // (autoDownload is off — the user decides whether to fetch the update).
   panelUpdater.init((channel, payload) => emitToWindow(channel, payload));
   panelUpdater.check().catch(() => {});
+  // zapret update check at startup — notify the renderer if a newer release exists.
+  setTimeout(async () => {
+    try {
+      const r = await updates.checkVersion(rootDir());
+      if (r && r.ok && r.upToDate === false && r.remote) emitToWindow('zapret:update', { remote: r.remote });
+    } catch { /* offline — silent */ }
+  }, 6000);
   const startHidden = process.argv.includes('--hidden') || config.get('startHidden', false);
   createWindow(startHidden);
   setTimeout(runPendingAction, 2000);

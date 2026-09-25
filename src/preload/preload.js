@@ -56,7 +56,7 @@ const api = {
   windowAction: (a) => ipcRenderer.invoke('app:windowAction', a),
 
   on: (channel, cb) => {
-    const allowed = ['tester:event', 'install:progress', 'install:stage', 'updater:event'];
+    const allowed = ['tester:event', 'install:progress', 'install:stage', 'updater:event', 'zapret:update'];
     if (allowed.includes(channel)) {
       const listener = (_e, payload) => cb(payload);
       ipcRenderer.on(channel, listener);

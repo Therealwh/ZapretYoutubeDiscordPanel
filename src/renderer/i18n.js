@@ -43,6 +43,10 @@ const DICT = {
     banner_admin_title: 'Панель запущена без прав администратора',
     banner_admin_text: 'Для установки службы и запуска winws нужны права администратора.',
     banner_admin_fix: 'Перезапустить с UAC',
+    banner_update_title: 'Доступно обновление',
+    banner_update_panel: 'Новая версия панели: {version}',
+    banner_update_zapret: 'Новая версия zapret: {version}',
+    banner_update_open: 'Открыть обновления',
 
     setup_title: 'Добро пожаловать',
     setup_intro: 'YoutubeDiscordPanel управляет утилитой zapret-discord-youtube. Сначала нужно установить её на ПК.',
@@ -283,6 +287,10 @@ const DICT = {
     banner_admin_title: 'Panel is running without administrator rights',
     banner_admin_text: 'Admin rights are required to install the service and run winws.',
     banner_admin_fix: 'Restart with UAC',
+    banner_update_title: 'Update available',
+    banner_update_panel: 'New panel version: {version}',
+    banner_update_zapret: 'New zapret version: {version}',
+    banner_update_open: 'Open updates',
 
     setup_title: 'Welcome',
     setup_intro: 'YoutubeDiscordPanel controls the zapret-discord-youtube utility. First, install it on your PC.',

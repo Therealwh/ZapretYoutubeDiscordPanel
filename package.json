@@ -1,7 +1,7 @@
 {
   "name": "youtube-discord-panel",
   "productName": "YoutubeDiscordPanel",
-  "version": "1.2.2",
+  "version": "1.2.3",
   "description": "Beautiful control panel for zapret-discord-youtube (RU/EN, dark/light themes)",
   "author": "Therealwh",
   "license": "MIT",
