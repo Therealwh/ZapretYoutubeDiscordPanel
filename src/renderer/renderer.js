@@ -1009,7 +1009,9 @@ function bindAutoConnect() {
     autoConnecting = false;
     btn.disabled = false;
     note.classList.add('hidden');
-    if (r && r.ok) toast(t('autoconnect_done', { name: r.strategy }), 'ok');
+    if (r && r.ok && r.already) toast(t('autoconnect_already', { name: r.strategy }), 'ok');
+    else if (r && r.ok && r.fallback) toast(t('autoconnect_keep', { name: r.strategy }), 'warn');
+    else if (r && r.ok) toast(t('autoconnect_done', { name: r.strategy }), 'ok');
     else if (r && r.reason === 'none_works') toast(t('autoconnect_none'), 'err');
     else if (r && r.reason === 'admin_required') toast(t('test_need_admin'), 'err');
     else if (r && r.reason === 'no_root') toast(t('toast_need_root'), 'err');

@@ -26,69 +26,6 @@ const DEFAULT_TARGETS = {
   CloudflareDNS1111: 'PING:1.1.1.1',
 };
 
-// YouTube playback check: the ISP throttles *.googlevideo.com instead of
-// blocking it, so reachability tells nothing. We resolve a REAL video CDN
-// URL via the innertube player API (like the YouTube player itself) and
-// measure download throughput — this is what the user actually feels.
-// Public InnerTube web-client key (shipped inside youtube.com's own JS to
-// every visitor — not a private credential). Split to keep secret scanners
-// from raising noise about a well-known public identifier.
-const YT_INNERTUBE_KEY = Buffer.from('QUl6YVN5QU9fRkoyU2xxVThRNFNURUhMR0NpbHdfWTlfMTFxY1c4', 'base64').toString('utf8');
-const YT_INNERTUBE_URL = 'https://www.youtube.com/youtubei/v1/player?key=' + YT_INNERTUBE_KEY;
-const YT_INNERTUBE_BODY = JSON.stringify({
-  context: { client: { clientName: 'ANDROID', clientVersion: '19.09.37', androidSdkVersion: 30, hl: 'en' } },
-  videoId: 'dQw4w9WgXcQ',
-  contentCheckOk: true,
-  racyCheckOk: true,
-});
-const SPEED_RANGE = '0-2097151'; // download up to 2 MB per probe
-// Throughput floor for "YouTube works": a throttled stream usually sits at
-// ~64–128 KB/s (enough for audio, unbearable for video). 512 KB/s ≈ 4 Mbit/s
-// means real video playback works.
-const MIN_YT_BYTES_PER_SEC = 512 * 1024;
-
-function innertubePlayer() {
-  const args = [
-    '-s', '-m', '9', '--http1.1',
-    '-H', 'Content-Type: application/json',
-    '-H', 'User-Agent: com.google.android.youtube/19.09.37 (Linux; U; Android 11) gzip',
-    '--data', YT_INNERTUBE_BODY,
-    YT_INNERTUBE_URL,
-  ];
-  return run('curl.exe', args, { timeout: 12000 }).then(({ code, stdout }) => {
-    if (code !== 0 || !stdout) return null;
-    try {
-      const j = JSON.parse(stdout);
-      const sd = j.streamingData || {};
-      const all = [...(sd.formats || []), ...(sd.adaptiveFormats || [])].filter((x) => x && x.url);
-      if (!all.length) return null;
-      const pick = all.find((x) => x.itag === 18) || all.find((x) => x.itag === 22) || all[0];
-      return { url: pick.url, host: new URL(pick.url).hostname };
-    } catch {
-      return null;
-    }
-  });
-}
-
-// Download a fixed range and return bytes/sec (curl computes it over the
-// actual transfer window; capped by --max-time).
-function speedProbe(url, maxSec = 12) {
-  const args = [
-    '-s', '-o', 'NUL', '-L', '--max-time', String(maxSec),
-    '-r', SPEED_RANGE,
-    '-w', '%{http_code} %{speed_download}',
-    url,
-  ];
-  return run('curl.exe', args, { timeout: (maxSec + 3) * 1000 }).then(({ code, stdout }) => {
-    const m = String(stdout).trim().match(/^(\d{3})\s+([\d.]+)$/);
-    if (!m) return { verdict: 'fail', bytesPerSec: 0, http: 0 };
-    const http = Number(m[1]);
-    const bytesPerSec = Math.round(Number(m[2]) || 0);
-    if (http === 200 || http === 206) return { verdict: 'ok', bytesPerSec, http };
-    return { verdict: 'fail', bytesPerSec, http };
-  });
-}
-
 function loadTargets(rootDir) {
   const file = path.join(rootDir, 'utils', 'targets.txt');
   try {
@@ -218,27 +155,12 @@ function scoreResults(targetResults) {
 
 // Per-service breakdown for verdicts. A connectivity group "works" when at
 // least one of its targets passed (DPI block resets kill all probes).
-// YouTube is special: the ISP throttles it instead of blocking, so when a
-// throughput measurement exists it is decisive. When the measurement is
-// UNAVAILABLE (CDN URL could not be resolved — innertube blocked/rate-limited),
-// we fall back to reachability probes instead of reporting "not working" for
-// a YouTube that is actually reachable.
-// groups.youtube.state: 'ok' | 'throttled' | 'dead'
+// Reachability-only, exactly like the official zapret tester: groups.youtube
+// state is 'ok' when any YouTube target is reachable, 'dead' otherwise.
 function groupStats(targetResults) {
   const mk = () => ({ okTargets: 0, total: 0, probesOk: 0, probesAll: 0 });
   const groups = { discord: mk(), youtube: mk(), other: mk() };
-  let speedEntry = null;
   for (const t of targetResults) {
-    if (t.kind === 'speed') {
-      speedEntry = t;
-      groups.youtube.total++;
-      groups.youtube.probesAll++;
-      if (t.result && t.result.verdict === 'ok') {
-        groups.youtube.okTargets++;
-        groups.youtube.probesOk++;
-      }
-      continue;
-    }
     if (t.kind !== 'url') continue;
     const g = /^discord/i.test(t.name) ? groups.discord : /^youtube/i.test(t.name) ? groups.youtube : groups.other;
     g.total++;
@@ -248,17 +170,10 @@ function groupStats(targetResults) {
     if (okProbes > 0) g.okTargets++;
   }
   groups.discord.works = groups.discord.okTargets > 0;
-  const sv = speedEntry && speedEntry.result ? speedEntry.result.verdict : null;
-  groups.youtube.state =
-    sv === 'ok' ? 'ok'
-      : sv === 'slow' ? 'throttled'
-        : sv === 'fail' ? 'dead'
-          : groups.youtube.okTargets > 0 ? 'ok' /* no/failed measurement -> reachability */
-            : 'dead';
+  // Official-zapret style verdict: reachability decides. The optional speed
+  // measurement is informational only and never vetoes a working strategy.
+  groups.youtube.state = groups.youtube.okTargets > 0 ? 'ok' : 'dead';
   groups.youtube.works = groups.youtube.state === 'ok';
-  groups.youtube.speed = speedEntry && speedEntry.result
-    ? { bytesPerSec: speedEntry.result.bytesPerSec, verdict: speedEntry.result.verdict, host: speedEntry.result.host || null }
-    : null;
   return groups;
 }
 
@@ -310,43 +225,20 @@ async function runStrategyTests(rootDir, onEvent, { timeoutSec = 4, stopOnFirst 
       }
     }
 
-    // YouTube throughput check with a REAL googlevideo CDN URL. Streamed
-    // while winws is still active so the strategy's treatment applies.
-    const ytCheck = { kind: 'speed', name: 'YouTubeVideoSpeed', result: null };
-    if (!abort.flagged) {
-      onEvent?.({ type: 'stage', strategy: strat.name, stage: 'yt_resolve' });
-      const vid = await innertubePlayer();
-      if (vid && vid.url) {
-        onEvent?.({ type: 'stage', strategy: strat.name, stage: 'yt_speed' });
-        const sp = await speedProbe(vid.url, 10);
-        const bypassOn = await baselineState();
-        ytCheck.result = {
-          bytesPerSec: sp.bytesPerSec,
-          http: sp.http,
-          bypassOn,
-          verdict: sp.verdict === 'ok' && sp.bytesPerSec >= MIN_YT_BYTES_PER_SEC ? 'ok' : sp.verdict === 'ok' ? 'slow' : 'fail',
-          host: vid.host,
-        };
-      } else {
-        ytCheck.result = { verdict: 'unavailable', bytesPerSec: 0, http: 0, bypassOn: await baselineState() };
-      }
-      targetResults.push(ytCheck);
-      onEvent?.({ type: 'target', strategy: strat.name, target: ytCheck.name, result: ytCheck.result });
-    }
-
-    await killWinwsAll();
     const score = scoreResults(targetResults);
     const groups = groupStats(targetResults);
     results.push({ name: strat.name, file: strat.file, failed: false, score, groups, targets: targetResults });
     onEvent?.({ type: 'strategy-done', name: strat.name, score, groups });
 
-    // stopOnFirst: found a strategy where Discord AND YouTube work —
-    // keep it as the winner and stop searching immediately.
+    // stopOnFirst: found a strategy where Discord AND YouTube are reachable —
+    // keep it as the winner, LEAVE IT RUNNING and stop searching immediately.
     if (stopOnFirst && groups.discord.works && groups.youtube.state === 'ok') {
       winnerFile = strat.file;
       onEvent?.({ type: 'winner-found', name: strat.name, file: strat.file });
       break;
     }
+
+    await killWinwsAll();
   }
 
   if (abort.flagged) onEvent?.({ type: 'aborted' });
@@ -371,4 +263,21 @@ async function runStrategyTests(rootDir, onEvent, { timeoutSec = 4, stopOnFirst 
   return { results, winner: winner ? winner.name : null, winnerFile: winner ? winner.file : null, aborted: abort.flagged };
 }
 
-module.exports = { runStrategyTests, loadTargets, scoreResults, groupStats, DEFAULT_TARGETS, abort };
+// Probe reachability WITHOUT touching the running bypass (used to verify the
+// currently connected strategy before restarting anything).
+async function checkReachability(rootDir, onEvent) {
+  const targets = loadTargets(rootDir);
+  const targetList = Object.entries(targets);
+  const targetResults = [];
+  for (let j = 0; j < targetList.length; j += 4) {
+    const batch = targetList.slice(j, j + 4);
+    const batchResults = await Promise.all(batch.map(([name, value]) => probeTarget(name, value, 4)));
+    for (const tr of batchResults) {
+      targetResults.push(tr);
+      onEvent?.({ type: 'target', target: tr.name, result: tr.kind === 'ping' ? tr.result : tr.results });
+    }
+  }
+  return { groups: groupStats(targetResults), targets: targetResults };
+}
+
+module.exports = { runStrategyTests, checkReachability, loadTargets, scoreResults, groupStats, DEFAULT_TARGETS, abort };

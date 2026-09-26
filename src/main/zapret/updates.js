@@ -390,20 +390,24 @@ async function installZapretInner(targetDir, onProgress, onStage) {
   }
 
   stage('stop');
-  // Running winws / services keep file handles inside the root folder and
-  // break the swap ("files in use") — stop the bypass first (best effort).
+  // Full stop + unregister: running winws / registered services keep handles
+  // inside the root folder and break the swap ("files in use").
   try {
     await service.killWinws();
     await service.stopService();
     await service.stopDrivers();
-    await new Promise((r) => setTimeout(r, 1200));
-  } catch {
-    /* best effort */
-  }
+    // drop the zapret service registration entirely (recreated on next enable)
+    await service.removeServices();
+  } catch { /* best effort */ }
+  try {
+    await service.killWinws();
+  } catch {}
+  await new Promise((r) => setTimeout(r, 1500));
   stage('swap');
   // Move old folder aside (keep one backup), then move new content in.
   // Transient locks (AV scan, driver unloading, indexer) make rename fail —
   // retry for up to ~12s before giving up, and keep the old folder intact.
+  // Last resort: merge-copy the new version over the old folder in place.
   const parent = path.dirname(targetDir);
   fs.mkdirSync(parent, { recursive: true });
   const backup = targetDir + '.backup';
@@ -423,12 +427,19 @@ async function installZapretInner(targetDir, onProgress, onStage) {
       }
     }
     if (!moved) {
-      try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {}
-      return {
-        ok: false,
-        reason: 'swap_failed_locked',
-        message: String((lastErr && lastErr.message) || lastErr),
-      };
+      // cannot rename the folder — merge-copy new files over the old ones
+      try {
+        fs.cpSync(src, targetDir, { recursive: true, force: true });
+        try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {}
+        return { ok: true, merged: true, version: rel.version, backup: null, releaseUrl: rel.url, releaseZip: zipPath };
+      } catch (e2) {
+        try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {}
+        return {
+          ok: false,
+          reason: 'swap_failed_locked',
+          message: String((e2 && e2.message) || lastErr && lastErr.message || e2),
+        };
+      }
     }
   }
   try {

@@ -146,8 +146,10 @@ function registerIpc() {
   ipcMain.handle('config:set', (_e, kv) => {
     for (const [k, v] of Object.entries(kv || {})) {
       config.set(k, v);
-      if (k === 'autostart') {
-        app.setLoginItemSettings({ openAtLogin: !!v, args: ['--hidden'] });
+      if (k === 'autostart' || k === 'startHidden') {
+        const autostart = config.get('autostart', false);
+        const hidden = config.get('startHidden', false);
+        app.setLoginItemSettings({ openAtLogin: !!autostart, args: autostart && hidden ? ['--hidden'] : [] });
       } else if (k === 'lang') {
         const ru = v === 'ru';
         setTrayI18n({
@@ -322,26 +324,56 @@ function registerIpc() {
       .catch((e) => ({ ok: false, reason: e.code || 'error', message: e.message }));
   });
 
-  // One-click "connect working bypass": test strategies in order and connect
-  // the first one where Discord AND YouTube work.
+  // One-click "connect working bypass": if the current bypass already works —
+  // keep it. Otherwise test strategies in order and connect the first one
+  // where Discord AND YouTube are reachable; if none is perfect, connect the
+  // best available so the user is never left without bypass.
   ipcMain.handle('autoconnect:run', async () => {
     const root = rootDir();
     if (!root) return { ok: false, reason: 'no_root' };
     if (!isAdminSync()) return { ok: false, reason: 'admin_required' };
     try {
-      const r = await tester.runStrategyTests(root, (ev) => emitToWindow('tester:event', ev), { stopOnFirst: true });
-      if (!r.winner || !r.winnerFile) return { ok: false, reason: 'none_works' };
-      config.set('lastStrategyFile', r.winnerFile);
-      const preferService = config.get('preferServiceMode', true);
-      let res;
-      if (preferService) {
-        res = await service.installStrategyAsService(root, r.winnerFile);
-      } else {
+      // 1. Already running? Verify it without touching anything.
+      const st = await status.getStatus(root);
+      if (st.activeMode !== 'off') {
+        const check = await tester.checkReachability(root, (ev) => emitToWindow('tester:event', ev));
+        const currentName = config.get('processStrategyName', null) || st.serviceStrategy || 'текущая';
+        if (check.groups.discord.works && check.groups.youtube.state === 'ok') {
+          return { ok: true, already: true, strategy: currentName };
+        }
+        // Not working — stop it and search for a better one.
         await service.killWinws();
-        res = await service.launchStrategyProcess(root, r.winnerFile);
+        await service.stopService();
       }
-      config.set('processStrategyName', r.winner);
-      return { ok: !!res.ok, strategy: r.winner, mode: preferService ? 'service' : 'process', reason: res.reason };
+
+      // 2. Search: connect the first fully working strategy.
+      const r = await tester.runStrategyTests(root, (ev) => emitToWindow('tester:event', ev), { stopOnFirst: true });
+      const preferService = config.get('preferServiceMode', true);
+
+      if (r.winnerFile) {
+        config.set('lastStrategyFile', r.winnerFile);
+        config.set('processStrategyName', r.winner);
+        // stopOnFirst leaves the winning winws RUNNING in process mode.
+        const winwsUp = await status.processRunning('winws.exe');
+        if (preferService) {
+          const res = await service.installStrategyAsService(root, r.winnerFile);
+          return { ok: !!res.ok, strategy: r.winner, mode: 'service', reason: res.reason };
+        }
+        if (winwsUp) return { ok: true, strategy: r.winner, mode: 'process-kept' };
+        const res = await service.launchStrategyProcess(root, r.winnerFile);
+        return { ok: !!res.ok, strategy: r.winner, mode: 'process', reason: res.reason };
+      }
+
+      // 3. Nothing perfect: connect the BEST available strategy so the user
+      // is not left without bypass.
+      const winner = r.results.filter((x) => !x.failed).sort((a, b) => b.score.ok - a.score.ok)[0];
+      if (!winner) return { ok: false, reason: 'none_works' };
+      config.set('lastStrategyFile', winner.file);
+      config.set('processStrategyName', winner.name);
+      let res;
+      if (preferService) res = await service.installStrategyAsService(root, winner.file);
+      else res = await service.launchStrategyProcess(root, winner.file);
+      return { ok: !!res.ok, strategy: winner.name, fallback: true, reason: res.reason };
     } catch (e) {
       return { ok: false, reason: e.code || e.message || 'error' };
     }
@@ -408,7 +440,10 @@ app.whenReady().then(() => {
       if (r && r.ok && r.upToDate === false && r.remote) emitToWindow('zapret:update', { remote: r.remote });
     } catch { /* offline — silent */ }
   }, 6000);
-  const startHidden = process.argv.includes('--hidden') || config.get('startHidden', false);
+  // Hidden start applies ONLY to the autostart launch (argv --hidden).
+  // A manual launch must always open the window, even if the user enabled
+  // "start hidden to tray" in settings.
+  const startHidden = process.argv.includes('--hidden');
   createWindow(startHidden);
   setTimeout(runPendingAction, 2000);
   createTray({
