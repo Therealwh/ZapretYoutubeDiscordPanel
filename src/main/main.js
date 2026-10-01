@@ -3,6 +3,21 @@ const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 
+// GPU guard: if the renderer kept crashing on this machine (black window),
+// the flag below was persisted — disable hardware acceleration this launch.
+try {
+  const cfgFile = path.join(app.getPath('userData'), 'config.json');
+  if (JSON.parse(fs.readFileSync(cfgFile, 'utf8')).disableHardwareAcceleration) {
+    app.disableHardwareAcceleration();
+  }
+} catch { /* first run / unreadable config — defaults */ }
+
+function appendRendererLog(line) {
+  try {
+    fs.appendFileSync(path.join(app.getPath('userData'), 'renderer-log.txt'), `${new Date().toISOString()} ${line}\n`);
+  } catch { /* best effort */ }
+}
+
 const config = require('./config');
 const { createTray, setTrayStatus, setTrayI18n, destroyTray } = require('./tray');
 const { isAdminSync, elevateCommands, restartElevated } = require('./admin');
@@ -66,6 +81,31 @@ function createWindow(startHidden) {
     },
   });
   win.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
+
+  // Black-window recovery: if the renderer dies (GPU/driver crash), reload
+  // it; after two crashes persist a GPU-off flag so the NEXT launch renders
+  // via software and the app is usable again.
+  let renderCrashes = 0;
+  win.webContents.on('render-process-gone', (_e, details) => {
+    appendRendererLog(`render-process-gone: ${details.reason}`);
+    renderCrashes += 1;
+    if (details.reason === 'crashed' || details.reason === 'oom') {
+      if (renderCrashes >= 2) config.set('disableHardwareAcceleration', true);
+    }
+    if (renderCrashes <= 3) {
+      setTimeout(() => {
+        try { if (win && !win.isDestroyed()) win.webContents.reload(); } catch {}
+      }, 800);
+    }
+  });
+  win.webContents.on('did-fail-load', (_e, code, desc, url, isMain) => {
+    appendRendererLog(`did-fail-load: ${code} ${desc} ${url}`);
+    if (isMain && code !== -3) {
+      setTimeout(() => {
+        try { if (win && !win.isDestroyed()) win.webContents.loadFile(path.join(__dirname, '..', 'renderer', 'index.html')); } catch {}
+      }, 1000);
+    }
+  });
 
   if (process.argv.includes('--smoke')) {
     win.webContents.on('did-fail-load', (_e, code, desc) => {

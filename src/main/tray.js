@@ -12,20 +12,38 @@ const { trayIco } = require('./tray-icons');
 let tray = null;
 
 function buildTrayIcon() {
+  // Last-resort fallback that needs NO codec: a solid accent square built
+  // from raw BGRA pixels (nativeImage.createFromBitmap never fails).
+  const solid = () => {
+    const w = 16, h = 16;
+    const buf = Buffer.alloc(w * h * 4);
+    for (let i = 0; i < buf.length; i += 4) {
+      buf[i] = 0x7c; buf[i + 1] = 0x6c; buf[i + 2] = 0xff; buf[i + 3] = 0xff;
+    }
+    return nativeImage.createFromBuffer(buf, { width: w, height: h });
+  };
   try {
     const buf = Buffer.from(trayIco.split(',')[1], 'base64');
     const file = path.join(os.tmpdir(), 'ydp-tray.ico');
     fs.writeFileSync(file, buf);
-    const img = nativeImage.createFromPath(file);
-    if (!img.isEmpty()) return img;
-  } catch { /* fall through */ }
-  // last resort: the packaged app icon (ICO)
-  return nativeImage.createFromPath(path.join(__dirname, '..', 'assets', 'icon.ico'));
+    let img = nativeImage.createFromPath(file);
+    if (img.isEmpty()) img = nativeImage.createFromPath(path.join(__dirname, '..', 'assets', 'icon.ico'));
+    if (img.isEmpty()) img = solid();
+    return img;
+  } catch {
+    return solid();
+  }
 }
 
 function createTray({ onShow, onToggle, onQuit, i18n }) {
-  const icon = buildTrayIcon();
-  tray = new Tray(icon);
+  try {
+    const icon = buildTrayIcon();
+    tray = new Tray(icon);
+  } catch (e) {
+    // A broken tray must never take the whole app down (black window).
+    console.error('tray disabled:', e.message);
+    return null;
+  }
   trayHandlers = { onShow, onToggle, onQuit };
   tray.setToolTip('YoutubeDiscordPanel');
   setTrayI18n(i18n);
