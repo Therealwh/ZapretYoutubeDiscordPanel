@@ -3,14 +3,27 @@ const { app, BrowserWindow, ipcMain, dialog, shell } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
 
-// GPU guard: if the renderer kept crashing on this machine (black window),
-// the flag below was persisted — disable hardware acceleration this launch.
+const { decideRecovery, formatExitCode, SAFE_SWITCHES } = require('./render-guard');
+
+// Smoke runs must not collide with a real running instance (single-instance
+// lock and cache are per-userData), so give them a throwaway profile.
+// Must run before anything reads userData.
+if (process.argv.includes('--smoke')) {
+  app.setPath('userData', path.join(require('node:os').tmpdir(), 'ydp-smoke-userdata'));
+}
+
+// Black-window guard: flags persisted by the crash handler below are applied
+// here, before the app is ready (Chromium switches can't change later).
+let bootCfg = {};
 try {
-  const cfgFile = path.join(app.getPath('userData'), 'config.json');
-  if (JSON.parse(fs.readFileSync(cfgFile, 'utf8')).disableHardwareAcceleration) {
-    app.disableHardwareAcceleration();
-  }
+  bootCfg = JSON.parse(fs.readFileSync(path.join(app.getPath('userData'), 'config.json'), 'utf8')) || {};
 } catch { /* first run / unreadable config — defaults */ }
+const gpuOff = !!bootCfg.disableHardwareAcceleration;
+const safeRenderer = !!bootCfg.safeRenderer;
+if (gpuOff) app.disableHardwareAcceleration();
+if (safeRenderer) {
+  for (const [k, v] of SAFE_SWITCHES) app.commandLine.appendSwitch(k, v);
+}
 
 function appendRendererLog(line) {
   try {
@@ -39,15 +52,11 @@ updates.setVtKeyProvider(() => config.get('virustotalKey', null));
 let win = null;
 let quitting = false;
 
-// Smoke runs must not collide with a real running instance (single-instance
-// lock and cache are per-userData), so give them a throwaway profile.
-if (process.argv.includes('--smoke')) {
-  app.setPath('userData', path.join(require('node:os').tmpdir(), 'ydp-smoke-userdata'));
-}
-
 const single = app.requestSingleInstanceLock();
 if (!single) {
-  app.quit();
+  // exit() instead of quit(): quit() is async and would let whenReady below
+  // still create a second window/tray in this duplicate process.
+  app.exit(0);
 } else {
   app.on('second-instance', () => {
     if (win) {
@@ -82,20 +91,48 @@ function createWindow(startHidden) {
   });
   win.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
 
-  // Black-window recovery: if the renderer dies (GPU/driver crash), reload
-  // it; after two crashes persist a GPU-off flag so the NEXT launch renders
-  // via software and the app is usable again.
+  // Black-window recovery ladder (see render-guard.js): reload, then
+  // relaunch with GPU off, then relaunch in safe renderer mode, then tell
+  // the user where the log is. Exit codes are logged for diagnostics.
   let renderCrashes = 0;
+  let recovering = false;
   win.webContents.on('render-process-gone', (_e, details) => {
-    appendRendererLog(`render-process-gone: ${details.reason}`);
     renderCrashes += 1;
-    if (details.reason === 'crashed' || details.reason === 'oom') {
-      if (renderCrashes >= 2) config.set('disableHardwareAcceleration', true);
-    }
-    if (renderCrashes <= 3) {
+    appendRendererLog(`render-process-gone: ${details.reason} exit=${formatExitCode(details.exitCode)} `
+      + `gpuOff=${gpuOff} safeRenderer=${safeRenderer} crash#${renderCrashes}`);
+    if (recovering) return;
+    const step = decideRecovery({ crashes: renderCrashes, reason: details.reason, gpuOff, safeMode: safeRenderer });
+    if (step.action === 'reload') {
       setTimeout(() => {
         try { if (win && !win.isDestroyed()) win.webContents.reload(); } catch {}
       }, 800);
+    } else if (step.action === 'relaunch') {
+      recovering = true;
+      for (const [k, v] of Object.entries(step.set)) config.set(k, v);
+      appendRendererLog(`recovery: relaunch with ${Object.keys(step.set).join(', ')}`);
+      quitting = true;
+      try { destroyTray(); } catch {}
+      app.relaunch();
+      app.exit(0);
+    } else if (step.action === 'give-up') {
+      recovering = true;
+      const logFile = path.join(app.getPath('userData'), 'renderer-log.txt');
+      const ru = config.get('lang', 'ru') === 'ru';
+      dialog.showMessageBox({
+        type: 'error',
+        title: 'YoutubeDiscordPanel',
+        message: ru ? 'Не удаётся отобразить окно программы' : 'The app window cannot be displayed',
+        detail: (ru
+          ? 'Окно падает даже в безопасном режиме. Обычно причина — антивирус. Добавьте программу в исключения и пришлите этот файл в issue на GitHub:\n'
+          : 'The window crashes even in safe mode, usually because of antivirus software. Add the app to exclusions and attach this file to a GitHub issue:\n') + logFile,
+        buttons: [ru ? 'Открыть лог' : 'Open log', ru ? 'Закрыть' : 'Close'],
+      }).then(({ response }) => { if (response === 0) shell.showItemInFolder(logFile); }).catch(() => {});
+    }
+  });
+  // Log the first successful paint so the log shows which mode finally worked.
+  win.webContents.once('did-finish-load', () => {
+    if (renderCrashes || gpuOff || safeRenderer) {
+      appendRendererLog(`renderer ok (gpuOff=${gpuOff} safeRenderer=${safeRenderer} crashes=${renderCrashes})`);
     }
   });
   win.webContents.on('did-fail-load', (_e, code, desc, url, isMain) => {
