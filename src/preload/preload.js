@@ -34,6 +34,8 @@ const api = {
   setFake: (kind, file) => ipcRenderer.invoke('fakes:set', kind, file),
 
   clearDiscordCache: () => ipcRenderer.invoke('discord:clearCache'),
+  setDnsFix: () => ipcRenderer.invoke('dns:set'),
+  resetDns: () => ipcRenderer.invoke('dns:reset'),
   runDiagnostics: () => ipcRenderer.invoke('diag:run'),
 
   checkVersion: () => ipcRenderer.invoke('updates:checkVersion'),

@@ -886,6 +886,18 @@ function bindDiagnostics() {
     const r = await window.api.clearDiscordCache();
     toast(r.foundAny ? t('diag_clear_done') : t('diag_no_discord'), r.foundAny ? 'ok' : 'warn');
   });
+  $('#btn-dns-fix').addEventListener('click', async () => {
+    const r = await window.api.setDnsFix();
+    if (r.ok) toast(t('dns_fix_done'), 'ok');
+    else if (r.reason === 'admin_required') toast(t('dns_need_admin'), 'err');
+    else toast(t('toast_error'), 'err');
+  });
+  $('#btn-dns-reset').addEventListener('click', async () => {
+    const r = await window.api.resetDns();
+    if (r.ok) toast(t('dns_reset_done'), 'ok');
+    else if (r.reason === 'admin_required') toast(t('dns_need_admin'), 'err');
+    else toast(t('toast_error'), 'err');
+  });
 }
 
 // ---------- settings ----------

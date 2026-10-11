@@ -46,6 +46,7 @@ const fakes = require('./zapret/fakes');
 const discord = require('./zapret/discord');
 const diagnostics = require('./zapret/diagnostics');
 const updates = require('./zapret/updates');
+const dns = require('./zapret/dns');
 const panelUpdater = require('./updater');
 updates.setVtKeyProvider(() => config.get('virustotalKey', null));
 
@@ -356,6 +357,9 @@ function registerIpc() {
   ipcMain.handle('fakes:set', (_e, kind, fakeFile) => fakes.setFake(rootDir(), kind, fakeFile));
 
   ipcMain.handle('discord:clearCache', () => discord.clearDiscordCache());
+
+  ipcMain.handle('dns:set', async () => dns.setDnsFix());
+  ipcMain.handle('dns:reset', async () => dns.resetDns());
 
   ipcMain.handle('diag:run', () => diagnostics.runDiagnostics(rootDir()));
 
