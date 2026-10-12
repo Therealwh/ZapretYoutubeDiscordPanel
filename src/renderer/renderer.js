@@ -355,7 +355,11 @@ function bindSetup() {
       $('#setup-done').classList.remove('hidden');
       toast(t('setup_done'), 'ok');
     } else {
-      toast(`${t('toast_error')}: ${res.reason || ''}`, 'err');
+      // "install_failed" alone told the user nothing — always surface the
+      // underlying reason/message and keep it on the stage line.
+      const detail = [res.reason || '', res.message || ''].filter(Boolean).join(' — ');
+      toast(`${t('toast_error')}: ${detail}`, 'err');
+      $('#setup-stage').textContent = t(`setup_err_${res.reason}`) || detail;
       if (res.reason === 'security_rejected') {
         $('#setup-stage').textContent = t('setup_sec_red');
       }

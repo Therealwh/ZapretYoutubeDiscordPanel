@@ -465,32 +465,18 @@ function registerIpc() {
 
   ipcMain.handle('updates:checkVersion', () => updates.checkVersion(rootDir()));
   ipcMain.handle('updates:installZapret', async (_e, targetDir) => {
-    const res = await updates.installZapret(
-      targetDir,
-      (frac) => emitToWindow('install:progress', frac),
-      (stage) => emitToWindow('install:stage', stage)
-    );
-    if (res.ok) {
-      // Safety gate: refuse a distribution that looks tampered with.
-      const sec = await updates.verifyReleaseSecurity(res.releaseUrl, res.releaseZip);
-      res.security = sec;
-      if (sec.ok === false && sec.level === 'red') {
-        // Roll back the swap: restore the backup if one was made.
-        try {
-          if (res.backup && fs.existsSync(res.backup)) {
-            fs.rmSync(targetDir, { recursive: true, force: true });
-            fs.renameSync(res.backup, targetDir);
-          } else {
-            fs.rmSync(targetDir, { recursive: true, force: true });
-          }
-        } catch {
-          /* best effort */
-        }
-        return res;
-      }
+    logger.info(`zapret install requested → ${targetDir}`);
+    const r = await updates.installZapret(targetDir, (f) => emitToWindow('install:progress', f), (s) => emitToWindow('install:stage', s));
+    if (r.ok) {
+      logger.info(`zapret installed: ${r.version}${r.merged ? ' (merged)' : ''}`);
+      // The pre-swap security gate in installZapret already refused red
+      // distributions, so no post-swap rollback is needed here.
       config.set('zapretRoot', targetDir);
+      refreshTrayState();
+    } else {
+      logger.error(`zapret install failed: ${r.reason}${r.message ? ` — ${r.message}` : ''}`);
     }
-    return res;
+    return r;
   });
   ipcMain.handle('updates:updateIpset', () => updates.updateIpset(rootDir()));
   ipcMain.handle('updates:updateHosts', (_e, opts) => updates.updateHosts(rootDir(), opts || {}));
@@ -501,10 +487,11 @@ function registerIpc() {
   ipcMain.handle('engine:update', async (_e, tag) => {
     const root = rootDir();
     if (!root) return { ok: false, reason: 'no_root' };
-    emitToWindow('install:stage', { stage: 'engine' });
+    emitToWindow('install:stage', 'resolve');
     const r = await engine.updateEngineToTag(root, tag, {
       onProgress: (f) => emitToWindow('install:progress', f),
-      onStage: (stage) => emitToWindow('install:stage', { stage }),
+      // Plain string stages: the setup UI maps these onto setup_stage_* keys.
+      onStage: (stage) => emitToWindow('install:stage', stage),
     });
     logger[r.ok ? 'info' : 'error'](`Engine update → ${tag}: ${r.ok ? r.copied.length + ' files' : r.reason}`);
     return r;

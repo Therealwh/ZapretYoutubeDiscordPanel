@@ -362,11 +362,24 @@ async function installZapretInner(targetDir, onProgress, onStage) {
   fs.mkdirSync(tmp, { recursive: true });
   const zipPath = path.join(tmp, rel.name);
   stage('download');
-  await module.exports.downloadFile(rel.url, zipPath, onProgress);
+  // Each stage reports ITS OWN reason: a generic install_failed tells the user
+  // nothing about which step broke (and the throw used to escape here).
+  try {
+    await module.exports.downloadFile(rel.url, zipPath, onProgress);
+  } catch (e) {
+    try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {}
+    return { ok: false, reason: 'download_failed', message: String((e && e.message) || e) };
+  }
   stage('security');
   // Safety gate: refuse tampered / malware-looking distributions before any
   // file is touched on disk outside the temp dir.
-  const sec = await verifyReleaseSecurity(rel.url, zipPath);
+  let sec;
+  try {
+    sec = await verifyReleaseSecurity(rel.url, zipPath);
+  } catch (e) {
+    try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {}
+    return { ok: false, reason: 'security_check_failed', message: String((e && e.message) || e) };
+  }
   if (sec.ok === false && sec.level === 'red') {
     try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {}
     return { ok: false, reason: 'security_rejected', security: sec };
@@ -377,14 +390,23 @@ async function installZapretInner(targetDir, onProgress, onStage) {
     `Expand-Archive -LiteralPath '${zipPath.replace(/'/g, "''")}' -DestinationPath '${extractDir.replace(/'/g, "''")}' -Force`,
   ].join('; ');
   const ex = await run('powershell', ['-NoProfile', '-Command', ps], { timeout: 300000 });
-  if (ex.code !== 0) return { ok: false, reason: 'extract_failed', stderr: ex.stderr };
+  if (ex.code !== 0) {
+    try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {}
+    return { ok: false, reason: 'extract_failed', message: (ex.stderr || `exit ${ex.code}`).trim().slice(0, 400) };
+  }
 
   // Zip contains a nested folder like zapret-discord-youtube-1.10.3/... Find it.
-  const inner = fs
-    .readdirSync(extractDir)
-    .map((n) => path.join(extractDir, n))
-    .find((p) => fs.statSync(p).isDirectory());
-  const src = inner || extractDir;
+  let src;
+  try {
+    const inner = fs
+      .readdirSync(extractDir)
+      .map((n) => path.join(extractDir, n))
+      .find((p) => fs.statSync(p).isDirectory());
+    src = inner || extractDir;
+  } catch (e) {
+    try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {}
+    return { ok: false, reason: 'extract_empty', message: String((e && e.message) || e) };
+  }
   if (!exists(path.join(src, 'bin', 'winws.exe'))) {
     return { ok: false, reason: 'bad_layout' };
   }
@@ -409,7 +431,12 @@ async function installZapretInner(targetDir, onProgress, onStage) {
   // retry for up to ~12s before giving up, and keep the old folder intact.
   // Last resort: merge-copy the new version over the old folder in place.
   const parent = path.dirname(targetDir);
-  fs.mkdirSync(parent, { recursive: true });
+  try {
+    fs.mkdirSync(parent, { recursive: true });
+  } catch (e) {
+    try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {}
+    return { ok: false, reason: 'target_unwritable', message: String((e && e.message) || e) };
+  }
   const backup = targetDir + '.backup';
   if (exists(targetDir)) {
     let moved = false;
