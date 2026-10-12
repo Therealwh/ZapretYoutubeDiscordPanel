@@ -1,7 +1,7 @@
 {
   "name": "youtube-discord-panel",
   "productName": "YoutubeDiscordPanel",
-  "version": "1.5.2",
+  "version": "1.6.0",
   "description": "Beautiful control panel for zapret-discord-youtube (RU/EN, dark/light themes)",
   "author": "Therealwh",
   "license": "MIT",
@@ -12,7 +12,7 @@
   },
   "scripts": {
     "start": "electron .",
-    "test": "node --test test/strategy.test.js test/security.test.js test/tester.test.js test/render-guard.test.js test/lists.test.js test/strategy-import.test.js",
+    "test": "node --test test/strategy.test.js test/security.test.js test/tester.test.js test/render-guard.test.js test/lists.test.js test/strategy-import.test.js test/tg-crypto.test.js test/tg-proxy.test.js",
     "dist": "electron-builder --win",
     "dist:portable": "electron-builder --win portable"
   },

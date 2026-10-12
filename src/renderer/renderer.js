@@ -76,7 +76,7 @@ function showPage(name) {
   if (name === 'diagnostics') renderDiagnostics();
   if (name === 'logs') renderLogs();
   if (name === 'settings') renderSettings();
-  if (name === 'dashboard') refreshStatus();
+  if (name === 'dashboard') { refreshStatus(); renderTelegram(); }
 }
 
 // ---------- status ----------
@@ -365,6 +365,20 @@ async function runSetupInstall(localZipPath) {
       if (res.reason === 'security_rejected') {
         $('#setup-stage').textContent = t('setup_sec_red');
       }
+      // No write access to the install folder (usually C:\ without admin):
+      // one UAC restart, then the install resumes by itself.
+      if (res.reason === 'target_unwritable' && !appInfo.admin) {
+        $('#setup-stage').textContent = t('setup_err_needs_admin');
+        const btn = document.createElement('button');
+        btn.className = 'btn btn-primary btn-sm';
+        btn.textContent = t('banner_admin_fix');
+        btn.addEventListener('click', () => window.api.restartElevated({ type: 'install-zapret', dir, localZip: localZipPath || null }));
+        const actions = $('#setup-download').parentElement;
+        if (!actions.querySelector('.setup-admin-btn')) {
+          btn.classList.add('setup-admin-btn');
+          actions.appendChild(btn);
+        }
+      }
     }
     $('#setup-download').disabled = false;
     $('#setup-download-local').disabled = false;
@@ -389,6 +403,67 @@ function enterApp() {
       if (!$('#main-view').classList.contains('hidden')) refreshStatus();
     }, 4000);
   }
+}
+
+// ---------- telegram proxy ----------
+async function renderTelegram() {
+  let st = null;
+  try {
+    st = await window.api.tgStatus();
+  } catch {
+    return;
+  }
+  const stateEl = $('#tg-state');
+  if (stateEl) {
+    stateEl.textContent = st.running ? t('tg_running') : t('tg_stopped');
+    stateEl.className = `power-state ${st.running ? 'ok' : ''}`;
+  }
+  const statsEl = $('#tg-stats');
+  if (statsEl) {
+    const up = (st.bytesUp / 1024).toFixed(1);
+    const down = (st.bytesDown / 1024).toFixed(1);
+    statsEl.textContent = `${st.host}:${st.port} · ${t('tg_connections')}: ${st.connections} · ↑${up} KB ↓${down} KB`;
+  }
+  const linkEl = $('#tg-link');
+  if (linkEl) linkEl.textContent = st.proxyUrl || '';
+  const btn = $('#btn-tg-toggle');
+  if (btn) btn.textContent = st.running ? t('tg_stop') : t('tg_start');
+  if (st.lastError && !st.running) {
+    const hint = $('#tg-hint');
+    if (hint) hint.textContent = st.lastError;
+  }
+}
+
+function bindTelegram() {
+  $('#btn-tg-toggle').addEventListener('click', async () => {
+    const st = await window.api.tgStatus();
+    const btn = $('#btn-tg-toggle');
+    btn.disabled = true;
+    const r = st.running ? await window.api.tgStop() : await window.api.tgStart();
+    btn.disabled = false;
+    if (!r.ok) toast(`${t('toast_error')}: ${r.reason || 'error'}`, 'err');
+    else toast(r.running ? t('tg_started') : t('tg_stopped'), 'ok');
+    renderTelegram();
+  });
+  $('#btn-tg-open').addEventListener('click', () => window.api.tgOpen());
+  $('#btn-tg-copy').addEventListener('click', async () => {
+    const st = await window.api.tgStatus();
+    if (!st.proxyUrl) return;
+    await navigator.clipboard.writeText(st.proxyUrl).catch(() => {});
+    toast(t('tg_copied'), 'ok');
+  });
+  $('#btn-tg-regen').addEventListener('click', async () => {
+    if (!confirm(t('tg_regen_confirm'))) return;
+    const r = await window.api.tgRegenerate();
+    const wasRunning = (await window.api.tgStatus()).running;
+    if (wasRunning) await window.api.tgRestart();
+    toast(t('tg_regen_done'), 'ok');
+    void r;
+    renderTelegram();
+  });
+  setInterval(() => {
+    if (!$('#page-dashboard').classList.contains('hidden')) renderTelegram();
+  }, 5000);
 }
 
 // ---------- strategies ----------
@@ -1538,6 +1613,7 @@ function bindChrome() {
   });
   bindSettings();
   bindAutoConnect();
+  bindTelegram();
   // The startup update check in main may have finished before we attached —
   // pick up its result and light the banner if a panel update is waiting.
   window.api.updaterState().then((st) => {

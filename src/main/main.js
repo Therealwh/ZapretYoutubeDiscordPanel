@@ -49,6 +49,7 @@ const updates = require('./zapret/updates');
 const dns = require('./zapret/dns');
   const ownership = require('./zapret/ownership');
   const engine = require('./zapret/engine');
+  const tgProxy = require('./zapret/tg-proxy');
 const panelUpdater = require('./updater');
   const logger = require('./logger');
 updates.setVtKeyProvider(() => config.get('virustotalKey', null));
@@ -507,6 +508,41 @@ function registerIpc() {
     return r;
   });
 
+  // ---- Telegram MTProto -> WebSocket proxy ----
+  ipcMain.handle('tg:status', () => tgProxy.getStats());
+  ipcMain.handle('tg:start', async (_e, opts) => {
+    const settings = {
+      port: Number(config.get('tgProxyPort', 1443)),
+      host: '127.0.0.1',
+      secretHex: config.get('tgProxySecret', null),
+      ...(opts || {}),
+    };
+    if (settings.secret) {
+      config.set('tgProxySecret', settings.secret);
+      delete settings.secret;
+    }
+    config.set('tgProxyPort', settings.port);
+    const r = await tgProxy.start(settings);
+    logger[r.ok ? 'info' : 'error'](`Telegram proxy ${r.ok ? `started on ${settings.host}:${settings.port}` : `failed: ${r.reason || 'error'}`}`);
+    return r;
+  });
+  ipcMain.handle('tg:stop', async () => {
+    const r = await tgProxy.stop();
+    logger.info('Telegram proxy stopped');
+    return r;
+  });
+  ipcMain.handle('tg:restart', async (_e, opts) => {
+    const r = await tgProxy.restart({ port: Number(config.get('tgProxyPort', 1443)), ...(opts || {}) });
+    logger.info('Telegram proxy restarted');
+    return r;
+  });
+  ipcMain.handle('tg:regenerate', () => tgProxy.regenerateSecret());
+  ipcMain.handle('tg:open', () => {
+    const link = tgProxy.proxyLink();
+    shell.openExternal(link);
+    return link;
+  });
+
   ipcMain.handle('tester:run', () => {
     const root = rootDir();
     if (!root) return { ok: false, reason: 'no_root' };
@@ -637,6 +673,22 @@ async function runPendingAction() {
   } else if (act === 'toggle-off') {
     await service.stopService();
     await service.killWinws();
+  } else if (act && act.type === 'install-zapret' && act.dir) {
+    // Resumed after a UAC restart: same install, now with admin rights.
+    logger.info(`Resuming zapret install after elevation → ${act.dir}`);
+    const r = await updates.installZapret(
+      act.dir,
+      (frac) => emitToWindow('install:progress', frac),
+      (stage) => emitToWindow('install:stage', stage),
+      { localZip: act.localZip || null }
+    );
+    if (r.ok) {
+      config.set('zapretRoot', act.dir);
+      logger.info(`zapret installed after elevation: ${r.version}`);
+    } else {
+      logger.error(`zapret install failed after elevation: ${r.reason}`);
+    }
+    emitToWindow('install:result', r);
   }
   // 'run-tests' is executed by the renderer (it owns the UI flow)
 }
@@ -647,6 +699,11 @@ app.whenReady().then(() => {
   // Live log stream: the logger batches entries and pushes them to the window.
   logger.setSink((batch) => emitToWindow('log:lines', batch));
   logger.info(`Panel ${app.getVersion()} started (admin=${isAdminSync()})`);
+  tgProxy.setLogger((msg, level) => (level === 'error' || level === 'warn' ? logger.warn(msg, 'tg-proxy') : logger.info(msg, 'tg-proxy')));
+  // The proxy secret is generated once and reused, otherwise Telegram would
+  // have to be reconfigured after every panel restart.
+  tgProxy.ensureSecret();
+  config.set('tgProxySecret', tgProxy.ensureSecret().toString('hex'));
   registerIpc();
   // Panel self-update: forward events to the renderer, then check quietly
   // (autoDownload is off — the user decides whether to fetch the update).

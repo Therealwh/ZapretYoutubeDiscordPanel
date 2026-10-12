@@ -330,6 +330,32 @@ async function latestReleaseAsset() {
   return { ok: true, version: json.tag_name, name: asset.name, url: asset.browser_download_url, size: asset.size };
 }
 
+// Can we actually create/write the destination folder? Checked BEFORE the
+// download so a permission problem does not waste 2 MB of traffic first.
+function assertTargetWritable(targetDir) {
+  const parent = path.dirname(targetDir);
+  let probeDir = null;
+  try {
+    fs.mkdirSync(parent, { recursive: true });
+  } catch (e) {
+    if (e && (e.code === 'EPERM' || e.code === 'EACCES' || e.code === 'ENOTEMPTY')) {
+      return { ok: false, reason: 'target_unwritable', message: `mkdir ${parent}: ${e.code}` };
+    }
+    return { ok: false, reason: 'target_unwritable', message: String((e && e.message) || e) };
+  }
+  if (!exists(targetDir)) {
+    try {
+      probeDir = path.join(parent, `.ydp-write-test-${process.pid}`);
+      fs.mkdirSync(probeDir);
+      fs.rmSync(probeDir, { recursive: true, force: true });
+    } catch (e) {
+      try { if (probeDir) fs.rmSync(probeDir, { recursive: true, force: true }); } catch { /* ignore */ }
+      return { ok: false, reason: 'target_unwritable', message: String((e && e.message) || e) };
+    }
+  }
+  return { ok: true };
+}
+
 // Full install/refresh: download zip to temp, extract with PowerShell, swap folder.
 // `opts.localZip` installs from a zip the user already has on disk — the only
 // option on a machine where github.com itself is blocked/throttled, which is
@@ -358,6 +384,10 @@ async function installZapretInner(targetDir, onProgress, onStage, opts = {}) {
     }
   } catch {}
   stage('resolve');
+  // Fail fast on an unwritable destination (e.g. C:\ without admin rights) —
+  // otherwise the user waits for a download that could never be installed.
+  const writable = assertTargetWritable(targetDir);
+  if (!writable.ok) return { ...writable, adminRequired: true };
   // Routed through module.exports so tests can stub resolution/download.
   const localZip = opts && opts.localZip ? String(opts.localZip) : null;
   if (localZip && !/\.zip$/i.test(localZip)) {

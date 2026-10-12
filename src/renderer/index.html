@@ -119,7 +119,7 @@
           </div>
           <div id="banner-foreign" class="banner banner-warn hidden" role="status" aria-live="polite">
             <div class="banner-text">
-              <strong data-i18n="banner_foreign_title"></strong>
+              <strong id="banner-foreign-title" data-i18n="banner_foreign_title"></strong>
               <span id="banner-foreign-text"></span>
             </div>
             <div class="banner-actions">
@@ -169,6 +169,25 @@
                 <p id="stat-winws-path" class="muted mono stat-path"></p>
               </div>
             </div>
+          </div>
+
+          <!-- TELEGRAM PROXY -->
+          <div class="card tg-card">
+            <div class="set-head">
+              <span class="set-ico tb-glyph" aria-hidden="true">&#xE723;</span>
+              <div><h3 data-i18n="tg_title"></h3><p id="tg-hint" class="muted set-sub" data-i18n="tg_hint"></p></div>
+            </div>
+            <div class="tg-row">
+              <span id="tg-state" class="power-state">—</span>
+              <span id="tg-stats" class="muted mono"></span>
+            </div>
+            <div class="btn-row">
+              <button id="btn-tg-toggle" class="btn btn-primary" data-i18n="tg_start"></button>
+              <button id="btn-tg-open" class="btn btn-secondary" data-i18n="tg_open"></button>
+              <button id="btn-tg-copy" class="btn btn-secondary" data-i18n="tg_copy"></button>
+              <button id="btn-tg-regen" class="btn btn-ghost" data-i18n="tg_regen"></button>
+            </div>
+            <p class="muted mono tg-link" id="tg-link"></p>
           </div>
 
           <!-- STRATEGIES -->

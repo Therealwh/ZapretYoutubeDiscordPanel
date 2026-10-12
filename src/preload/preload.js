@@ -67,6 +67,13 @@ const api = {
   abortTests: () => ipcRenderer.invoke('tester:abort'),
   autoConnect: () => ipcRenderer.invoke('autoconnect:run'),
 
+  tgStatus: () => ipcRenderer.invoke('tg:status'),
+  tgStart: (opts) => ipcRenderer.invoke('tg:start', opts),
+  tgStop: () => ipcRenderer.invoke('tg:stop'),
+  tgRestart: (opts) => ipcRenderer.invoke('tg:restart', opts),
+  tgRegenerate: () => ipcRenderer.invoke('tg:regenerate'),
+  tgOpen: () => ipcRenderer.invoke('tg:open'),
+
   updaterState: () => ipcRenderer.invoke('updater:state'),
   updaterCheck: () => ipcRenderer.invoke('updater:check'),
   updaterDownload: () => ipcRenderer.invoke('updater:download'),
@@ -77,7 +84,7 @@ const api = {
   windowAction: (a) => ipcRenderer.invoke('app:windowAction', a),
 
   on: (channel, cb) => {
-    const allowed = ['tester:event', 'install:progress', 'install:stage', 'updater:event', 'zapret:update', 'log:lines', 'app:navigate'];
+    const allowed = ['tester:event', 'install:progress', 'install:stage', 'updater:event', 'zapret:update', 'log:lines', 'app:navigate', 'install:result'];
     if (allowed.includes(channel)) {
       const listener = (_e, payload) => cb(payload);
       ipcRenderer.on(channel, listener);

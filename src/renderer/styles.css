@@ -600,3 +600,9 @@ input[type="text"]:focus, textarea:focus { outline: none; border-color: var(--ac
 .engine-select { flex: 1 1 200px; min-width: 160px; }
 .ver-status.ok { color: var(--ok); }
 .ver-status.err { color: var(--err); }
+
+/* ---- telegram proxy card ---- */
+.tg-card { margin-top: 12px; }
+.tg-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 10px 0; }
+.tg-link { word-break: break-all; font-size: 11px; margin: 10px 0 0; }
+.setup-admin-btn { margin-top: 8px; }
