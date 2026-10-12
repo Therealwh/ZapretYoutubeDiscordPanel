@@ -576,11 +576,27 @@ ipcMain.handle('zapret:repair', async (_e, targetDir) => {
     return r;
   });
   ipcMain.handle('tg:restart', async (_e, opts) => {
-    const r = await tgProxy.restart({ port: Number(config.get('tgProxyPort', 1443)), ...(opts || {}) });
+    const r = await tgProxy.restart({
+      port: Number(config.get('tgProxyPort', 1443)),
+      secretHex: config.get('tgProxySecret', null),
+      ...(opts || {}),
+    });
     logger.info('Telegram proxy restarted');
     return r;
   });
-  ipcMain.handle('tg:regenerate', () => tgProxy.regenerateSecret());
+  ipcMain.handle('tg:regenerate', async () => {
+    const r = tgProxy.regenerateSecret();
+    if (r.secretHex) config.set('tgProxySecret', r.secretHex);
+    // A new secret only takes effect once the listener is restarted with it.
+    const wasRunning = tgProxy.getStats().running;
+    if (wasRunning) {
+      await tgProxy.restart({ port: Number(config.get('tgProxyPort', 1443)), secretHex: r.secretHex });
+      logger.info('Telegram proxy secret regenerated and restarted');
+    } else {
+      logger.info('Telegram proxy secret regenerated');
+    }
+    return r;
+  });
   ipcMain.handle('tg:open', () => {
     const link = tgProxy.proxyLink();
     shell.openExternal(link);
@@ -770,11 +786,12 @@ app.whenReady().then(() => {
   logger.setSink((batch) => emitToWindow('log:lines', batch));
   logger.info(`Panel ${app.getVersion()} started (admin=${isAdminSync()})`);
   tgProxy.setLogger((msg, level) => (level === 'error' || level === 'warn' ? logger.warn(msg, 'tg-proxy') : logger.info(msg, 'tg-proxy')));
-  // The proxy secret is generated once and reused, otherwise Telegram would
-  // have to be reconfigured after every panel restart.
-  tgProxy.ensureSecret();
+  // The proxy secret is generated once, persisted and then reused — otherwise
+  // Telegram would have to be reconfigured after every panel restart.
   tgProxy.setUserDataDir(app.getPath('userData'));
-  config.set('tgProxySecret', tgProxy.ensureSecret().toString('hex'));
+  if (!tgProxy.loadSecret(config.get('tgProxySecret', null))) {
+    config.set('tgProxySecret', tgProxy.ensureSecret().toString('hex'));
+  }
   registerIpc();
   // Panel self-update: forward events to the renderer, then check quietly
   // (autoDownload is off — the user decides whether to fetch the update).

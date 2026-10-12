@@ -75,6 +75,16 @@ function ensureSecret() {
   return state.secret;
 }
 
+// Reuse the secret persisted in the panel config so Telegram keeps working
+// across panel restarts. Returns true when a valid stored secret was loaded.
+function loadSecret(hex) {
+  if (typeof hex !== 'string' || !/^[0-9a-fA-F]{32}$/.test(hex.trim())) return false;
+  const buf = Buffer.from(hex.trim(), 'hex');
+  if (buf.length !== 16) return false;
+  state.secret = buf;
+  return true;
+}
+
 // Test seam: skip the upstream dial entirely. Used by the automated tests so
 // they assert the handshake stage hermetically — no DNS, no TLS, no Telegram,
 // and no sockets left behind to surface as stray errors after the test ends.
@@ -174,7 +184,7 @@ async function restart(opts) {
 
 function regenerateSecret() {
   state.secret = genSecret();
-  return { ok: true, proxyUrl: proxyLink() };
+  return { ok: true, proxyUrl: proxyLink(), secretHex: state.secret.toString('hex') };
 }
 
 // Read exactly n bytes from a socket (mirrors asyncio readexactly).
@@ -307,7 +317,8 @@ async function handleClient(socket, secret) {
       ? state.cfDomains
       : tgCf.SEED_DOMAINS;
     if (state.cfEnabled !== false) {
-      const relay = await tgCf.openCfRelay(domains, log);
+      // Probe with the real relay-init packet: the worker rejects an empty body.
+      const relay = await tgCf.openCfRelay(domains, log, relayInit);
       if (relay) {
         transport = { kind: 'cf', ws: relay };
         log(`${tag}: using Cloudflare relay ${relay.domain}`, 'info');
@@ -430,6 +441,7 @@ module.exports = {
   setUpstreamDisabled,
   proxyLink,
   ensureSecret,
+  loadSecret,
   wsDomains,
   DC_DEFAULT_IPS,
   DEFAULT_PORT,

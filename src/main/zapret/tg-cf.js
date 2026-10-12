@@ -215,11 +215,17 @@ class CfRelay extends EventEmitter {
   }
 }
 
-// Try domains in order until one answers.
-async function openCfRelay(domains, onLog) {
+// Try domains in order until one answers. The probe must be the real relay-init
+// packet: the worker rejects an empty body and a bogus packet gets no reply, so
+// probing with Buffer.alloc(0) made every domain look unreachable.
+async function openCfRelay(domains, onLog, probePacket) {
+  if (!Buffer.isBuffer(probePacket) || !probePacket.length) {
+    onLog?.('CF relay probe packet missing, cannot select a domain', 'warn');
+    return null;
+  }
   for (const domain of domains) {
     try {
-      await postPacket(domain, Buffer.alloc(0), 8000);
+      await postPacket(domain, probePacket, 8000);
       onLog?.(`CF relay ready: ${domain}`, 'info');
       return new CfRelay(domain);
     } catch (e) {
