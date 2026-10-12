@@ -63,6 +63,12 @@ function actionToast(r) {
 
 // ---------- navigation ----------
 function showPage(name) {
+  // A strategy run kills/restarts winws on every step: navigating away mid-run
+  // would leave the bypass down with no winner applied (issue #3).
+  if (testing && name !== 'strategies') {
+    toast(t('test_nav_blocked'), 'err');
+    return;
+  }
   $$('.nav-item').forEach((b) => b.classList.toggle('active', b.dataset.page === name));
   $$('.page').forEach((p) => p.classList.add('hidden'));
   $(`#page-${name}`).classList.remove('hidden');

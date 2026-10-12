@@ -11,6 +11,7 @@
 //   service.bat's own launch line) instead of brittle nested cmd quoting.
 const { spawn } = require('node:child_process');
 const path = require('node:path');
+const fs = require('node:fs');
 const { listStrategies } = require('./strategy');
 const { run, isAdminSync } = require('../util');
 const { runCommands } = require('../admin');
@@ -111,16 +112,34 @@ function killWinwsAll() {
 // The bat wrapper only exists to build args; we already parse them ourselves.
 function startStrategyWinws(rootDir, strategyFile) {
   const { args } = require('./strategy').parseStrategyFile(strategyFile, { rootDir });
-  if (!args || !args.length) return Promise.resolve(false);
+  if (!args || !args.length) return Promise.resolve({ ok: false, reason: 'no_args' });
+  // winws treats a MISSING --ipset-exclude / --hostlist file as fatal and
+  // exits with code 1 ("cannot access ipset file"). A fresh zapret extraction
+  // ships without the *-user.txt files — they are created by service.bat on
+  // first run — so without this every strategy looks like "не запустилась".
+  try {
+    require('./lists').ensureUserLists(rootDir);
+  } catch { /* best effort — winws will report the real error */ }
   const winws = path.join(rootDir, 'bin', 'winws.exe');
+  if (!fs.existsSync(winws)) {
+    // The classic cause: an antivirus quarantined winws.exe. Naming it beats a
+    // silent "не запустилась" on every strategy.
+    return Promise.resolve({ ok: false, reason: 'winws_missing' });
+  }
   const bin = path.join(rootDir, 'bin');
-  const q = (s) => s.replace(/'/g, "''");
-  const argItems = args.map((a) => `'${q(a)}'`).join(',');
+  const q = (s) => String(s).replace(/'/g, "''");
+  // Start-Process re-parses its argument string: quotes must be stripped or a
+  // path with spaces reaches winws as '"C:\Program",Files\...' and it exits
+  // with "cannot access ipset file" (surfacing as "не запустилась").
+  const spawnArgs = require('./strategy').stripArgQuotes(require('./strategy').rejoinFlagValues(args));
+  const argItems = spawnArgs.map((a) => `'${q(a)}'`).join(',');
   const ps = `Start-Process -FilePath '${q(winws)}' -ArgumentList @(${argItems}) -WorkingDirectory '${q(bin)}' -WindowStyle Hidden -PassThru | Out-Null`;
   return new Promise((resolve) => {
-    const p = spawn('powershell.exe', ['-NoProfile', '-Command', ps], { windowsHide: true, stdio: 'ignore' });
-    p.on('exit', (c) => resolve(c === 0));
-    p.on('error', () => resolve(false));
+    const p = spawn('powershell.exe', ['-NoProfile', '-Command', ps], { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+    let err = '';
+    p.stderr?.on('data', (d) => { err = (err + d).slice(-2000); });
+    p.on('exit', (c) => resolve({ ok: c === 0, reason: c === 0 ? null : `launch_exit_${c}`, stderr: err.trim().slice(-300) }));
+    p.on('error', (e) => resolve({ ok: false, reason: 'launch_error', stderr: String((e && e.message) || e) }));
   });
 }
 
@@ -180,6 +199,23 @@ function groupStats(targetResults) {
 // Abort flag shared with the IPC layer so "Stop" actually interrupts the loop.
 const abort = { flagged: false };
 
+// Persist the run so results survive a panel restart — issue #3 asked for
+// exactly this. Written to utils/test results/test_results_<stamp>.json.
+function saveResults(rootDir, results, winner) {
+  try {
+    const dir = path.join(rootDir, 'utils', 'test results');
+    fs.mkdirSync(dir, { recursive: true });
+    const d = new Date();
+    const p = (n) => String(n).padStart(2, '0');
+    const stamp = `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}_${p(d.getHours())}-${p(d.getMinutes())}-${p(d.getSeconds())}`;
+    fs.writeFileSync(
+      path.join(dir, `test_results_${stamp}.json`),
+      JSON.stringify({ at: d.toISOString(), winner, results }, null, 2),
+      'utf8'
+    );
+  } catch { /* persisting results must never break the run */ }
+}
+
 async function runStrategyTests(rootDir, onEvent, { timeoutSec = 4, stopOnFirst = false } = {}) {
   if (!isAdminSync()) {
     const err = new Error('admin_required');
@@ -202,14 +238,17 @@ async function runStrategyTests(rootDir, onEvent, { timeoutSec = 4, stopOnFirst 
     if (abort.flagged) break;
 
     const started = await startStrategyWinws(rootDir, strat.file);
-    const up = started ? await waitForWinws() : false;
+    const up = started.ok ? await waitForWinws() : false;
     if (abort.flagged) {
       await killWinwsAll();
       break;
     }
     if (!up) {
-      onEvent?.({ type: 'strategy-fail', name: strat.name, reason: 'not_started' });
-      results.push({ name: strat.name, file: strat.file, failed: true, score: { ok: 0, total: 0, pingOk: 0, pingFail: 0, err: 0, unsup: 0 } });
+      // Name the real reason (missing exe / AV quarantine / bad args) instead
+      // of lumping every failure into "не запустилась".
+      const reason = started.reason || 'not_started';
+      onEvent?.({ type: 'strategy-fail', name: strat.name, reason, stderr: started.stderr || '' });
+      results.push({ name: strat.name, file: strat.file, failed: true, failReason: reason, stderr: started.stderr || '', score: { ok: 0, total: 0, pingOk: 0, pingFail: 0, err: 0, unsup: 0 } });
       continue;
     }
     await new Promise((r) => setTimeout(r, 500));
@@ -259,7 +298,8 @@ async function runStrategyTests(rootDir, onEvent, { timeoutSec = 4, stopOnFirst 
       }
     }
   }
-  onEvent?.({ type: 'complete', winner: winner ? winner.name : null, results: results.map((r) => ({ name: r.name, failed: r.failed, score: r.score })) });
+  onEvent?.({ type: 'complete', winner: winner ? winner.name : null, results: results.map((r) => ({ name: r.name, failed: r.failed, failReason: r.failReason, score: r.score })) });
+  saveResults(rootDir, results, winner ? winner.name : null);
   return { results, winner: winner ? winner.name : null, winnerFile: winner ? winner.file : null, aborted: abort.flagged };
 }
 

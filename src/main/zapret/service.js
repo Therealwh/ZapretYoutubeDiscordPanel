@@ -5,7 +5,7 @@ const os = require('node:os');
 const { execFile } = require('node:child_process');
 const { runCommands, elevateBatFile } = require('../admin');
 const { isAdminSync, run } = require('../util');
-const { toScArgsString, parseStrategyFile } = require('./strategy');
+const { toScArgsString, parseStrategyFile, stripArgQuotes, rejoinFlagValues } = require('./strategy');
 const { parseScState } = require('./status');
 
 // Enable TCP timestamps like service.bat :tcp_enable (best effort)
@@ -47,23 +47,55 @@ function waitWinws(absent, timeoutMs = 10000) {
   });
 }
 
-// Install the service by writing a .bat with the exact commands of the
-// original service.bat :service_install and running it. This avoids the
-// cmd.exe double-quoting mangling that breaks `sc create binPath=` when the
-// chain is passed as a single execFile argument (sc prints usage, service is
-// never created).
+// Install the service so `sc create binPath=` is never re-quoted by cmd.exe.
+//
+// The previous implementation piped the whole chain through a .bat, which only
+// works while the install path has no spaces: cmd.exe strips \" and splits the
+// value on the space, so SCM got a malformed ImagePath (QueryServiceConfig 1734)
+// and the service died with 1067. When we are already admin we call sc.exe
+// directly with argv, which passes the value to SCM untouched; the .bat path
+// stays only for the UAC-elevation case and is escaped with carets there.
+// A service ImagePath with spaces is a known-bad shape for SCM: the service
+// dies with 1067 / QueryServiceConfig 1734, while the very same strategy runs
+// fine as a process. Detect it up front so the user gets an actionable message
+// instead of "zapret failed to start".
+function assertServicePathUsable(rootDir) {
+  if (!/\s/.test(rootDir)) return { ok: true };
+  return { ok: false, reason: 'service_path_has_spaces', message: rootDir };
+}
+
 async function installStrategyAsService(rootDir, strategyFile) {
   const { args } = parseStrategyFile(strategyFile, { rootDir });
   if (!args.length) return { ok: false, reason: 'parse_failed' };
+  const usable = assertServicePathUsable(rootDir);
+  if (!usable.ok) return usable;
   const winws = path.join(rootDir, 'bin', 'winws.exe');
   const scArgs = toScArgsString(args);
   const strategyName = path.basename(strategyFile, '.bat');
 
+  // The engine exits fatally when a referenced list file is missing, and a
+  // fresh extraction ships without the *-user.txt files.
+  try {
+    require('./lists').ensureUserLists(rootDir);
+  } catch { /* best effort */ }
+
+  // A leftover winws.exe keeps the WinDivert handle, and the NEW service's
+  // winws then dies with code 1 — which surfaced as the useless
+  // "service_start_failed". Killing every winws and waiting for it to be gone
+  // makes applying a strategy idempotent.
+  //
+  // The chain runs from a .bat on purpose: SCM needs the whole command line
+  // wrapped in quotes with the exe path quotes escaped inside it
+  // (binPath= "\"C:\...\winws.exe\" --args"). Handing that to sc.exe as a
+  // plain argv value makes SCM reject the ImagePath (QueryServiceConfig 1734)
+  // and the service dies with 1067 — the failure users reported in issue #3.
   const bat = [
     '@echo off',
     'chcp 437 >nul',
     'net stop zapret >nul 2>&1',
     'sc delete zapret >nul 2>&1',
+    'taskkill /IM winws.exe /F >nul 2>&1',
+    'ping -n 2 127.0.0.1 >nul',
     `sc create zapret binPath= "\\"${winws}\\" ${scArgs}" DisplayName= "zapret" start= auto`,
     'sc description zapret "Zapret DPI bypass software"',
     'sc start zapret',
@@ -80,7 +112,6 @@ async function installStrategyAsService(rootDir, strategyFile) {
 
   let exec;
   if (isAdminSync()) {
-    // Direct: cmd runs the bat verbatim, no extra quoting layers.
     exec = await new Promise((resolve) => {
       execFile('cmd.exe', ['/d', '/c', batFile], { windowsHide: true, timeout: 60000 }, (err, stdout, stderr) => {
         resolve({ code: err && err.code != null ? err.code : err ? 1 : 0, stdout: stdout || '', stderr: stderr || '' });
@@ -88,14 +119,14 @@ async function installStrategyAsService(rootDir, strategyFile) {
     });
   } else {
     const el = await elevateBatFile(batFile);
-    if (!el.ok) {
-      try { fs.rmSync(batFile, { force: true }); } catch {}
-      return { ok: false, reason: el.cancelled ? 'elevate_cancelled' : 'elevate_failed' };
-    }
+    try { fs.rmSync(batFile, { force: true }); } catch {}
+    if (!el.ok) return { ok: false, reason: el.cancelled ? 'elevate_cancelled' : 'elevate_failed' };
     exec = { code: el.exitCode, stdout: '', stderr: '' };
   }
   try { fs.rmSync(batFile, { force: true }); } catch {}
 
+  // WinDivert stays held for a moment after winws exits.
+  await waitWinws(true, 8000);
   // Trust only the observed state, not exit codes (net stop / sc delete of an
   // absent service fail harmlessly and skew the chain exit code).
   const up = await waitServiceState('zapret', 'RUNNING');
@@ -103,8 +134,7 @@ async function installStrategyAsService(rootDir, strategyFile) {
     return {
       ok: false,
       reason: 'service_start_failed',
-      code: exec.code,
-      output: String(exec.stdout || '').split(/\r?\n/).filter(Boolean).slice(-6).join('\n'),
+      message: String(exec.stderr || exec.stdout || '').trim().slice(-300),
     };
   }
   return { ok: true, args };
@@ -146,8 +176,16 @@ function launchStrategyProcess(rootDir, strategyFile) {
   if (!args.length) return Promise.resolve({ ok: false, reason: 'parse_failed' });
   const bin = path.join(rootDir, 'bin');
   const winws = path.join(bin, 'winws.exe');
-  const argsStr = args.join(' ');
-  const q = (s) => s.replace(/'/g, "''");
+  // Missing *-user.txt files make winws exit with "cannot access ipset file"
+  // (code 1) — recreate them before every launch.
+  try {
+    require('./lists').ensureUserLists(rootDir);
+  } catch { /* best effort */ }
+  // Quotes must be stripped here: Start-Process re-parses the argument string,
+  // and a quoted path containing spaces reaches winws with literal quotes,
+  // which makes it exit with "cannot access ipset file".
+  const argsStr = stripArgQuotes(rejoinFlagValues(args)).join(' ');
+  const q = (s) => String(s).replace(/'/g, "''");
   const ps = [
     `$p = Start-Process -FilePath '${q(winws)}' -ArgumentList '${q(argsStr)}' -WorkingDirectory '${q(bin)}' -WindowStyle Hidden${isAdminSync() ? '' : ' -Verb RunAs'} -PassThru`,
     'if ($p) { exit 0 } else { exit 1 }',
@@ -190,4 +228,5 @@ module.exports = {
   killWinws,
   stopDrivers,
   waitServiceState,
+  assertServicePathUsable,
 };

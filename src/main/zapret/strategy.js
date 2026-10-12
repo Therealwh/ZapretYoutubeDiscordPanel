@@ -111,9 +111,33 @@ function listStrategies(rootDir) {
     .sort((a, b) => (a.sortKey < b.sortKey ? -1 : a.sortKey > b.sortKey ? 1 : 0));
 }
 
-// Tokenize like cmd's `for %%i in (!line!)`: split on space/tab, comma, semicolon, '='
+// Tokenize like cmd's `for %%i in (!line!)`: split on space/tab, comma, semicolon and
+// '=' — but NEVER inside a quoted string.
+//
+// The quote awareness is what keeps `--hostlist="C:\Program Files\zapret\lists\x.txt"`
+// in one piece. Splitting it produced `--hostlist` + `"C:\Program` +
+// `Files\zapret\lists\x.txt"`, which winws then read as a comma-joined list and
+// rejected with `cannot access ipset file 'C:\Program\,Files\...'` — the bypass
+// simply refused to start from a folder with a space in its name.
 function cmdTokenize(line) {
-  return line.split(/[\s,;=]+/).filter(Boolean);
+  const out = [];
+  let cur = '';
+  let inQuotes = false;
+  for (const ch of String(line)) {
+    if (ch === '"') {
+      inQuotes = !inQuotes;
+      cur += ch;
+      continue;
+    }
+    if (!inQuotes && /[\s,;=]/.test(ch)) {
+      if (cur) out.push(cur);
+      cur = '';
+      continue;
+    }
+    cur += ch;
+  }
+  if (cur) out.push(cur);
+  return out;
 }
 
 // Expand cmd %-variables the way `call set` re-expansion does inside service.bat.
@@ -265,6 +289,46 @@ function toScArgsString(args) {
   return args.map((a) => a.replace(/"/g, '\\"')).join(' ');
 }
 
+// Re-attach a flag's value that cmd-style tokenizing split apart.
+//
+// The parser must tokenize on spaces (that is what cmd.exe does), but that
+// also breaks `--hostlist="C:\Program Files\zapret\lists\x.txt"` into
+// `--hostlist` + `"C:\Program` + `Files\zapret\lists\x.txt"`. winws then treats
+// the stray token as a list of names separated by spaces and rejects it with
+//   cannot access ipset file 'C:\Program\,Files\zapret\lists\x.txt'
+// Merging the value back with `=` restores winws' documented syntax, and the
+// value keeps its quotes so a path with spaces survives winws' own tokenizer.
+function rejoinFlagValues(args) {
+  const out = [];
+  for (let i = 0; i < args.length; i += 1) {
+    const tok = String(args[i]);
+    const next = i + 1 < args.length ? String(args[i + 1]) : null;
+    // A flag without '=' followed by a value token belongs together.
+    if (tok.startsWith('--') && !tok.includes('=') && next !== null && next !== '' && !next.startsWith('--')) {
+      out.push(`${tok}=${next}`);
+      i += 1;
+      continue;
+    }
+    out.push(tok);
+  }
+  return out;
+}
+
+// Strip the quotes for a DIRECT spawn (no shell, no cmd.exe).
+//
+// Each array element is already exactly one argv entry, so the escaped quotes
+// that SCM needs become LITERAL characters for winws — and winws re-tokenizes
+// its own command line, which breaks a path like
+//   "C:\Program Files\zapret\lists\ipset-exclude.txt"
+// into '"C:\Program",Files\zapret\lists\..."' (winws then exits with
+// "cannot access ipset file"). Removing the quotes fixes it.
+function stripArgQuotes(args) {
+  return args.map((a) => {
+    const s = String(a);
+    return s.startsWith('"') && s.endsWith('"') && s.length > 1 ? s.slice(1, -1) : s;
+  });
+}
+
 // ---- import / delete of user strategies ----
 const IMPORT_PREFIX = 'user-';
 
@@ -332,4 +396,5 @@ function isImported(name) {
 module.exports = {
   listStrategies, parseStrategyFile, buildVarMap, toScArgsString,
   detectMethods, methodBadges, importStrategy, deleteStrategy, isImported, safeStrategyName,
+  stripArgQuotes, rejoinFlagValues,
 };

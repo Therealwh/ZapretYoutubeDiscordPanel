@@ -338,7 +338,7 @@ const DICT = {
     toast_need_root: 'Сначала установите zapret',
     toast_cmd_sent: 'Команды отправлены (подтвердите UAC)',
     toast_uac_cancelled: 'UAC отклонён — команды не выполнены',
-    err_service_start: 'Служба zapret не запустилась. Запустите диагностику или попробуйте другую стратегию',
+    err_service_start: 'Служба zapret не запустилась. Попробуйте «Запустить» в режиме процесса или перенесите zapret в папку без пробелов (например C:\\zapret)',
 
     win_minimize: 'Свернуть',
     win_maximize: 'Развернуть',
@@ -685,7 +685,7 @@ const DICT = {
     toast_need_root: 'Install zapret first',
     toast_cmd_sent: 'Commands sent (confirm UAC)',
     toast_uac_cancelled: 'UAC declined — commands were not executed',
-    err_service_start: 'zapret service failed to start. Run diagnostics or try another strategy',
+    err_service_start: 'The zapret service failed to start. Try "Run" (process mode) or move zapret to a folder without spaces (e.g. C:\\zapret)',
 
     win_minimize: 'Minimize',
     win_maximize: 'Maximize',
