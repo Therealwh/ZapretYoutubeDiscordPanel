@@ -5,6 +5,8 @@
 **Красивая панель управления для [zapret-discord-youtube](https://github.com/Flowseal/zapret-discord-youtube)**
 **A beautiful control panel for [zapret-discord-youtube](https://github.com/Flowseal/zapret-discord-youtube)**
 
+🎛 Обход блокировок Discord / YouTube на Windows · 📡 встроенный **MTProxy** для Telegram · 🔍 темы: `zapret`, `mtproxy`, `anti-dpi`, `obhod-blokirovok`
+
 ![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-blue)
 ![Release](https://img.shields.io/github/v/release/Therealwh/ZapretYoutubeDiscordPanel)
 ![License](https://img.shields.io/badge/license-MIT-green)
@@ -106,11 +108,15 @@
 > 💡 **YouTube или Discord не работают, хотя обход включён?**
 > Зайдите в **Диагностику** и нажмите **«Исправить DNS»** — часто провайдер подменяет DNS-ответы, и именно это ломает доступ. Кнопка «Сбросить DNS» вернёт настройки как было.
 
-### 📡 Telegram-прокси
-Встроенный мост **MTProto → WebSocket** (`127.0.0.1:1443`) для Telegram Desktop — порт
-[Flowseal/tg-ws-proxy](https://github.com/Flowseal/tg-ws-proxy): разбор рукопожатия obfuscated2,
-определение DC, WebSocket-релей `kws<dc>.web.telegram.org/apiws` и **фолбэк на прямой TCP к IP
-дата-центра**, когда WebSocket-реливы заблокированы.
+### 📡 Telegram-прокси (MTProxy-совместимый)
+Встроенный локальный **MTProxy** — мост **MTProto → WebSocket** на `127.0.0.1:1443`, совместимый с
+настройкой прокси в Telegram Desktop (`Свойства → Дополнительно → Тип соединения → MTProto`).
+Реализация портирована из [Flowseal/tg-ws-proxy](https://github.com/Flowseal/tg-ws-proxy): разбор
+рукопожатия obfuscated2, определение DC, WebSocket-рели `kws<dc>.web.telegram.org/apiws` и
+**фолбэк на прямой TCP к IP дата-центра**, когда WebSocket-реливы заблокированы.
+
+> Ключи `topics` репозитория: `mtproxy`, `mtproto`, `telegram`, `telegram-proxy`, `proxy`,
+> `zapret`, `anti-dpi`, `obhod-blokirovok` — по ним ищут в GitHub.
 
 - Кнопки Старт/Стоп, статистика (соединения, трафик), копирование `tg://`-ссылки и кнопка
   **«Настроить в Telegram»** — секрет прокси генерируется один раз и сохраняется
