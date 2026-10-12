@@ -1068,8 +1068,11 @@ async function renderPanelUpdater() {
       status.className = 'ver-status';
       break;
     case 'error':
-      status.textContent = t('panel_error');
+      // Show WHY the check failed (no network / proxy / TLS) instead of a
+      // generic message — issue #3 asked for real reasons.
+      status.textContent = `${t('panel_error')}${st.message ? `: ${st.message}` : ''}`;
       status.className = 'ver-status err';
+      status.title = st.message || '';
       break;
     default:
       status.textContent = t('panel_uptodate');

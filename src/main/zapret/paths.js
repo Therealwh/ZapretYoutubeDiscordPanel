@@ -11,7 +11,7 @@ function looksLikeZapretRoot(dir) {
 
 // Recommended install locations to scan on first run
 function candidateRoots() {
-  const out = ['C:\\zapret', 'C:\\zapret-discord-youtube', 'C:\\Program Files\\zapret-discord-youtube'];
+  const out = ['C:\\Zapret', 'C:\\zapret', 'C:\\zapret-discord-youtube', 'C:\\Program Files\\zapret-discord-youtube'];
   if (process.env.LOCALAPPDATA) {
     out.push(path.join(process.env.LOCALAPPDATA, 'zapret-discord-youtube'));
   }

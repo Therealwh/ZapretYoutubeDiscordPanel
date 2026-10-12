@@ -715,6 +715,17 @@ async function runPendingAction() {
 
 app.whenReady().then(() => {
   config.init(app.getPath('userData'));
+  // A zapret folder that no longer holds the engine (e.g. it was installed into
+  // the panel's own folder and got wiped by a panel update) must not stay
+  // configured: every page would show "unknown" and nothing would work.
+  // Clearing it brings the user back to the setup wizard, which reinstalls into
+  // the dedicated C:\Zapret folder.
+  const configuredRoot = config.get('zapretRoot', null);
+  if (configuredRoot && !isZapretRoot(configuredRoot)) {
+    logger.warn(`zapret folder is empty or damaged: ${configuredRoot} — resetting setup`);
+    config.set('zapretRoot', null);
+    config.set('lastStrategyFile', null);
+  }
   logger.init(app.getPath('userData'));
   // Live log stream: the logger batches entries and pushes them to the window.
   logger.setSink((batch) => emitToWindow('log:lines', batch));
