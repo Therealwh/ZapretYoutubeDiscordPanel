@@ -84,6 +84,9 @@ test('a real obfuscated2 handshake is accepted and the DC is detected', async ()
 
     const sock = net.connect(port, '127.0.0.1');
     await new Promise((res, rej) => { sock.once('connect', res); sock.once('error', rej); });
+    // The proxy tears the connection down on its own; a late ECONNRESET here
+    // must not surface as an unhandled error after the test finished.
+    sock.on('error', () => {});
     sock.write(hs);
 
     // Wait until the proxy has parsed it and moved on to the upstream dial.
@@ -123,6 +126,7 @@ test('a handshake with the wrong secret is rejected', async () => {
 
     const sock = net.connect(port, '127.0.0.1');
     await new Promise((res, rej) => { sock.once('connect', res); sock.once('error', rej); });
+    sock.on('error', () => {});
     sock.write(hs);
 
     const rejected = await waitForLog(logs, 'handshake parse failed', 6000);
