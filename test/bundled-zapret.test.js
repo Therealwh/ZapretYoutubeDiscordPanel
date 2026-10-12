@@ -92,6 +92,56 @@ test('installZapret refuses the panel folder before downloading', async () => {
   }
 });
 
+test('updating an existing install does not fail on the drive root', async () => {
+  // The swap step used to `mkdir` the PARENT unconditionally; on a drive root
+  // (C:\) that always throws EPERM, so every update to C:\Zapret aborted with
+  // "target_unwritable" even though the folder was writable.
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ydp-root-'));
+  const service = require('../src/main/zapret/service');
+  const orig = service.killWinws;
+  const origStop = service.stopService;
+  const origDrivers = service.stopDrivers;
+  const origRemove = service.removeServices;
+  service.killWinws = async () => {};
+  service.stopService = async () => {};
+  service.stopDrivers = async () => {};
+  service.removeServices = async () => {};
+  const target = path.join(dir, 'zapret');
+  fs.mkdirSync(target); // pre-existing folder forces the swap path
+  try {
+    const res = await updates.installZapret(target, () => {}, () => {}, { preferBundled: true, allowExisting: true });
+    assert.strictEqual(res.ok, true, `update must succeed: ${res.reason || ''} ${res.message || ''}`);
+    assert.ok(fs.existsSync(path.join(target, 'bin', 'winws.exe')));
+    assert.ok(fs.existsSync(path.join(target, 'service.bat')));
+  } finally {
+    service.killWinws = orig;
+    service.stopService = origStop;
+    service.stopDrivers = origDrivers;
+    service.removeServices = origRemove;
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+test('install refuses to overwrite the panel folder on a fresh install', async () => {
+  const orig = updates.latestReleaseAsset;
+  let networkUsed = false;
+  updates.latestReleaseAsset = async () => {
+    networkUsed = true;
+    return { ok: false, reason: 'no_asset' };
+  };
+  try {
+    const res = await updates.installZapret('C:\\Program Files\\YoutubeDiscordPanel', () => {}, () => {}, {
+      panelDir: 'C:\\Program Files\\YoutubeDiscordPanel',
+      allowExisting: false,
+    });
+    assert.strictEqual(res.ok, false);
+    assert.strictEqual(res.reason, 'target_is_panel_dir');
+    assert.strictEqual(networkUsed, false);
+  } finally {
+    updates.latestReleaseAsset = orig;
+  }
+});
+
 test('assertTargetWritable reports a missing root permission early', () => {
   // Z: does not exist here, so creating it must fail fast without a download.
   const res = updates.assertTargetWritable('Z:\\zapret');

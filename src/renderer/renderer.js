@@ -1104,6 +1104,9 @@ async function renderUpdates() {
   const v = await window.api.checkVersion();
   $('#ver-local').textContent = v.local || t('updates_version_unknown');
   $('#ver-remote').textContent = v.remote || t('updates_version_unknown');
+  // No readable local version means the zapret folder is broken or missing —
+  // offer the one-click repair instead of a dead "Update" button.
+  $('#ver-repair').classList.toggle('hidden', !!v.local);
   const st = $('#ver-status');
   if (!v.ok) {
     st.textContent = t('toast_error');
@@ -1121,6 +1124,29 @@ async function renderUpdates() {
 }
 
 function bindUpdates() {
+  $('#btn-ver-repair').addEventListener('click', async () => {
+    const btn = $('#btn-ver-repair');
+    btn.disabled = true;
+    const bar = $('#install-progress');
+    const wrap = $('#install-progress-wrap');
+    const off = window.api.on('install:progress', (frac) => {
+      wrap?.classList.remove('hidden');
+      if (bar) bar.style.width = `${Math.round((frac || 0) * 100)}%`;
+    });
+    const r = await window.api.repairZapret();
+    if (off) off();
+    wrap?.classList.add('hidden');
+    btn.disabled = false;
+    if (r.ok) {
+      cfg = await window.api.getConfig();
+      toast(`${t('ver_repair_done')} (${r.version})`, 'ok');
+      $('#ver-repair').classList.add('hidden');
+      renderUpdates();
+      showPage('strategies');
+    } else {
+      toast(`${t('toast_error')}: ${[r.reason, r.message].filter(Boolean).join(' — ')}`, 'err');
+    }
+  });
   $('#btn-engine-refresh').addEventListener('click', () => loadEngineReleases());
   $('#btn-engine-update').addEventListener('click', async () => {
     const tag = $('#engine-select').value;

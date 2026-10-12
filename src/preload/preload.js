@@ -48,6 +48,7 @@ const api = {
   chooseZip: () => ipcRenderer.invoke('dialog:chooseZip'),
   runningInfo: () => ipcRenderer.invoke('zapret:runningInfo'),
   ownership: () => ipcRenderer.invoke('zapret:ownership'),
+  repairZapret: (dir) => ipcRenderer.invoke('zapret:repair', dir),
   takeoverForeign: () => ipcRenderer.invoke('zapret:takeover'),
   adoptPortable: () => ipcRenderer.invoke('zapret:adoptPortable'),
   updateIpset: () => ipcRenderer.invoke('updates:updateIpset'),

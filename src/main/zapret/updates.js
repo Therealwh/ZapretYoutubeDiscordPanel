@@ -550,11 +550,16 @@ async function installZapretInner(targetDir, onProgress, onStage, opts = {}) {
   // retry for up to ~12s before giving up, and keep the old folder intact.
   // Last resort: merge-copy the new version over the old folder in place.
   const parent = path.dirname(targetDir);
-  try {
-    fs.mkdirSync(parent, { recursive: true });
-  } catch (e) {
-    try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {}
-    return { ok: false, reason: 'target_unwritable', message: String((e && e.message) || e) };
+  // Only create the parent when it is really missing: `mkdir` on an existing
+  // drive root (C:\) throws EPERM even though the folder is writable, which
+  // aborted every update to the default C:\Zapret location.
+  if (!exists(parent)) {
+    try {
+      fs.mkdirSync(parent, { recursive: true });
+    } catch (e) {
+      try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {}
+      return { ok: false, reason: 'target_unwritable', message: String((e && e.message) || e) };
+    }
   }
   const backup = targetDir + '.backup';
   if (exists(targetDir)) {

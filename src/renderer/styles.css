@@ -668,3 +668,14 @@ select option { background: var(--bg-card); color: var(--text); }
 .logs-head h2 { margin: 0; }
 .logs-head .mono { font-size: 12px; }
 .logs-toolbar { margin-bottom: 12px; }
+
+/* ---- zapret repair callout ---- */
+.ver-repair {
+  margin: 10px 0 4px;
+  padding: 12px 14px;
+  border: 1px solid var(--warn);
+  border-radius: 12px;
+  background: rgba(255, 176, 32, 0.08);
+  display: flex; flex-direction: column; gap: 10px; align-items: flex-start;
+}
+.ver-repair p { margin: 0; }

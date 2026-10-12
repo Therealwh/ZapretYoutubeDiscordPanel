@@ -72,6 +72,10 @@ if (!single) {
   });
 }
 
+// The one folder zapret is allowed to live in. Keeping it outside the panel's
+// own install directory is what stops a panel update from wiping the bypass.
+const DEFAULT_ZAPRET_ROOT = 'C:\\Zapret';
+
 function rootDir() {
   return config.get('zapretRoot', null);
 }
@@ -326,6 +330,28 @@ function registerIpc() {
   ipcMain.handle('zapret:validateRoot', (_e, dir) => paths.validateRoot(dir));
 
   // ---- foreign / portable zapret ----
+  // One-click recovery: (re)install the bundled zapret into the dedicated folder
+// and point the panel at it. Used when the configured folder is broken, sits
+// inside the panel's own install (wiped by panel updates) or is not writable.
+ipcMain.handle('zapret:repair', async (_e, targetDir) => {
+    const dir = targetDir || DEFAULT_ZAPRET_ROOT;
+    logger.info(`Repairing zapret install into ${dir}`);
+    const r = await updates.installZapret(dir, (f) => emitToWindow('install:progress', f), (s) => emitToWindow('install:stage', s), {
+      preferBundled: true,
+      panelDir: path.dirname(app.getPath('exe')),
+      allowExisting: true,
+    });
+    if (r.ok) {
+      config.set('zapretRoot', dir);
+      config.set('lastStrategyFile', null);
+      try { lists.ensureUserLists(dir); } catch { /* best effort */ }
+      logger.info(`zapret repaired: ${r.version} (${r.source}) in ${dir}`);
+    } else {
+      logger.error(`zapret repair failed: ${r.reason} ${r.message || ''}`);
+    }
+    return r;
+  });
+
   ipcMain.handle('zapret:ownership', () => ownership.detectOwnership(rootDir()));
   ipcMain.handle('zapret:takeover', async () => {
     const r = await ownership.takeoverForeignService({ managedRoot: rootDir() });
