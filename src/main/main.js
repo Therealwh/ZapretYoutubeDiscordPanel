@@ -76,6 +76,16 @@ function rootDir() {
   return config.get('zapretRoot', null);
 }
 
+// Does this folder already hold a working zapret install?
+function isZapretRoot(dir) {
+  if (!dir) return false;
+  try {
+    return fs.existsSync(path.join(dir, 'bin', 'winws.exe'));
+  } catch {
+    return false;
+  }
+}
+
 function createWindow(startHidden) {
   win = new BrowserWindow({
     width: 1120,
@@ -479,9 +489,11 @@ function registerIpc() {
     logger.info(`zapret install requested → ${targetDir}${localZip ? ' (local zip)' : ''}`);
     const r = await updates.installZapret(targetDir, (f) => emitToWindow('install:progress', f), (s) => emitToWindow('install:stage', s), {
       localZip: localZip || null,
-      // Installing zapret into the panel's own folder gets wiped by the next
-      // panel update, so it is refused unless the caller passes force.
-      panelDir: app.getAppPath(),
+      // Installing zapret INTO the panel's own folder gets wiped by the next
+      // panel update, so a FRESH install there is refused. An existing install
+      // in that folder must still be updatable, otherwise the user is stuck.
+      panelDir: path.dirname(app.getPath('exe')),
+      allowExisting: isZapretRoot(targetDir),
       preferBundled: !!(opts && opts.preferBundled),
     });
     if (r.ok) {

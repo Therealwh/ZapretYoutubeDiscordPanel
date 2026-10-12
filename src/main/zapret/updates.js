@@ -330,26 +330,22 @@ async function latestReleaseAsset() {
   return { ok: true, version: json.tag_name, name: asset.name, url: asset.browser_download_url, size: asset.size };
 }
 
-// Can we actually create/write the destination folder? Checked BEFORE the
-// download so a permission problem does not waste 2 MB of traffic first.
+// Can we actually write to the destination folder? Checked BEFORE the download
+// so a permission problem does not waste traffic.
+//
+// Two traps this avoids:
+//   * `mkdir` on an existing drive root (C:\) fails with EPERM even though the
+//     folder is writable — and C:\zapret is our own default suggestion, so
+//     probing the parent with mkdir broke EVERY fresh install
+//     (`mkdir C:\: EPERM`).
+//   * creating the folder just to test it would leave an empty folder behind
+//     when the user cancels. `access()` asks the ACLs and touches nothing.
 function assertTargetWritable(targetDir) {
-  const parent = path.dirname(targetDir);
+  const probeDir = exists(targetDir) ? targetDir : path.dirname(targetDir);
   try {
-    fs.mkdirSync(parent, { recursive: true });
+    fs.accessSync(probeDir, fs.constants.W_OK);
   } catch (e) {
-    if (e && (e.code === 'EPERM' || e.code === 'EACCES' || e.code === 'ENOTEMPTY')) {
-      return { ok: false, reason: 'target_unwritable', message: `mkdir ${parent}: ${e.code}` };
-    }
     return { ok: false, reason: 'target_unwritable', message: String((e && e.message) || e) };
-  }
-  if (!exists(targetDir)) {
-    try {
-      const probeDir = path.join(parent, `.ydp-write-test-${process.pid}`);
-      fs.mkdirSync(probeDir);
-      fs.rmSync(probeDir, { recursive: true, force: true });
-    } catch (e) {
-      return { ok: false, reason: 'target_unwritable', message: String((e && e.message) || e) };
-    }
   }
   return { ok: true };
 }

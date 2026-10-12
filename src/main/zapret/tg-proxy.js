@@ -259,6 +259,7 @@ async function handleClient(socket, secret) {
   const splitter = new tg.MsgSplitter(tg.protoIntOf(parsed.protoTag));
 
   let transport = null;
+  let lastErr = null;
 
   // Tests skip the network entirely; the handshake stage above still runs.
   if (state.upstreamDisabled) {

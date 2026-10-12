@@ -99,6 +99,29 @@ test('assertTargetWritable reports a missing root permission early', () => {
   assert.strictEqual(res.reason, 'target_unwritable');
 });
 
+test('assertTargetWritable accepts the default drive-root path (issue: mkdir C:\\: EPERM)', () => {
+  // C:\zapret is the wizard's default suggestion. Probing it used to fail with
+  // `mkdir C:\: EPERM` because mkdir on an existing drive root always throws.
+  const res = updates.assertTargetWritable('C:\\zapret');
+  assert.strictEqual(res.ok, true, `default install path must be accepted: ${res.message || ''}`);
+});
+
+test('assertTargetWritable leaves no folder behind', () => {
+  const target = path.join(os.tmpdir(), `ydp-no-side-effect-${process.pid}`);
+  assert.strictEqual(fs.existsSync(target), false);
+  updates.assertTargetWritable(target);
+  assert.strictEqual(fs.existsSync(target), false, 'a permission check must not create folders');
+});
+
+test('assertTargetWritable accepts an existing writable folder', () => {
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ydp-exist-'));
+  try {
+    assert.strictEqual(updates.assertTargetWritable(path.join(dir, 'zapret')).ok, true);
+  } finally {
+    fs.rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 test('assertTargetWritable accepts a writable temp folder', () => {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'ydp-w-'));
   try {
