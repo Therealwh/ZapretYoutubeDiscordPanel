@@ -16,6 +16,7 @@ const net = require('node:net');
 const crypto = require('node:crypto');
 const { RawWebSocket } = require('./tg-ws');
 const tg = require('./tg-crypto');
+const tgCf = require('./tg-cf');
 
 const DEFAULT_PORT = 1443;
 const DEFAULT_HOST = '127.0.0.1';
@@ -49,12 +50,20 @@ const state = {
   lastError: null,
   startedAt: null,
   upstreamDisabled: false,
+  cfEnabled: true,
+  cfDomains: null,
+  userData: null,
 };
 
 let log = () => {};
 
 function setLogger(fn) {
   log = typeof fn === 'function' ? fn : () => {};
+}
+
+// Where to cache the refreshed Cloudflare domain pool.
+function setUserDataDir(dir) {
+  state.userData = dir || null;
 }
 
 function genSecret() {
@@ -97,6 +106,8 @@ function start(opts = {}) {
   if (state.running) return { ok: true, alreadyRunning: true, ...getStats() };
   state.port = Number(opts.port) || DEFAULT_PORT;
   state.host = opts.host || DEFAULT_HOST;
+  if (typeof opts.cfEnabled === 'boolean') state.cfEnabled = opts.cfEnabled;
+  if (Array.isArray(opts.cfDomains) && opts.cfDomains.length) state.cfDomains = opts.cfDomains;
   if (opts.secretHex) {
     try {
       const buf = Buffer.from(String(opts.secretHex), 'hex');
@@ -127,6 +138,14 @@ function start(opts = {}) {
       state.lastError = null;
       state.startedAt = new Date().toISOString();
       log(`Telegram proxy listening on ${state.host}:${state.port}`, 'info');
+      // Refresh the Cloudflare relay pool in the background; failures keep the
+      // bundled list, so the proxy is never left without a fallback route.
+      tgCf
+        .refreshDomains(state.userData || require('node:os').tmpdir(), log)
+        .then((list) => {
+          state.cfDomains = list;
+        })
+        .catch(() => {});
       resolve({ ok: true, ...getStats() });
     });
   });
@@ -280,9 +299,27 @@ async function handleClient(socket, secret) {
     }
   }
 
-  // 2) Direct TCP to the DC address. kws*.web.telegram.org is blocked more
-  //    often than the DC endpoints themselves, so this fallback is what keeps
-  //    the proxy usable on hostile networks (see tg-ws-proxy do_fallback).
+  // 2) Cloudflare worker relays. On hostile networks the kws relays AND the DC
+  //    addresses are both blocked, while CF-fronted worker domains still pass —
+  //    this is what makes tg-ws-proxy work where a direct connection cannot.
+  if (!transport) {
+    const domains = Array.isArray(state.cfDomains) && state.cfDomains.length
+      ? state.cfDomains
+      : tgCf.SEED_DOMAINS;
+    if (state.cfEnabled !== false) {
+      const relay = await tgCf.openCfRelay(domains, log);
+      if (relay) {
+        transport = { kind: 'cf', ws: relay };
+        log(`${tag}: using Cloudflare relay ${relay.domain}`, 'info');
+      } else {
+        log(`${tag}: no Cloudflare relay available`, 'warn');
+      }
+    }
+  }
+
+  // 3) Direct TCP to the DC address. kws*.web.telegram.org is blocked more
+  //    often than the DC endpoints themselves, so this is the last resort
+  //    (see tg-ws-proxy do_fallback).
   if (!transport) {
     const ip = DC_DEFAULT_IPS[dc];
     if (ip) {
@@ -388,6 +425,7 @@ module.exports = {
   restart,
   getStats,
   setLogger,
+  setUserDataDir,
   regenerateSecret,
   setUpstreamDisabled,
   proxyLink,

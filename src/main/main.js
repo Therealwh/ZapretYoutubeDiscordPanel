@@ -773,6 +773,7 @@ app.whenReady().then(() => {
   // The proxy secret is generated once and reused, otherwise Telegram would
   // have to be reconfigured after every panel restart.
   tgProxy.ensureSecret();
+  tgProxy.setUserDataDir(app.getPath('userData'));
   config.set('tgProxySecret', tgProxy.ensureSecret().toString('hex'));
   registerIpc();
   // Panel self-update: forward events to the renderer, then check quietly
