@@ -169,7 +169,7 @@ function createWindow(startHidden) {
           };
           await new Promise((r) => setTimeout(r, 2500));
           await shot('dashboard');
-          for (const page of ['updates', 'settings', 'strategies']) {
+          for (const page of ['updates', 'strategies', 'lists', 'logs', 'settings']) {
             await win.webContents.executeJavaScript(`document.querySelector('[data-page=${page}]').click()`);
             await new Promise((r) => setTimeout(r, 900));
             await shot(page);

@@ -169,25 +169,25 @@
                 <p id="stat-winws-path" class="muted mono stat-path"></p>
               </div>
             </div>
-          </div>
 
-          <!-- TELEGRAM PROXY -->
-          <div class="card tg-card">
-            <div class="set-head">
-              <span class="set-ico tb-glyph" aria-hidden="true">&#xE723;</span>
-              <div><h3 data-i18n="tg_title"></h3><p id="tg-hint" class="muted set-sub" data-i18n="tg_hint"></p></div>
+            <!-- TELEGRAM PROXY -->
+            <div class="card tg-card">
+              <div class="set-head">
+                <span class="set-ico tb-glyph" aria-hidden="true">&#xE723;</span>
+                <div><h3 data-i18n="tg_title"></h3><p id="tg-hint" class="muted set-sub" data-i18n="tg_hint"></p></div>
+              </div>
+              <div class="tg-row">
+                <span id="tg-state" class="power-state">—</span>
+                <span id="tg-stats" class="muted mono"></span>
+              </div>
+              <div class="btn-row">
+                <button id="btn-tg-toggle" class="btn btn-primary" data-i18n="tg_start"></button>
+                <button id="btn-tg-open" class="btn btn-secondary" data-i18n="tg_open"></button>
+                <button id="btn-tg-copy" class="btn btn-secondary" data-i18n="tg_copy"></button>
+                <button id="btn-tg-regen" class="btn btn-ghost" data-i18n="tg_regen"></button>
+              </div>
+              <p class="muted mono tg-link" id="tg-link"></p>
             </div>
-            <div class="tg-row">
-              <span id="tg-state" class="power-state">—</span>
-              <span id="tg-stats" class="muted mono"></span>
-            </div>
-            <div class="btn-row">
-              <button id="btn-tg-toggle" class="btn btn-primary" data-i18n="tg_start"></button>
-              <button id="btn-tg-open" class="btn btn-secondary" data-i18n="tg_open"></button>
-              <button id="btn-tg-copy" class="btn btn-secondary" data-i18n="tg_copy"></button>
-              <button id="btn-tg-regen" class="btn btn-ghost" data-i18n="tg_regen"></button>
-            </div>
-            <p class="muted mono tg-link" id="tg-link"></p>
           </div>
 
           <!-- STRATEGIES -->
@@ -340,11 +340,9 @@
                 <span class="set-ico tb-glyph" aria-hidden="true">&#xE8EC;</span>
                 <div><h3 data-i18n="engine_title"></h3><p class="muted set-sub" data-i18n="engine_hint"></p></div>
               </div>
-              <div class="ver-tiles">
-                <div class="ver-tile">
-                  <span class="ver-label" data-i18n="engine_current"></span>
-                  <span id="engine-current" class="ver-value">—</span>
-                </div>
+              <div class="engine-current-row">
+                <span class="ver-label" data-i18n="engine_current"></span>
+                <span id="engine-current" class="engine-chip">—</span>
               </div>
               <div class="btn-row engine-row">
                 <select id="engine-select" class="input engine-select" aria-label="Engine release"></select>
@@ -394,21 +392,21 @@
 
           <!-- LOGS -->
           <div id="page-logs" class="page hidden">
-            <div class="page-head">
+            <div class="logs-head">
               <h2 data-i18n="logs_title"></h2>
-              <div class="btn-row">
-                <input id="log-filter" class="input log-search" type="search" placeholder="..." data-i18n-ph="logs_search" aria-label="Filter logs">
-                <select id="log-level" class="input log-select" aria-label="Level">
-                  <option value="" data-i18n="logs_all_levels"></option>
-                  <option value="info">info</option>
-                  <option value="warn">warn</option>
-                  <option value="error">error</option>
-                </select>
-                <button id="btn-log-open" class="btn btn-secondary" data-i18n="logs_open_file"></button>
-                <button id="btn-log-export" class="btn btn-secondary" data-i18n="logs_export"></button>
-                <button id="btn-log-clear" class="btn btn-ghost" data-i18n="logs_clear"></button>
-              </div>
-              <p class="muted" id="log-count"></p>
+              <span id="log-count" class="muted mono"></span>
+            </div>
+            <div class="btn-row logs-toolbar">
+              <input id="log-filter" class="input log-search" type="search" placeholder="..." data-i18n-ph="logs_search" aria-label="Filter logs">
+              <select id="log-level" class="input log-select" aria-label="Level">
+                <option value="" data-i18n="logs_all_levels"></option>
+                <option value="info">info</option>
+                <option value="warn">warn</option>
+                <option value="error">error</option>
+              </select>
+              <button id="btn-log-open" class="btn btn-secondary" data-i18n="logs_open_file"></button>
+              <button id="btn-log-export" class="btn btn-secondary" data-i18n="logs_export"></button>
+              <button id="btn-log-clear" class="btn btn-ghost" data-i18n="logs_clear"></button>
             </div>
             <div id="log-view" class="log-view" role="log" aria-live="polite" tabindex="0"></div>
           </div>

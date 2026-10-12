@@ -244,17 +244,12 @@ p { margin: 4px 0; }
 .switch-row input:focus-visible + .toggle { outline: 2px solid var(--accent); outline-offset: 2px; }
 
 /* ---- inputs ---- */
+/* NOTE: sizing/appearance now live in the shared ".input" rule further down,
+   so text/search/select/textarea all stay in one place and line up. */
 input[type="text"], textarea {
-  background: var(--bg-hover);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  color: var(--text);
   font-family: inherit;
-  padding: 9px 12px;
-  font-size: 13.5px;
-  transition: border-color var(--speed) ease, box-shadow var(--speed) ease;
 }
-input[type="text"]:focus, textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(122, 92, 255, 0.2); }
+textarea:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px rgba(122, 92, 255, 0.2); }
 .path-row { display: flex; gap: 8px; margin: 8px 0; }
 .path-row input { flex: 1; }
 .port-row { display: flex; gap: 14px; margin-top: 12px; flex-wrap: wrap; }
@@ -375,7 +370,7 @@ input[type="text"]:focus, textarea:focus { outline: none; border-color: var(--ac
 /* ---- updates ---- */
 .ver-tiles { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
 .ver-tile {
-  flex: 1; min-width: 150px;
+  flex: 1; min-width: 150px; max-width: 360px;
   background: var(--bg-hover); border: 1px solid var(--border);
   border-radius: 12px; padding: 13px 18px;
   display: flex; flex-direction: column; gap: 4px;
@@ -556,8 +551,55 @@ input[type="text"]:focus, textarea:focus { outline: none; border-color: var(--ac
 .log-line.warn .log-text { color: var(--warn); }
 .log-line.error .log-text { color: var(--err); }
 .log-empty { color: var(--text-dim); font-family: 'Segoe UI', sans-serif; padding: 12px; }
-.log-search { min-width: 190px; }
-.log-select { min-width: 130px; }
+
+/* ---- unified form controls (text / search / select) ---- */
+.input,
+input[type="text"],
+input[type="search"],
+select {
+  appearance: none;
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13.5px;
+  font-weight: 500;
+  line-height: 1.2;
+  /* matches .btn height so toolbars line up perfectly */
+  padding: 9px 14px;
+  min-height: 38px;
+  transition: border-color var(--speed), box-shadow var(--speed), background var(--speed);
+}
+.input::placeholder { color: var(--text-dim); opacity: 0.75; }
+.input:hover,
+input[type="text"]:hover,
+input[type="search"]:hover,
+select:hover { border-color: var(--accent); }
+.input:focus,
+input[type="text"]:focus,
+input[type="search"]:focus,
+select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(122, 92, 255, 0.2);
+}
+/* Custom chevron: native select arrows ignore the theme on Windows. */
+select {
+  padding-right: 34px;
+  background-image: linear-gradient(45deg, transparent 50%, currentColor 50%),
+                    linear-gradient(135deg, currentColor 50%, transparent 50%);
+  background-position: calc(100% - 18px) calc(50% + 1px), calc(100% - 13px) calc(50% + 1px);
+  background-size: 5px 5px, 5px 5px;
+  background-repeat: no-repeat;
+  cursor: pointer;
+}
+select option { background: var(--bg-card); color: var(--text); }
+
+/* ---- live logs toolbar ---- */
+.log-search { width: 220px; }
+.log-select { width: 150px; }
+.logs-toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
 
 /* ---- smart list editor ---- */
 .list-toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 10px 0 6px; }
@@ -597,7 +639,18 @@ input[type="text"]:focus, textarea:focus { outline: none; border-color: var(--ac
 
 /* ---- engine card ---- */
 .engine-row { align-items: center; }
-.engine-select { flex: 1 1 200px; min-width: 160px; }
+.engine-select { flex: 0 1 260px; min-width: 160px; max-width: 260px; }
+.engine-current-row { display: flex; align-items: center; gap: 10px; margin: 12px 0; }
+.engine-chip {
+  display: inline-block;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: var(--bg-hover);
+  border: 1px solid var(--border);
+  font-family: Consolas, monospace;
+  font-size: 13px;
+  font-weight: 600;
+}
 .ver-status.ok { color: var(--ok); }
 .ver-status.err { color: var(--err); }
 
@@ -606,3 +659,12 @@ input[type="text"]:focus, textarea:focus { outline: none; border-color: var(--ac
 .tg-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin: 10px 0; }
 .tg-link { word-break: break-all; font-size: 11px; margin: 10px 0 0; }
 .setup-admin-btn { margin-top: 8px; }
+
+/* ---- logs page header ---- */
+.logs-head {
+  display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+.logs-head h2 { margin: 0; }
+.logs-head .mono { font-size: 12px; }
+.logs-toolbar { margin-bottom: 12px; }

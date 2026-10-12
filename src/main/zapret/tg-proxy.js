@@ -194,25 +194,32 @@ function connectTcp(host, port, timeoutMs = 10000) {
   return new Promise((resolve, reject) => {
     const sock = net.connect({ host, port });
     sock.setNoDelay(true);
-    const timer = setTimeout(() => {
-      sock.destroy();
-      reject(new Error('tcp_timeout'));
-    }, timeoutMs);
+    let settled = false;
+    const finish = (err) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      if (err) {
+        try { sock.destroy(); } catch { /* ignore */ }
+        reject(err);
+      }
+    };
+    const timer = setTimeout(() => finish(new Error('tcp_timeout')), timeoutMs);
     if (typeof timer.unref === 'function') timer.unref();
-    sock.once('connect', () => {
-      clearTimeout(timer);
-      resolve(sock);
-    });
-    sock.once('error', (e) => {
-      clearTimeout(timer);
-      reject(e);
-    });
+    sock.once('connect', () => finish(null));
+    sock.once('error', (e) => finish(e));
+    // Any later error (reset after teardown) must not become uncaught.
+    sock.on('error', () => { /* handled by the bridge */ });
   });
 }
 
 async function handleClient(socket, secret) {
   socket.setNoDelay(true);
-  socket.on('error', () => { /* handled by the bridge teardown */ });
+  // Permanent no-op error listener. readExactly() removes its own listeners
+  // when it resolves, so between the handshake and the bridge teardown there
+  // is a window where an incoming ECONNRESET would be an unhandled 'error'
+  // event — enough to take down the whole main process.
+  socket.on('error', () => { /* teardown handles the lifecycle */ });
 
   // 1) handshake first, with the stream flowing so the listener actually gets it.
   let handshake;

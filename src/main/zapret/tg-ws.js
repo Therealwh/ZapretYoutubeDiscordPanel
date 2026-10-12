@@ -66,11 +66,23 @@ class RawWebSocket extends EventEmitter {
       );
       socket.setNoDelay(true);
 
-      const timer = setTimeout(() => {
-        socket.destroy();
-        reject(new Error('ws_handshake_timeout'));
-      }, timeoutMs);
+      // Bound the WHOLE dial (DNS + TCP + TLS + upgrade). Without this a
+      // blocked host keeps the socket pending for minutes, which is exactly
+      // what happens on the networks this proxy exists for.
+      let settled = false;
+      const finish = (err) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        if (err) {
+          try { socket.destroy(); } catch { /* ignore */ }
+          reject(err);
+        }
+      };
+      const timer = setTimeout(() => finish(new Error('ws_handshake_timeout')), timeoutMs);
       if (typeof timer.unref === 'function') timer.unref();
+      socket.on('error', (e) => finish(e));
+      // eslint-disable-next-line no-unused-vars
 
       let acc = Buffer.alloc(0);
       const onData = (chunk) => {

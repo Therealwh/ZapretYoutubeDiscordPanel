@@ -7,6 +7,18 @@ const crypto = require('node:crypto');
 const tgProxy = require('../src/main/zapret/tg-proxy');
 const tg = require('../src/main/zapret/tg-crypto');
 
+// The upstream dial to Telegram must never make the test suite depend on the
+// network: an unreachable DC is a valid outcome here. The tests below only
+// assert the handshake stage and always wait for the connection to settle.
+async function waitForLog(logs, needle, timeoutMs) {
+  const t0 = Date.now();
+  for (;;) {
+    if (logs.some((l) => l.includes(needle))) return true;
+    if (Date.now() - t0 > timeoutMs) return false;
+    await new Promise((r) => setTimeout(r, 100));
+  }
+}
+
 test('wsDomains picks the right relay host per DC and media flag', () => {
   assert.deepStrictEqual(tgProxy.wsDomains(2, false), ['kws2.web.telegram.org']);
   assert.deepStrictEqual(tgProxy.wsDomains(2, true), ['kws2-1.web.telegram.org', 'kws2.web.telegram.org']);
@@ -75,21 +87,15 @@ test('a real obfuscated2 handshake is accepted and the DC is detected', async ()
     sock.write(hs);
 
     // Wait until the proxy has parsed it and moved on to the upstream dial.
-    const ok = await new Promise((res) => {
-      const started2 = Date.now();
-      const tick = () => {
-        if (logs.some((l) => l.includes('client handshake ok'))) return res(true);
-        if (Date.now() - started2 > 6000) return res(false);
-        setTimeout(tick, 100);
-      };
-      tick();
-    });
+    const ok = await waitForLog(logs, 'client handshake ok', 6000);
     sock.destroy();
     assert.strictEqual(ok, true, 'handshake must be parsed and logged');
     assert.ok(
       logs.some((l) => l.includes('DC4')),
       `DC must be reported, got: ${logs.join(' | ')}`
     );
+    // Let the upstream attempt finish so no async work outlives the test.
+    await waitForLog(logs, 'no upstream', 20000);
   } finally {
     tgProxy.setLogger(null);
     await tgProxy.stop();
@@ -119,15 +125,7 @@ test('a handshake with the wrong secret is rejected', async () => {
     await new Promise((res, rej) => { sock.once('connect', res); sock.once('error', rej); });
     sock.write(hs);
 
-    const rejected = await new Promise((res) => {
-      const t0 = Date.now();
-      const tick = () => {
-        if (logs.some((l) => l.includes('handshake parse failed'))) return res(true);
-        if (Date.now() - t0 > 6000) return res(false);
-        setTimeout(tick, 100);
-      };
-      tick();
-    });
+    const rejected = await waitForLog(logs, 'handshake parse failed', 6000);
     sock.destroy();
     assert.strictEqual(rejected, true, 'wrong secret must be rejected');
   } finally {
