@@ -1,4 +1,11 @@
 'use strict';
+// Tray with status-aware submenus:
+//   Start / Stop / Restart
+//   → Strategies (active one always visible, max 8 entries)
+//   → Navigation (all pages)
+//   → Tuning (Game Filter mode, IPSet mode, autostart)
+//   → Tools (open log file, run diagnostics)
+// Status is polled; the menu is rebuilt when something actually changes.
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
@@ -9,7 +16,21 @@ const { Tray, Menu, nativeImage } = require('electron');
 // the only representation Electron reliably decodes here.
 const { trayIco } = require('./tray-icons');
 
+const REFRESH_MS = 15000;
+const MAX_STRATEGY_ITEMS = 8;
+
 let tray = null;
+let trayHandlers = {};
+let state = {
+  running: false,
+  mode: 'off',
+  strategy: null,
+  strategies: [],
+  gameFilter: 'disabled',
+  ipset: 'unknown',
+  autostart: false,
+  blocked: false, // foreign zapret — management disabled from the tray
+};
 
 function buildTrayIcon() {
   // Last-resort fallback that needs NO codec: a solid accent square built
@@ -35,7 +56,7 @@ function buildTrayIcon() {
   }
 }
 
-function createTray({ onShow, onToggle, onQuit, i18n }) {
+function createTray({ onShow, onToggle, onRestart, onQuit, onStrategy, onGameFilter, onIpset, onNavigate, onTool, i18n }) {
   try {
     const icon = buildTrayIcon();
     tray = new Tray(icon);
@@ -44,26 +65,166 @@ function createTray({ onShow, onToggle, onQuit, i18n }) {
     console.error('tray disabled:', e.message);
     return null;
   }
-  trayHandlers = { onShow, onToggle, onQuit };
+  trayHandlers = { onShow, onToggle, onRestart, onQuit, onStrategy, onGameFilter, onIpset, onNavigate, onTool };
   tray.setToolTip('YoutubeDiscordPanel');
   setTrayI18n(i18n);
   tray.on('click', () => onShow?.());
+  tray.on('double-click', () => onShow?.());
+  refreshMenu();
+  tray._timer = setInterval(refreshMenu, REFRESH_MS);
+  if (typeof tray._timer.unref === 'function') tray._timer.unref();
   return tray;
 }
 
-let trayHandlers = {};
+const DEFAULT_I18N = {
+  trayShow: 'Show',
+  trayToggle: 'Toggle bypass',
+  trayQuit: 'Quit',
+};
+let lang = DEFAULT_I18N;
 
 // Rebuild the context menu (e.g. after the user switches UI language)
 function setTrayI18n(i18n) {
+  lang = { ...DEFAULT_I18N, ...(i18n || {}) };
+  refreshMenu(true);
+}
+
+// Push fresh runtime state; the menu is rebuilt only when something changed.
+function setTrayState(next) {
+  const changed = Object.keys(next).some((k) => state[k] !== next[k]);
+  state = { ...state, ...next };
+  if (changed) refreshMenu();
+  if (tray) {
+    const bits = ['YoutubeDiscordPanel', state.running ? (lang.running || 'ON') : (lang.stopped || 'OFF')];
+    if (state.strategy) bits.push(state.strategy);
+    if (state.blocked) bits.push(lang.foreignBlocked || '!');
+    tray.setToolTip(bits.join(' — '));
+  }
+}
+
+function strategySubmenu() {
+  const items = [];
+  const list = state.strategies || [];
+  const active = state.strategy;
+  // Active strategy first, then fill up to the cap; active is never dropped.
+  const ordered = active
+    ? [active, ...list.filter((s) => s !== active)]
+    : list;
+  for (const name of ordered.slice(0, MAX_STRATEGY_ITEMS)) {
+    items.push({
+      label: name === active ? `● ${name}` : name,
+      type: 'radio',
+      checked: name === active,
+      enabled: !state.blocked,
+      click: () => trayHandlers.onStrategy?.(name),
+    });
+  }
+  if (ordered.length > MAX_STRATEGY_ITEMS) {
+    items.push({ type: 'separator' });
+    items.push({ label: lang.trayMore || 'More…', enabled: !state.blocked, click: () => trayHandlers.onNavigate?.('strategies') });
+  }
+  if (!items.length) items.push({ label: lang.trayNoStrategies || 'No strategies found', enabled: false });
+  return items;
+}
+
+function gameFilterSubmenu() {
+  const modes = ['disabled', 'all', 'tcp', 'udp'];
+  const labels = {
+    disabled: lang.gfOff || 'Off',
+    all: lang.gfAll || 'TCP + UDP',
+    tcp: lang.gfTcp || 'TCP only',
+    udp: lang.gfUdp || 'UDP only',
+  };
+  return modes.map((m) => ({
+    label: labels[m],
+    type: 'radio',
+    checked: state.gameFilter === m,
+    click: () => trayHandlers.onGameFilter?.(m),
+  }));
+}
+
+function ipsetSubmenu() {
+  const modes = [
+    ['none', lang.ipsetNone || 'none'],
+    ['loaded', lang.ipsetLoaded || 'loaded'],
+    ['any', lang.ipsetAny || 'any'],
+  ];
+  return modes.map(([m, l]) => ({
+    label: l,
+    type: 'radio',
+    checked: state.ipset === m,
+    click: () => trayHandlers.onIpset?.(m),
+  }));
+}
+
+function navSubmenu() {
+  const pages = lang.pages || [
+    ['dashboard', 'Обход'],
+    ['strategies', 'Стратегии'],
+    ['filters', 'Фильтры'],
+    ['lists', 'Списки'],
+    ['updates', 'Обновления'],
+    ['diagnostics', 'Диагностика'],
+    ['logs', 'Логи'],
+    ['settings', 'Настройки'],
+  ];
+  return pages.map(([id, label]) => ({ label, click: () => { trayHandlers.onShow?.(); trayHandlers.onNavigate?.(id); } }));
+}
+
+function refreshMenu(force = false) {
   if (!tray) return;
-  const t = i18n || { trayShow: 'Show', trayToggle: 'Toggle', trayQuit: 'Quit' };
-  const menu = Menu.buildFromTemplate([
-    { label: t.trayShow, click: () => trayHandlers.onShow?.() },
-    { label: t.trayToggle, click: () => trayHandlers.onToggle?.() },
+  if (!force && state._menuKey === menuKey()) return;
+  state._menuKey = menuKey();
+
+  const template = [
+    {
+      label: state.running
+        ? (lang.running || 'ON')
+        : (lang.stopped || 'OFF'),
+      enabled: false,
+    },
     { type: 'separator' },
-    { label: t.trayQuit, click: () => trayHandlers.onQuit?.() },
-  ]);
-  tray.setContextMenu(menu);
+    {
+      label: state.running ? (lang.trayStop || 'Stop') : (lang.trayStart || 'Start'),
+      enabled: !state.blocked,
+      click: () => trayHandlers.onToggle?.(),
+    },
+    { label: lang.trayRestart || 'Restart', enabled: !state.blocked, click: () => trayHandlers.onRestart?.() },
+    { type: 'separator' },
+    { label: lang.trayStrategies || 'Strategies', enabled: !state.blocked, submenu: strategySubmenu() },
+    { label: lang.trayTuning || 'Tuning', submenu: [{ label: lang.trayGameFilter || 'Game Filter', submenu: gameFilterSubmenu() }, { label: lang.trayIpset || 'IPSet', submenu: ipsetSubmenu() }] },
+    { type: 'separator' },
+    { label: lang.trayShow || 'Show', click: () => trayHandlers.onShow?.() },
+    { label: lang.trayNavigate || 'Go to', submenu: navSubmenu() },
+    {
+      label: lang.trayTools || 'Tools',
+      submenu: [
+        { label: lang.trayOpenLog || 'Open log file', click: () => trayHandlers.onTool?.('log') },
+        { label: lang.trayDiagnostics || 'Run diagnostics', click: () => trayHandlers.onTool?.('diag') },
+      ],
+    },
+    { type: 'separator' },
+    { label: lang.trayQuit || 'Quit', click: () => trayHandlers.onQuit?.() },
+  ];
+
+  if (state.blocked) {
+    template.splice(2, 0, { label: lang.foreignBlocked || 'Foreign zapret — take over in the panel', enabled: false });
+  }
+
+  tray.setContextMenu(Menu.buildFromTemplate(template));
+}
+
+// Cheap signature so the 15 s poll does not rebuild an identical menu.
+function menuKey() {
+  return [
+    state.running,
+    state.strategy,
+    (state.strategies || []).length,
+    state.gameFilter,
+    state.ipset,
+    state.autostart,
+    state.blocked,
+  ].join('|');
 }
 
 function setTrayStatus(running) {
@@ -72,9 +233,10 @@ function setTrayStatus(running) {
 
 function destroyTray() {
   if (tray) {
+    if (tray._timer) clearInterval(tray._timer);
     tray.destroy();
     tray = null;
   }
 }
 
-module.exports = { createTray, setTrayStatus, setTrayI18n, destroyTray };
+module.exports = { createTray, setTrayStatus, setTrayI18n, setTrayState, destroyTray };

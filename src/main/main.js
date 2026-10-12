@@ -32,7 +32,7 @@ function appendRendererLog(line) {
 }
 
 const config = require('./config');
-const { createTray, setTrayStatus, setTrayI18n, destroyTray } = require('./tray');
+const { createTray, setTrayStatus, setTrayI18n, setTrayState, destroyTray } = require('./tray');
 const { isAdminSync, elevateCommands, restartElevated } = require('./admin');
 const tester = require('./zapret/tester');
 
@@ -47,7 +47,10 @@ const discord = require('./zapret/discord');
 const diagnostics = require('./zapret/diagnostics');
 const updates = require('./zapret/updates');
 const dns = require('./zapret/dns');
+  const ownership = require('./zapret/ownership');
+  const engine = require('./zapret/engine');
 const panelUpdater = require('./updater');
+  const logger = require('./logger');
 updates.setVtKeyProvider(() => config.get('virustotalKey', null));
 
 let win = null;
@@ -204,6 +207,50 @@ function showWindow() {
   }
 }
 
+// Ask the renderer to switch pages (tray "Go to" submenu).
+function navigateTo(page) {
+  showWindow();
+  setTimeout(() => emitToWindow('app:navigate', page), 250);
+}
+
+// Refresh everything the tray menu renders from (status, strategies, filters).
+async function refreshTrayState() {
+  try {
+    const root = rootDir();
+    const st = await status.getStatus(root);
+    let strategies = [];
+    try {
+      strategies = root ? strategy.listStrategies(root).map((s) => s.name) : [];
+    } catch { /* no root yet */ }
+    let gf = 'disabled';
+    let ipset = 'unknown';
+    try {
+      if (root) {
+        gf = filters.readGameFilter(root).mode;
+        const ip = filters.readIpsetStatus(root);
+        ipset = ip && ip.mode ? ip.mode : 'unknown';
+      }
+    } catch { /* filters optional */ }
+    let blocked = false;
+    try {
+      const det = await ownership.detectOwnership(root);
+      blocked = det.ownership === 'foreign';
+    } catch { /* detection is best effort */ }
+    setTrayState({
+      running: st.activeMode !== 'off',
+      mode: st.activeMode,
+      strategy: st.serviceStrategy || config.get('processStrategyName', null),
+      strategies,
+      gameFilter: gf,
+      ipset,
+      autostart: !!config.get('autostart', false),
+      blocked,
+    });
+  } catch (e) {
+    logger.warn(`Tray state refresh failed: ${e.message}`);
+  }
+}
+
 // Notify renderer of tester progress and installer progress
 function emitToWindow(channel, payload) {
   if (win && !win.isDestroyed()) {
@@ -229,12 +276,7 @@ function registerIpc() {
         const hidden = config.get('startHidden', false);
         app.setLoginItemSettings({ openAtLogin: !!autostart, args: autostart && hidden ? ['--hidden'] : [] });
       } else if (k === 'lang') {
-        const ru = v === 'ru';
-        setTrayI18n({
-          trayShow: ru ? 'Показать' : 'Show',
-          trayToggle: ru ? 'Вкл/Выкл обход' : 'Toggle bypass',
-          trayQuit: ru ? 'Выход' : 'Quit',
-        });
+        setTrayI18n(trayI18n());
       }
     }
     return config.all();
@@ -272,6 +314,25 @@ function registerIpc() {
 
   ipcMain.handle('zapret:validateRoot', (_e, dir) => paths.validateRoot(dir));
 
+  // ---- foreign / portable zapret ----
+  ipcMain.handle('zapret:ownership', () => ownership.detectOwnership(rootDir()));
+  ipcMain.handle('zapret:takeover', async () => {
+    const r = await ownership.takeoverForeignService({ managedRoot: rootDir() });
+    logger[r.ok ? 'info' : 'warn'](`Foreign service takeover: ${r.ok ? 'done' : r.reason}`);
+    return r;
+  });
+  ipcMain.handle('zapret:adoptPortable', async () => {
+    const det = await ownership.detectOwnership(rootDir());
+    const r = ownership.adoptPortable(det, rootDir());
+    if (r.ok) {
+      config.set('zapretRoot', r.root);
+      logger.info(`Adopted portable zapret at ${r.root}`);
+    } else {
+      logger.warn(`Adopt portable failed: ${r.reason}`);
+    }
+    return r;
+  });
+
   ipcMain.handle('dialog:chooseDir', async () => {
     const res = await dialog.showOpenDialog(win, { properties: ['openDirectory', 'createDirectory'] });
     if (res.canceled || !res.filePaths.length) return null;
@@ -307,10 +368,34 @@ function registerIpc() {
     return root ? strategy.listStrategies(root) : [];
   });
 
+  ipcMain.handle('strategy:import', async () => {
+    const root = rootDir();
+    if (!root) return { ok: false, reason: 'no_root' };
+    const res = await dialog.showOpenDialog(win, {
+      title: 'Import .bat strategy',
+      properties: ['openFile'],
+      filters: [{ name: 'Batch files', extensions: ['bat'] }],
+    });
+    if (res.canceled || !res.filePaths.length) return { ok: false, reason: 'canceled' };
+    const r = strategy.importStrategy(root, res.filePaths[0]);
+    logger[r.ok ? 'info' : 'error'](`Strategy import: ${r.ok ? r.name : r.reason}`);
+    return r;
+  });
+  ipcMain.handle('strategy:delete', (_e, file) => {
+    const root = rootDir();
+    if (!root) return { ok: false, reason: 'no_root' };
+    const r = strategy.deleteStrategy(root, file);
+    logger[r.ok ? 'info' : 'warn'](`Strategy delete: ${r.ok ? path.basename(file) : r.reason}`);
+    return r;
+  });
+
   ipcMain.handle('zapret:installService', async (_e, strategyFile) => {
     const root = rootDir();
     if (!root) return { ok: false, reason: 'no_root' };
-    return service.installStrategyAsService(root, strategyFile);
+    logger.info(`Applying strategy as service: ${path.basename(strategyFile)}`);
+    const r = await service.installStrategyAsService(root, strategyFile);
+    r?.ok ? logger.info(`Strategy applied: ${path.basename(strategyFile)}`) : logger.error(`Strategy apply failed: ${r?.reason || 'unknown'}`);
+    return r;
   });
 
   ipcMain.handle('zapret:launchProcess', (_e, strategyFile) => {
@@ -324,9 +409,22 @@ function registerIpc() {
   });
 
   ipcMain.handle('zapret:removeServices', () => service.removeServices(rootDir()));
-  ipcMain.handle('zapret:startService', () => service.startService());
-  ipcMain.handle('zapret:stopService', () => service.stopService());
-  ipcMain.handle('zapret:killWinws', () => service.killWinws());
+  ipcMain.handle('zapret:startService', async () => {
+    logger.info('Starting zapret service');
+    const r = await service.startService();
+    r?.ok ? logger.info('zapret service started') : logger.warn(`zapret service start failed: ${r?.reason || 'unknown'}`, 'app');
+    return r;
+  });
+  ipcMain.handle('zapret:stopService', async () => {
+    logger.info('Stopping zapret service');
+    const r = await service.stopService();
+    r?.ok ? logger.info('zapret service stopped') : logger.warn(`zapret service stop failed: ${r?.reason || 'unknown'}`, 'app');
+    return r;
+  });
+  ipcMain.handle('zapret:killWinws', async () => {
+    logger.info('Killing winws processes');
+    return service.killWinws();
+  });
 
   ipcMain.handle('filters:get', () => {
     const root = rootDir();
@@ -352,6 +450,8 @@ function registerIpc() {
   ipcMain.handle('lists:read', (_e, key) => lists.readList(rootDir(), key));
   ipcMain.handle('lists:write', (_e, key, content) => lists.writeList(rootDir(), key, content));
   ipcMain.handle('lists:readIpsetAll', () => lists.readIpsetAll(rootDir()));
+  ipcMain.handle('lists:stats', (_e, key) => lists.stats(rootDir(), key));
+  ipcMain.handle('lists:op', (_e, key, op, payload) => lists.listOp(rootDir(), key, op, payload || {}));
 
   ipcMain.handle('fakes:list', () => fakes.listFakes(rootDir()));
   ipcMain.handle('fakes:set', (_e, kind, fakeFile) => fakes.setFake(rootDir(), kind, fakeFile));
@@ -394,6 +494,21 @@ function registerIpc() {
   });
   ipcMain.handle('updates:updateIpset', () => updates.updateIpset(rootDir()));
   ipcMain.handle('updates:updateHosts', (_e, opts) => updates.updateHosts(rootDir(), opts || {}));
+
+  // ---- engine (bol-van/zapret) ----
+  ipcMain.handle('engine:releases', () => engine.listEngineReleases());
+  ipcMain.handle('engine:current', () => ({ version: engine.currentEngineVersion(rootDir()) }));
+  ipcMain.handle('engine:update', async (_e, tag) => {
+    const root = rootDir();
+    if (!root) return { ok: false, reason: 'no_root' };
+    emitToWindow('install:stage', { stage: 'engine' });
+    const r = await engine.updateEngineToTag(root, tag, {
+      onProgress: (f) => emitToWindow('install:progress', f),
+      onStage: (stage) => emitToWindow('install:stage', { stage }),
+    });
+    logger[r.ok ? 'info' : 'error'](`Engine update → ${tag}: ${r.ok ? r.copied.length + ' files' : r.reason}`);
+    return r;
+  });
 
   ipcMain.handle('tester:run', () => {
     const root = rootDir();
@@ -466,6 +581,28 @@ function registerIpc() {
     return { ok: true };
   });
 
+  // ---- Live logs ----
+  ipcMain.handle('logs:buffer', () => logger.getBuffer());
+  ipcMain.handle('logs:clear', () => {
+    logger.clear();
+    return true;
+  });
+  ipcMain.handle('logs:path', () => logger.logPath());
+  ipcMain.handle('logs:showFile', () => {
+    const f = logger.logPath();
+    if (f && fs.existsSync(f)) shell.showItemInFolder(f);
+    return !!f;
+  });
+  ipcMain.handle('logs:export', async (_e, filter) => {
+    const stamp = new Date().toISOString().slice(0, 10);
+    const res = await dialog.showSaveDialog(win, {
+      defaultPath: `ydp-logs-${stamp}.log`,
+      filters: [{ name: 'Log files', extensions: ['log', 'txt'] }],
+    });
+    if (res.canceled || !res.filePath) return { ok: false, reason: 'canceled' };
+    return logger.exportLog(res.filePath, filter || {});
+  });
+
   ipcMain.handle('shell:openExternal', (_e, url) => shell.openExternal(url));
   ipcMain.handle('shell:showItem', (_e, p) => shell.showItemInFolder(p));
 
@@ -509,6 +646,10 @@ async function runPendingAction() {
 
 app.whenReady().then(() => {
   config.init(app.getPath('userData'));
+  logger.init(app.getPath('userData'));
+  // Live log stream: the logger batches entries and pushes them to the window.
+  logger.setSink((batch) => emitToWindow('log:lines', batch));
+  logger.info(`Panel ${app.getVersion()} started (admin=${isAdminSync()})`);
   registerIpc();
   // Panel self-update: forward events to the renderer, then check quietly
   // (autoDownload is off — the user decides whether to fetch the update).
@@ -540,18 +681,103 @@ app.whenReady().then(() => {
           else await service.launchStrategyProcess(rootDir(), last);
         }
       }
+      refreshTrayState();
+    },
+    onRestart: async () => {
+      const st = await status.getStatus(rootDir());
+      if (st.activeMode === 'off') return;
+      await service.stopService();
+      await service.killWinws();
+      const last = config.get('lastStrategyFile', null);
+      if (last && fs.existsSync(last)) {
+        if (config.get('preferServiceMode', true)) await service.installStrategyAsService(rootDir(), last);
+        else await service.launchStrategyProcess(rootDir(), last);
+      }
+      logger.info('Bypass restarted from tray');
+      refreshTrayState();
+    },
+    onStrategy: async (name) => {
+      const root = rootDir();
+      const list = root ? strategy.listStrategies(root) : [];
+      const target = list.find((s) => s.name === name);
+      if (!target) return;
+      const preferService = config.get('preferServiceMode', true);
+      const r = preferService
+        ? await service.installStrategyAsService(root, target.file)
+        : await service.launchStrategyProcess(root, target.file);
+      logger[r.ok ? 'info' : 'error'](`Tray strategy switch → ${name}: ${r.ok ? 'ok' : r.reason}`);
+      if (r.ok) config.set('lastStrategyFile', target.file);
+      refreshTrayState();
+    },
+    onGameFilter: async (mode) => {
+      const root = rootDir();
+      if (!root) return;
+      const r = filters.writeGameFilter(root, { mode });
+      logger[r.ok ? 'info' : 'error'](`Tray game filter → ${mode}: ${r.ok ? 'ok' : r.reason}`);
+      refreshTrayState();
+    },
+    onIpset: async (mode) => {
+      const root = rootDir();
+      if (!root) return;
+      const r = filters.writeIpsetMode(root, mode);
+      logger[r.ok ? 'info' : 'error'](`Tray IPSet → ${mode}: ${r.ok ? 'ok' : r.reason}`);
+      refreshTrayState();
+    },
+    onNavigate: navigateTo,
+    onTool: (tool) => {
+      if (tool === 'log') {
+        const f = logger.logPath();
+        if (f && fs.existsSync(f)) shell.showItemInFolder(f);
+        return;
+      }
+      if (tool === 'diag') navigateTo('diagnostics');
     },
     onQuit: () => {
       quitting = true;
       app.quit();
     },
-    i18n: {
-      trayShow: config.get('lang', 'ru') === 'ru' ? 'Показать' : 'Show',
-      trayToggle: config.get('lang', 'ru') === 'ru' ? 'Вкл/Выкл обход' : 'Toggle bypass',
-      trayQuit: config.get('lang', 'ru') === 'ru' ? 'Выход' : 'Quit',
-    },
+    i18n: trayI18n(),
   });
+  refreshTrayState();
+  setInterval(refreshTrayState, 30000);
 });
+
+// Tray menu strings, rebuilt when the UI language changes.
+function trayI18n() {
+  const ru = config.get('lang', 'ru') === 'ru';
+  if (!ru) {
+    return {
+      running: 'ON', stopped: 'OFF',
+      trayStart: 'Start', trayStop: 'Stop', trayRestart: 'Restart',
+      trayShow: 'Show', trayQuit: 'Quit',
+      trayStrategies: 'Strategies', trayTuning: 'Tuning', trayNavigate: 'Go to',
+      trayGameFilter: 'Game Filter', trayIpset: 'IPSet', trayTools: 'Tools',
+      trayOpenLog: 'Open log file', trayDiagnostics: 'Run diagnostics',
+      trayMore: 'More…', trayNoStrategies: 'No strategies found',
+      foreignBlocked: 'Foreign zapret — take over in the panel',
+      gfOff: 'Off', gfAll: 'TCP + UDP', gfTcp: 'TCP only', gfUdp: 'UDP only',
+      ipsetNone: 'none', ipsetLoaded: 'loaded', ipsetAny: 'any',
+      pages: [['dashboard', 'Dashboard'], ['strategies', 'Strategies'], ['filters', 'Filters'],
+        ['lists', 'Lists'], ['updates', 'Updates'], ['diagnostics', 'Diagnostics'],
+        ['logs', 'Logs'], ['settings', 'Settings']],
+    };
+  }
+  return {
+    running: 'ВКЛ', stopped: 'ВЫКЛ',
+    trayStart: 'Запустить', trayStop: 'Остановить', trayRestart: 'Перезапустить',
+    trayShow: 'Показать', trayQuit: 'Выход',
+    trayStrategies: 'Стратегии', trayTuning: 'Тюнинг', trayNavigate: 'Перейти',
+    trayGameFilter: 'Игровой фильтр', trayIpset: 'IPSet', trayTools: 'Инструменты',
+    trayOpenLog: 'Открыть файл логов', trayDiagnostics: 'Запустить диагностику',
+    trayMore: 'Ещё…', trayNoStrategies: 'Стратегии не найдены',
+    foreignBlocked: 'Чужой zapret — перехватите в панели',
+    gfOff: 'Выключен', gfAll: 'TCP + UDP', gfTcp: 'Только TCP', gfUdp: 'Только UDP',
+    ipsetNone: 'none', ipsetLoaded: 'loaded', ipsetAny: 'any',
+    pages: [['dashboard', 'Обход'], ['strategies', 'Стратегии'], ['filters', 'Фильтры'],
+      ['lists', 'Списки'], ['updates', 'Обновления'], ['diagnostics', 'Диагностика'],
+      ['logs', 'Логи'], ['settings', 'Настройки']],
+  };
+}
 
 app.on('before-quit', () => {
   quitting = true;

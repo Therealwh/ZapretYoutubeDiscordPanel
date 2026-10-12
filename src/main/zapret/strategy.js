@@ -18,6 +18,69 @@ const path = require('node:path');
 
 const ARGS_WITH_VALUE = ['sni', 'host', 'altorder'];
 
+// Desync methods zapret understands — used for strategy badges in the UI.
+const KNOWN_METHODS = [
+  'fake', 'fakedsplit', 'multisplit', 'multidisorder', 'multisplit_ovl',
+  'hostfakesplit', 'syndata', 'split', 'split2', 'disorder', 'disorder2',
+  'fake_unknown', 'udplen', 'ipfrag', 'tcpfrag',
+];
+
+// Detect `--dpi-desync=` methods plus notable fakes/filters in the args.
+//
+// Our parser mirrors cmd tokenizing: `=` is a separator, so
+// `--dpi-desync=fake,multisplit` becomes `--dpi-desync` + `fake` +
+// `multisplit`, while a fake WITHOUT `=` stays glued to its flag
+// (`--dpi-desync-fake-quic`). Both shapes must be recognised, and
+// `--dpi-desync-*` sub-flags (repeats, fooling, fake-tls…) must NOT match.
+function detectMethods(args) {
+  const found = new Set();
+  const list = args.map((a) => String(a));
+  for (let i = 0; i < list.length; i += 1) {
+    const eq = list[i].match(/^--dpi-desync=(.+)$/i);
+    const bare = !eq && /^--dpi-desync$/i.test(list[i]);
+    if (!eq && !bare) continue;
+    if (eq) {
+      for (const part of eq[1].split(',')) {
+        const name = part.trim().toLowerCase();
+        if (name) found.add(name);
+      }
+    }
+    // Continuation values: bare tokens until the next "--" flag. A value may
+    // itself be comma-joined (--dpi-desync fake,fakedsplit).
+    for (let j = i + 1; j < list.length; j += 1) {
+      if (list[j].startsWith('--')) break;
+      for (const part of list[j].trim().toLowerCase().split(',')) {
+        const v = part.trim();
+        if (v) found.add(v);
+      }
+    }
+  }
+  const all = list.join(' ');
+  // Sub-flags reach us WITHOUT '=' (--dpi-desync-fake-quic <path>), and may
+  // also arrive glued when the file used the '=' form.
+  if (/(?:^|\s)--dpi-desync-fake-quic(?:=|\s|$)/i.test(all)) found.add('fake QUIC');
+  if (/fake-tls-mod=rnd/i.test(all)) found.add('auto fake TLS');
+  else if (/(?:^|\s)--dpi-desync-fake-tls(?:=|\s|$)/i.test(all)) found.add('fake TLS');
+  if (/(?:^|\s)--filter-l7(?:=|\s)\s*discord/i.test(all)) found.add('Discord voice/STUN');
+  return [...found];
+}
+
+// Short human-readable badges for the strategies list.
+function methodBadges(args) {
+  const methods = detectMethods(args);
+  const badges = [];
+  if (methods.includes('multisplit')) badges.push('multisplit');
+  if (methods.includes('multidisorder')) badges.push('multidisorder');
+  if (methods.includes('fakedsplit')) badges.push('fakedsplit');
+  if (methods.includes('hostfakesplit')) badges.push('hostfakesplit');
+  if (methods.includes('syndata')) badges.push('syndata');
+  if (methods.includes('fake QUIC')) badges.push('fake QUIC');
+  if (methods.includes('auto fake TLS')) badges.push('auto fake TLS');
+  else if (methods.includes('fake TLS')) badges.push('fake TLS');
+  if (methods.includes('Discord voice/STUN')) badges.push('Discord voice');
+  return badges;
+}
+
 function listStrategies(rootDir) {
   let entries;
   try {
@@ -32,7 +95,18 @@ function listStrategies(rootDir) {
       const natural = name.replace(/(\d+)/g, (_, d) => d.padStart(8, '0'));
       // Best-effort human title: strip extension and accents like (ALT), (FAKE)
       const title = name.replace(/\.bat$/i, '').replace(/^\s*general[\s_-]*/i, '');
-      return { file: path.join(rootDir, name), name, title: title || name, sortKey: natural };
+      // Badges are best-effort: a parse failure must never hide the strategy.
+      let badges = [];
+      try {
+        badges = methodBadges(parseStrategyFile(path.join(rootDir, name), { rootDir }).args);
+      } catch { /* unparsable file still listed */ }
+      return {
+        file: path.join(rootDir, name),
+        name,
+        title: title || name,
+        badges,
+        sortKey: natural,
+      };
     })
     .sort((a, b) => (a.sortKey < b.sortKey ? -1 : a.sortKey > b.sortKey ? 1 : 0));
 }
@@ -186,9 +260,76 @@ function parseStrategyFile(file, opts = {}) {
 }
 
 // Render args for embedding into `sc create ... binPath= "..."`:
-// quotes inside must be escaped ("\"C:\\path\\file\"") exactly as service.bat does.
+// quotes inside must be escaped ("\"C:\path\file\"") exactly as service.bat does.
 function toScArgsString(args) {
   return args.map((a) => a.replace(/"/g, '\\"')).join(' ');
 }
 
-module.exports = { listStrategies, parseStrategyFile, buildVarMap, toScArgsString };
+// ---- import / delete of user strategies ----
+const IMPORT_PREFIX = 'user-';
+
+// Sanitize a user-supplied file name into a safe strategy file name.
+function safeStrategyName(raw) {
+  const base = path.basename(String(raw || '')).replace(/\.bat$/i, '');
+  const clean = base
+    .replace(/[^\w\s().-]+/g, ' ') // drop path separators and unsafe chars
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (!clean) return null;
+  return `${IMPORT_PREFIX}${clean.slice(0, 80)}`;
+}
+
+// Copy a .bat into the zapret root as an importable strategy.
+// Refuses to overwrite an existing UPSTREAM (non-imported) file, so an import
+// can never shadow a shipped general*.bat.
+function importStrategy(rootDir, srcFile) {
+  let content;
+  try {
+    content = fs.readFileSync(srcFile, 'utf8');
+  } catch {
+    return { ok: false, reason: 'read_failed' };
+  }
+  if (!/winws\.exe/i.test(content)) {
+    return { ok: false, reason: 'no_winws' };
+  }
+  const name = safeStrategyName(srcFile);
+  if (!name) return { ok: false, reason: 'bad_name' };
+  const dest = path.join(rootDir, `${name}.bat`);
+  if (fs.existsSync(dest)) {
+    return { ok: false, reason: 'exists', file: dest };
+  }
+  try {
+    fs.writeFileSync(dest, content, 'utf8');
+  } catch {
+    return { ok: false, reason: 'write_failed' };
+  }
+  let badges = [];
+  try {
+    badges = methodBadges(parseStrategyFile(dest, { rootDir }).args);
+  } catch { /* imported file may be exotic */ }
+  return { ok: true, file: dest, name: path.basename(dest), badges };
+}
+
+// Delete an imported strategy. Upstream files (no user- prefix) are protected.
+function deleteStrategy(rootDir, file) {
+  const base = path.basename(String(file || ''));
+  if (!base.toLowerCase().startsWith(IMPORT_PREFIX)) {
+    return { ok: false, reason: 'protected' };
+  }
+  const target = path.join(rootDir, base);
+  try {
+    fs.unlinkSync(target);
+    return { ok: true };
+  } catch {
+    return { ok: false, reason: 'delete_failed' };
+  }
+}
+
+function isImported(name) {
+  return String(name || '').toLowerCase().startsWith(IMPORT_PREFIX);
+}
+
+module.exports = {
+  listStrategies, parseStrategyFile, buildVarMap, toScArgsString,
+  detectMethods, methodBadges, importStrategy, deleteStrategy, isImported, safeStrategyName,
+};

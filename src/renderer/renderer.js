@@ -17,6 +17,9 @@ function applyI18n() {
   document.querySelectorAll('[data-i18n]').forEach((el) => {
     el.textContent = t(el.getAttribute('data-i18n'));
   });
+  document.querySelectorAll('[data-i18n-ph]').forEach((el) => {
+    el.setAttribute('placeholder', t(el.getAttribute('data-i18n-ph')));
+  });
   document.documentElement.lang = currentLang;
   $('#lang-toggle').textContent = currentLang.toUpperCase();
 }
@@ -69,8 +72,9 @@ function showPage(name) {
   if (name === 'strategies') renderStrategies();
   if (name === 'filters') renderFilters();
   if (name === 'lists') renderLists();
-  if (name === 'updates') renderUpdates();
+  if (name === 'updates') renderUpdates().then(renderEngine);
   if (name === 'diagnostics') renderDiagnostics();
+  if (name === 'logs') renderLogs();
   if (name === 'settings') renderSettings();
   if (name === 'dashboard') refreshStatus();
 }
@@ -103,6 +107,7 @@ async function refreshStatus() {
   $('#stat-winws').className = `stat-value ${st.winwsProcess ? 'ok' : 'dim'}`;
   const pathEl = $('#stat-winws-path');
   if (pathEl) pathEl.textContent = st.winwsProcessPath || '';
+  refreshOwnershipBanner();
 }
 
 // ---------- banners ----------
@@ -119,6 +124,90 @@ function renderBanner(banner, st) {
     el.classList.add('hidden');
   }
   $('#banner-admin').classList.toggle('hidden', !!appInfo.admin);
+}
+
+// Foreign/portable zapret banner — a bypass we cannot control breaks the
+// "everything is green but nothing works" case, so it must stay visible.
+async function refreshOwnershipBanner() {
+  const el = $('#banner-foreign');
+  if (!el) return;
+  let det = null;
+  try {
+    det = await window.api.ownership();
+  } catch {
+    return;
+  }
+  if (!det || (det.ownership !== 'foreign' && det.ownership !== 'portable')) {
+    el.classList.add('hidden');
+    return;
+  }
+  if (sessionStorage.getItem('foreignDismissed') === det.ownership) {
+    el.classList.add('hidden');
+    return;
+  }
+  const btn = $('#banner-foreign-takeover');
+  const title = $('#banner-foreign-title');
+  if (det.ownership === 'foreign') {
+    title.textContent = t('banner_foreign_title');
+    $('#banner-foreign-text').textContent = t('banner_foreign_body', { path: det.servicePath || '?' });
+    btn.classList.remove('hidden');
+    btn.textContent = t('banner_foreign_takeover');
+  } else {
+    title.textContent = t('banner_portable_title');
+    $('#banner-foreign-text').textContent = t('banner_portable_body', { path: det.processPath || '?' });
+    btn.classList.remove('hidden');
+    btn.textContent = t('banner_portable_adopt');
+  }
+  el.classList.remove('hidden');
+}
+
+function bindOwnershipBanner() {
+  const el = $('#banner-foreign');
+  if (!el) return;
+  $('#banner-foreign-takeover').addEventListener('click', async () => {
+    const foreign = !$('#banner-foreign-title').textContent.startsWith(t('banner_portable_title'));
+    if (foreign) {
+      const ok = await confirmDialog(t('banner_foreign_confirm', { path: $('#banner-foreign-text').textContent }));
+      if (!ok) return;
+      const r = await window.api.takeoverForeign();
+      toast(r.ok ? t('banner_foreign_done') : `${t('toast_error')}: ${r.reason}`, r.ok ? 'ok' : 'err');
+    } else {
+      const r = await window.api.adoptPortable();
+      toast(r.ok ? t('banner_portable_done') : `${t('toast_error')}: ${r.reason}`, r.ok ? 'ok' : 'err');
+      if (r.ok) {
+        cfg = await window.api.getConfig();
+        setupDone();
+        refreshStatus();
+      }
+    }
+    refreshOwnershipBanner();
+  });
+  $('#banner-foreign-dismiss').addEventListener('click', () => {
+    const title = $('#banner-foreign-title').textContent;
+    sessionStorage.setItem('foreignDismissed', title.startsWith(t('banner_portable_title')) ? 'portable' : 'foreign');
+    el.classList.add('hidden');
+  });
+}
+
+// Small promise-based confirm in the renderer (no native dialog round-trip).
+function confirmDialog(message) {
+  return new Promise((resolve) => {
+    const box = document.createElement('div');
+    box.className = 'confirm-overlay';
+    box.innerHTML = `<div class="confirm-box"><p></p><div class="btn-row"><button class="btn btn-ghost" data-no></button><button class="btn btn-danger" data-yes></button></div></div>`;
+    box.querySelector('p').textContent = message;
+    box.querySelector('[data-no]').textContent = t('banner_dismiss');
+    box.querySelector('[data-yes]').textContent = t('banner_confirm_yes');
+    box.querySelector('[data-no]').addEventListener('click', () => {
+      box.remove();
+      resolve(false);
+    });
+    box.querySelector('[data-yes]').addEventListener('click', () => {
+      box.remove();
+      resolve(true);
+    });
+    document.body.append(box);
+  });
 }
 
 // ---------- setup ----------
@@ -378,6 +467,19 @@ async function renderStrategies() {
       vd.textContent = verdictText(res);
       badges.appendChild(vd);
     }
+    // Desync-method badges parsed out of the strategy's winws arguments.
+    for (const m of s.badges || []) {
+      const b = document.createElement('span');
+      b.className = 'badge tech';
+      b.textContent = m;
+      badges.appendChild(b);
+    }
+    if (window.api.isImportedName?.(s.name)) {
+      const b = document.createElement('span');
+      b.className = 'badge imported';
+      b.textContent = t('strat_imported_badge');
+      badges.appendChild(b);
+    }
     left.appendChild(badges);
 
     const actions = document.createElement('div');
@@ -395,6 +497,19 @@ async function renderStrategies() {
       refreshStatus();
     });
     actions.append(runBtn, svcBtn);
+    // Imported strategies can be removed; upstream ones are protected.
+    if (window.api.isImportedName?.(s.name)) {
+      const delBtn = mkBtn(t('strat_delete'), 'btn btn-danger btn-sm', async () => {
+        const r = await window.api.deleteStrategy(s.file);
+        toast(r.ok ? t('strat_deleted') : `${t('toast_error')}: ${r.reason}`, r.ok ? 'ok' : 'err');
+        if (r.ok) {
+          const c = await window.api.getConfig();
+          if (c.lastStrategyFile === s.file) await window.api.setConfig({ lastStrategyFile: null });
+          renderStrategies();
+        }
+      });
+      actions.appendChild(delBtn);
+    }
     main.append(left, actions);
     card.appendChild(main);
 
@@ -488,6 +603,17 @@ function mkBtn(label, cls, onClick) {
 
 // ---------- strategy testing ----------
 function bindTester() {
+  $('#btn-strat-import').addEventListener('click', async () => {
+    const r = await window.api.importStrategy();
+    if (r.reason === 'canceled') return;
+    if (r.ok) {
+      toast(`${t('strat_imported')}: ${r.name}`, 'ok');
+      renderStrategies();
+    } else {
+      const map = { exists: t('strat_import_exists'), no_winws: t('strat_import_nowinws'), bad_name: t('strat_import_badname') };
+      toast(`${t('toast_error')}: ${map[r.reason] || r.reason}`, 'err');
+    }
+  });
   const setButtons = (running) => {
     $('#btn-find-working').disabled = running;
     $('#btn-test-stop').classList.toggle('hidden', !running);
@@ -651,6 +777,46 @@ async function loadList(key) {
   editor.readOnly = !isEditable;
   $('#lists-hint').textContent = key === 'general' ? t('lists_hint_general') : '';
   $('#list-save').classList.toggle('hidden', !isEditable);
+  $('.list-toolbar').classList.toggle('hidden', !isEditable);
+  refreshListStats();
+}
+
+// Live counters: entries / duplicates / size.
+async function refreshListStats() {
+  const el = $('#lists-stats');
+  if (!el || !listsEditable.includes(currentList)) {
+    if (el) el.textContent = '';
+    return;
+  }
+  const r = await window.api.listStats(currentList);
+  if (!r.ok) {
+    el.textContent = '';
+    return;
+  }
+  const s = r.stats;
+  const parts = [`${t('lists_stat_entries')}: ${s.total}`];
+  if (s.duplicates) parts.push(`${t('lists_stat_dupes')}: ${s.duplicates}`);
+  if (s.comments) parts.push(`${t('lists_stat_comments')}: ${s.comments}`);
+  parts.push(`${Math.round(s.bytes / 102.4) / 10} KB`);
+  el.textContent = parts.join(' · ');
+}
+
+// Run a smart operation in main, then reload the editor from disk.
+async function runListOp(op, payload) {
+  const r = await window.api.listOp(currentList, op, payload);
+  if (!r.ok) {
+    const map = { duplicate: t('lists_err_dup'), invalid: t('lists_err_invalid'), not_found: t('lists_err_nofind'), too_big: t('lists_err_big') };
+    toast(`${t('toast_error')}: ${map[r.reason] || r.reason}`, 'err');
+    return false;
+  }
+  if (r.content !== undefined) $('#list-editor').value = r.content;
+  if (op === 'dedupe') toast(`${t('lists_deduped')}: ${r.removed}`, 'ok');
+  else if (op === 'sort') toast(`${t('lists_sorted')}: ${r.count}`, 'ok');
+  else if (op === 'add') toast(`${t('lists_added')}: ${r.added}`, 'ok');
+  else if (op === 'remove') toast(`${t('lists_removed')}: ${r.removed}`, 'ok');
+  else if (op === 'stripPlaceholder') toast(t('lists_stripped'), 'ok');
+  await loadList(currentList);
+  return true;
 }
 
 function bindLists() {
@@ -658,7 +824,97 @@ function bindLists() {
   $('#list-save').addEventListener('click', async () => {
     const r = await window.api.writeList(currentList, $('#list-editor').value);
     toast(r.ok ? t('lists_saved') : t('toast_error'), r.ok ? 'ok' : 'err');
+    if (r.ok) refreshListStats();
   });
+  const addInput = $('#list-add-input');
+  const doAdd = async () => {
+    const value = addInput.value.trim();
+    if (!value) return;
+    if (await runListOp('add', { entry: value })) addInput.value = '';
+  };
+  $('#list-add-btn').addEventListener('click', doAdd);
+  addInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      doAdd();
+    }
+  });
+  $('#list-dedupe').addEventListener('click', () => runListOp('dedupe'));
+  $('#list-sort').addEventListener('click', () => runListOp('sort'));
+  $('#list-strip').addEventListener('click', () => runListOp('stripPlaceholder'));
+  $('#list-editor').addEventListener('input', debounceLocalStats);
+}
+
+// Cheap local counter while typing (no IPC per keystroke).
+let listStatsTimer = null;
+function debounceLocalStats() {
+  clearTimeout(listStatsTimer);
+  listStatsTimer = setTimeout(() => {
+    const el = $('#lists-stats');
+    if (!el) return;
+    const lines = $('#list-editor').value.split(/\r?\n/).map((l) => l.trim());
+    const entries = lines.filter((l) => l && !l.startsWith('#') && !l.startsWith(';'));
+    const seen = new Set();
+    let dupes = 0;
+    for (const e of entries) {
+      const k = e.toLowerCase().replace(/^\^/, '');
+      if (seen.has(k)) dupes++;
+      else seen.add(k);
+    }
+    const parts = [`${t('lists_stat_entries')}: ${entries.length}`];
+    if (dupes) parts.push(`${t('lists_stat_dupes')}: ${dupes}`);
+    el.textContent = parts.join(' · ') + ' •';
+  }, 400);
+}
+
+async function renderEngineCurrent() {
+  try {
+    const r = await window.api.engineCurrent();
+    const el = $('#engine-current');
+    if (el) el.textContent = r.version || t('engine_unknown');
+  } catch { /* offline — keep placeholder */ }
+}
+
+async function loadEngineReleases() {
+  const sel = $('#engine-select');
+  const status = $('#engine-status');
+  if (!sel) return;
+  sel.textContent = '';
+  const loading = document.createElement('option');
+  loading.textContent = t('engine_loading');
+  loading.value = '';
+  sel.appendChild(loading);
+  try {
+    const list = await window.api.engineReleases();
+    sel.textContent = '';
+    if (!list || !list.length) {
+      const none = document.createElement('option');
+      none.textContent = t('engine_none');
+      none.value = '';
+      sel.appendChild(none);
+      if (status) status.textContent = t('engine_no_releases');
+      return;
+    }
+    for (const r of list) {
+      const opt = document.createElement('option');
+      opt.value = r.tag;
+      opt.textContent = r.tag;
+      sel.appendChild(opt);
+    }
+    if (status) status.textContent = t('engine_releases_found', { count: list.length });
+  } catch (e) {
+    sel.textContent = '';
+    const none = document.createElement('option');
+    none.textContent = t('engine_none');
+    none.value = '';
+    sel.appendChild(none);
+    if (status) status.textContent = t('engine_failed', { reason: e.message });
+  }
+}
+
+async function renderEngine() {
+  await renderEngineCurrent();
+  await loadEngineReleases();
 }
 
 // ---------- updates ----------
@@ -751,6 +1007,38 @@ async function renderUpdates() {
 }
 
 function bindUpdates() {
+  $('#btn-engine-refresh').addEventListener('click', () => loadEngineReleases());
+  $('#btn-engine-update').addEventListener('click', async () => {
+    const tag = $('#engine-select').value;
+    if (!tag) {
+      toast(t('engine_none'), 'err');
+      return;
+    }
+    if (!confirm(t('engine_confirm', { tag }))) return;
+    const btn = $('#btn-engine-update');
+    btn.disabled = true;
+    $('#engine-status').textContent = t('engine_working');
+    $('#engine-status').className = 'ver-status';
+    const off = window.api.on('install:progress', (frac) => {
+      $('#install-progress-wrap')?.classList.remove('hidden');
+      const bar = $('#install-progress');
+      if (bar) bar.style.width = `${Math.round((frac || 0) * 100)}%`;
+    });
+    const r = await window.api.engineUpdate(tag);
+    if (off) off();
+    $('#install-progress-wrap')?.classList.add('hidden');
+    btn.disabled = false;
+    if (r.ok) {
+      $('#engine-status').textContent = t('engine_done', { tag: r.tag, count: r.copied.length });
+      $('#engine-status').className = 'ver-status ok';
+      toast(t('engine_done_short'), 'ok');
+      await renderEngineCurrent();
+    } else {
+      $('#engine-status').textContent = t('engine_failed', { reason: r.reason });
+      $('#engine-status').className = 'ver-status err';
+      toast(`${t('toast_error')}: ${r.reason}`, 'err');
+    }
+  });
   $('#btn-ver-check').addEventListener('click', renderUpdates);
   $('#btn-ver-open').addEventListener('click', () => window.api.openExternal('https://github.com/Flowseal/zapret-discord-youtube/releases/latest'));
   $('#btn-ver-install').addEventListener('click', async () => {
@@ -1097,6 +1385,99 @@ function bindPower() {
   $('#banner-admin-fix').addEventListener('click', () => window.api.restartElevated());
 }
 
+// ---------- live logs ----------
+const logState = { lines: [], filter: '', level: '', max: 2000 };
+
+function logLineEl(e) {
+  const div = document.createElement('div');
+  div.className = `log-line ${e.level || 'info'}`;
+  const time = document.createElement('span');
+  time.className = 'log-time';
+  time.textContent = e.time || '';
+  const src = document.createElement('span');
+  src.className = 'log-src';
+  src.textContent = e.source || 'app';
+  const txt = document.createElement('span');
+  txt.className = 'log-text';
+  txt.textContent = e.text || '';
+  div.append(time, src, txt);
+  return div;
+}
+
+function logMatches(e) {
+  if (logState.level && e.level !== logState.level) return false;
+  if (logState.filter && !String(e.text || '').toLowerCase().includes(logState.filter)) return false;
+  return true;
+}
+
+function renderLogs() {
+  const view = $('#log-view');
+  if (!view) return;
+  const atBottom = view.scrollHeight - view.scrollTop - view.clientHeight < 40;
+  view.textContent = '';
+  const shown = logState.lines.filter(logMatches);
+  if (!shown.length) {
+    const empty = document.createElement('div');
+    empty.className = 'log-empty';
+    empty.textContent = t('logs_empty');
+    view.append(empty);
+  } else {
+    const frag = document.createDocumentFragment();
+    for (const e of shown) frag.append(logLineEl(e));
+    view.append(frag);
+  }
+  const total = logState.lines.length;
+  const cnt = $('#log-count');
+  if (cnt) cnt.textContent = `${shown.length} / ${total}`;
+  if (atBottom) view.scrollTop = view.scrollHeight;
+}
+
+function appendLogs(batch) {
+  const list = Array.isArray(batch) ? batch : [batch];
+  for (const e of list) {
+    if (!e || typeof e !== 'object') continue;
+    logState.lines.push(e);
+  }
+  if (logState.lines.length > logState.max) {
+    logState.lines.splice(0, logState.lines.length - logState.max);
+  }
+  if (!$('#page-logs').classList.contains('hidden')) renderLogs();
+}
+
+function bindLogs() {
+  const view = $('#log-view');
+  if (!view) return;
+  $('#log-filter').addEventListener('input', (ev) => {
+    logState.filter = ev.target.value.trim().toLowerCase();
+    renderLogs();
+  });
+  $('#log-level').addEventListener('change', (ev) => {
+    logState.level = ev.target.value;
+    renderLogs();
+  });
+  $('#btn-log-clear').addEventListener('click', async () => {
+    await window.api.clearLogs();
+    logState.lines = [];
+    renderLogs();
+    toast(t('logs_cleared'), 'ok');
+  });
+  $('#btn-log-open').addEventListener('click', () => window.api.showLogFile());
+  $('#btn-log-export').addEventListener('click', async () => {
+    const r = await window.api.exportLogs({
+      q: logState.filter,
+      level: logState.level,
+      full: !logState.filter && !logState.level,
+    });
+    if (r && r.ok) toast(`${t('logs_exported')} (${r.lines})`, 'ok');
+    else if (r && r.reason !== 'canceled') toast(`${t('toast_error')}: ${r.reason}`, 'err');
+  });
+  window.api.logBuffer().then((buf) => {
+    logState.lines = Array.isArray(buf) ? buf.slice(-logState.max) : [];
+    renderLogs();
+  });
+  window.api.on('log:lines', appendLogs);
+}
+
 // ---------- titlebar / nav ----------
 function bindChrome() {
   $('#btn-min').addEventListener('click', () => window.api.windowAction('minimize'));
@@ -1135,6 +1516,12 @@ function bindChrome() {
   bindPanelUpdater();
   bindUpdateBanner();
   bindDiagnostics();
+  bindLogs();
+  bindOwnershipBanner();
+  // Tray "Go to" submenu drives navigation from the main process.
+  window.api.on('app:navigate', (page) => {
+    if (page && $(`#page-${page}`)) showPage(page);
+  });
   bindSettings();
   bindAutoConnect();
   // The startup update check in main may have finished before we attached —

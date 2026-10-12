@@ -80,6 +80,7 @@
           <button class="nav-item" data-page="lists"><span class="nav-ico" aria-hidden="true">&#xE8B7;</span><span data-i18n="nav_lists"></span></button>
           <button class="nav-item" data-page="updates"><span class="nav-ico" aria-hidden="true">&#xE895;</span><span data-i18n="nav_updates"></span></button>
           <button class="nav-item" data-page="diagnostics"><span class="nav-ico" aria-hidden="true">&#xE90F;</span><span data-i18n="nav_diagnostics"></span></button>
+          <button class="nav-item" data-page="logs"><span class="nav-ico" aria-hidden="true">&#xE9D5;</span><span data-i18n="nav_logs"></span></button>
           <button class="nav-item" data-page="settings"><span class="nav-ico" aria-hidden="true">&#xE713;</span><span data-i18n="nav_settings"></span></button>
         </nav>
 
@@ -112,6 +113,16 @@
             </div>
             <div class="banner-actions">
               <button id="banner-admin-fix" class="btn btn-primary btn-sm" data-i18n="banner_admin_fix"></button>
+            </div>
+          </div>
+          <div id="banner-foreign" class="banner banner-warn hidden" role="status" aria-live="polite">
+            <div class="banner-text">
+              <strong data-i18n="banner_foreign_title"></strong>
+              <span id="banner-foreign-text"></span>
+            </div>
+            <div class="banner-actions">
+              <button id="banner-foreign-takeover" class="btn btn-primary btn-sm" data-i18n="banner_foreign_takeover"></button>
+              <button id="banner-foreign-dismiss" class="btn btn-ghost btn-sm" data-i18n="banner_dismiss"></button>
             </div>
           </div>
 
@@ -165,6 +176,7 @@
               <div class="btn-row">
                 <button id="btn-test-stop" class="btn btn-danger hidden" data-i18n="test_stop"></button>
                 <button id="btn-find-working" class="btn btn-primary" data-i18n="strat_find_working"></button>
+                <button id="btn-strat-import" class="btn btn-secondary" data-i18n="strat_import"></button>
               </div>
             </div>
             <p class="muted" data-i18n="strat_intro"></p>
@@ -230,6 +242,14 @@
               <button class="tab" data-list="ipsetAll" role="tab" data-i18n="lists_ipset_view"></button>
             </div>
             <p id="lists-hint" class="muted"></p>
+            <div class="list-toolbar">
+              <input id="list-add-input" class="input list-add" type="text" spellcheck="false" placeholder="example.com" data-i18n-ph="lists_add_ph" aria-label="Add entry">
+              <button id="list-add-btn" class="btn btn-primary btn-sm" data-i18n="lists_add"></button>
+              <button id="list-dedupe" class="btn btn-secondary btn-sm" data-i18n="lists_dedupe"></button>
+              <button id="list-sort" class="btn btn-secondary btn-sm" data-i18n="lists_sort"></button>
+              <button id="list-strip" class="btn btn-ghost btn-sm" data-i18n="lists_strip"></button>
+            </div>
+            <p id="lists-stats" class="muted list-stats"></p>
             <textarea id="list-editor" class="list-editor" spellcheck="false" rows="16"></textarea>
             <div class="editor-actions">
               <button id="list-save" class="btn btn-primary" data-i18n="lists_save"></button>
@@ -296,6 +316,24 @@
             </div>
             <div class="card">
               <div class="set-head">
+                <span class="set-ico tb-glyph" aria-hidden="true">&#xE8EC;</span>
+                <div><h3 data-i18n="engine_title"></h3><p class="muted set-sub" data-i18n="engine_hint"></p></div>
+              </div>
+              <div class="ver-tiles">
+                <div class="ver-tile">
+                  <span class="ver-label" data-i18n="engine_current"></span>
+                  <span id="engine-current" class="ver-value">—</span>
+                </div>
+              </div>
+              <div class="btn-row engine-row">
+                <select id="engine-select" class="input engine-select" aria-label="Engine release"></select>
+                <button id="btn-engine-refresh" class="btn btn-secondary" data-i18n="engine_refresh"></button>
+                <button id="btn-engine-update" class="btn btn-primary" data-i18n="engine_update"></button>
+              </div>
+              <div id="engine-status" class="ver-status"></div>
+            </div>
+            <div class="card">
+              <div class="set-head">
                 <span class="set-ico tb-glyph" aria-hidden="true">&#xE8B7;</span>
                 <div><h3 data-i18n="updates_ipset"></h3></div>
               </div>
@@ -331,6 +369,27 @@
               <p class="muted" data-i18n="dns_hint"></p>
             </div>
             <div id="diag-list" class="card-list"></div>
+          </div>
+
+          <!-- LOGS -->
+          <div id="page-logs" class="page hidden">
+            <div class="page-head">
+              <h2 data-i18n="logs_title"></h2>
+              <div class="btn-row">
+                <input id="log-filter" class="input log-search" type="search" placeholder="..." data-i18n-ph="logs_search" aria-label="Filter logs">
+                <select id="log-level" class="input log-select" aria-label="Level">
+                  <option value="" data-i18n="logs_all_levels"></option>
+                  <option value="info">info</option>
+                  <option value="warn">warn</option>
+                  <option value="error">error</option>
+                </select>
+                <button id="btn-log-open" class="btn btn-secondary" data-i18n="logs_open_file"></button>
+                <button id="btn-log-export" class="btn btn-secondary" data-i18n="logs_export"></button>
+                <button id="btn-log-clear" class="btn btn-ghost" data-i18n="logs_clear"></button>
+              </div>
+              <p class="muted" id="log-count"></p>
+            </div>
+            <div id="log-view" class="log-view" role="log" aria-live="polite" tabindex="0"></div>
           </div>
 
           <!-- SETTINGS -->

@@ -521,3 +521,82 @@ input[type="text"]:focus, textarea:focus { outline: none; border-color: var(--ac
 ::-webkit-scrollbar-track { background: transparent; }
 
 .strat-legend { font-size: 12.5px; line-height: 1.55; max-width: 720px; margin-bottom: 14px; }
+
+/* ---- live logs ---- */
+.log-view {
+  margin-top: 14px;
+  height: calc(100vh - 260px);
+  min-height: 260px;
+  overflow-y: auto;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  font-family: Consolas, 'Courier New', monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  box-shadow: var(--shadow);
+}
+.log-line { display: flex; gap: 8px; white-space: pre-wrap; word-break: break-word; padding: 1px 0; }
+.log-time { color: var(--text-dim); flex: 0 0 auto; }
+.log-src {
+  flex: 0 0 auto;
+  min-width: 62px;
+  padding: 0 6px;
+  border-radius: 5px;
+  text-align: center;
+  font-size: 11px;
+  align-self: flex-start;
+  background: var(--bg-hover);
+  color: var(--text-dim);
+}
+.log-line.warn .log-src { background: rgba(255, 176, 32, 0.16); color: var(--warn); }
+.log-line.error .log-src { background: rgba(255, 77, 79, 0.16); color: var(--err); }
+.log-text { flex: 1 1 auto; }
+.log-line.warn .log-text { color: var(--warn); }
+.log-line.error .log-text { color: var(--err); }
+.log-empty { color: var(--text-dim); font-family: 'Segoe UI', sans-serif; padding: 12px; }
+.log-search { min-width: 190px; }
+.log-select { min-width: 130px; }
+
+/* ---- smart list editor ---- */
+.list-toolbar { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin: 10px 0 6px; }
+.list-add { flex: 1 1 220px; min-width: 180px; }
+.list-stats { margin: 0 0 8px; font-size: 12px; }
+
+/* ---- confirm dialog ---- */
+.confirm-overlay {
+  position: fixed; inset: 0; z-index: 90;
+  background: rgba(5, 6, 12, 0.6);
+  display: flex; align-items: center; justify-content: center;
+  backdrop-filter: blur(3px);
+  animation: fadeIn var(--speed) ease;
+}
+.confirm-box {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: var(--shadow);
+  padding: 20px 22px; max-width: 420px; width: calc(100% - 48px);
+}
+.confirm-box p { margin: 0 0 16px; line-height: 1.5; word-break: break-word; }
+.confirm-box .btn-row { justify-content: flex-end; }
+
+/* ---- strategy tech badges ---- */
+.badge.tech {
+  background: var(--bg-hover);
+  color: var(--text-dim);
+  font-weight: 600;
+  font-family: Consolas, monospace;
+  animation: none;
+}
+.badge.imported {
+  background: rgba(155, 89, 255, 0.18);
+  color: var(--accent-2);
+  font-weight: 600;
+  animation: none;
+}
+
+/* ---- engine card ---- */
+.engine-row { align-items: center; }
+.engine-select { flex: 1 1 200px; min-width: 160px; }
+.ver-status.ok { color: var(--ok); }
+.ver-status.err { color: var(--err); }
