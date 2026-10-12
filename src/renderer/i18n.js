@@ -59,6 +59,8 @@ const DICT = {
     setup_err_security_check_failed: 'Не удалось выполнить проверку безопасности файла.',
     setup_err_install_failed: 'Установка прервана. Подробности — в разделе «Логи».',
     setup_err_no_root: 'Папка zapret не настроена.',
+    setup_download_local: 'Установить из файла',
+    setup_download_local_hint: 'Если GitHub недоступен с этого ПК — скачайте zapret-discord-youtube-*.zip на другом устройстве и установите из него.',
 
     logs_title: 'Живые логи',
     logs_search: 'Поиск по тексту...',
@@ -387,6 +389,8 @@ const DICT = {
     setup_err_security_check_failed: 'The file security check could not be completed.',
     setup_err_install_failed: 'Setup was interrupted. See the Logs page for details.',
     setup_err_no_root: 'The zapret folder is not configured.',
+    setup_download_local: 'Install from file',
+    setup_download_local_hint: 'If github.com is unreachable from this PC — download zapret-discord-youtube-*.zip on another device and install it here.',
 
     logs_title: 'Live logs',
     logs_search: 'Search text...',

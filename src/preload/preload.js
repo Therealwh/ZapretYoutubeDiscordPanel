@@ -44,7 +44,8 @@ const api = {
   runDiagnostics: () => ipcRenderer.invoke('diag:run'),
 
   checkVersion: () => ipcRenderer.invoke('updates:checkVersion'),
-  installZapret: (dir) => ipcRenderer.invoke('updates:installZapret', dir),
+  installZapret: (dir, localZip) => ipcRenderer.invoke('updates:installZapret', dir, localZip),
+  chooseZip: () => ipcRenderer.invoke('dialog:chooseZip'),
   runningInfo: () => ipcRenderer.invoke('zapret:runningInfo'),
   ownership: () => ipcRenderer.invoke('zapret:ownership'),
   takeoverForeign: () => ipcRenderer.invoke('zapret:takeover'),

@@ -330,18 +330,21 @@ async function latestReleaseAsset() {
   return { ok: true, version: json.tag_name, name: asset.name, url: asset.browser_download_url, size: asset.size };
 }
 
-// Full install/refresh: download zip to temp, extract with PowerShell, swap folder
-async function installZapret(targetDir, onProgress, onStage) {
+// Full install/refresh: download zip to temp, extract with PowerShell, swap folder.
+// `opts.localZip` installs from a zip the user already has on disk — the only
+// option on a machine where github.com itself is blocked/throttled, which is
+// exactly the machine that needs the setup wizard in the first place.
+async function installZapret(targetDir, onProgress, onStage, opts) {
   // Never let an error escape: the renderer awaits this over IPC, and a
   // rejected promise would freeze its UI mid-install.
   try {
-    return await installZapretInner(targetDir, onProgress, onStage);
+    return await installZapretInner(targetDir, onProgress, onStage, opts);
   } catch (e) {
     return { ok: false, reason: 'install_failed', message: String((e && e.message) || e) };
   }
 }
 
-async function installZapretInner(targetDir, onProgress, onStage) {
+async function installZapretInner(targetDir, onProgress, onStage, opts = {}) {
   const stage = (s) => onStage && onStage(s);
   // Housekeeping: drop install temp dirs older than a day.
   try {
@@ -356,19 +359,42 @@ async function installZapretInner(targetDir, onProgress, onStage) {
   } catch {}
   stage('resolve');
   // Routed through module.exports so tests can stub resolution/download.
-  const rel = await module.exports.latestReleaseAsset();
-  if (!rel.ok) return { ok: false, reason: rel.reason };
+  const localZip = opts && opts.localZip ? String(opts.localZip) : null;
+  if (localZip && !/\.zip$/i.test(localZip)) {
+    return { ok: false, reason: 'not_a_zip', message: localZip };
+  }
+  if (localZip && !exists(localZip)) {
+    return { ok: false, reason: 'local_zip_missing', message: localZip };
+  }
+  let rel;
+  if (localZip) {
+    rel = { ok: true, version: null, name: path.basename(localZip), url: null, size: 0, local: true };
+  } else {
+    rel = await module.exports.latestReleaseAsset();
+    if (!rel.ok) return { ok: false, reason: rel.reason };
+  }
   const tmp = path.join(require('node:os').tmpdir(), `ydp-${Date.now()}`);
   fs.mkdirSync(tmp, { recursive: true });
   const zipPath = path.join(tmp, rel.name);
-  stage('download');
-  // Each stage reports ITS OWN reason: a generic install_failed tells the user
-  // nothing about which step broke (and the throw used to escape here).
-  try {
-    await module.exports.downloadFile(rel.url, zipPath, onProgress);
-  } catch (e) {
-    try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {}
-    return { ok: false, reason: 'download_failed', message: String((e && e.message) || e) };
+  if (localZip) {
+    stage('copy');
+    // Copy so the install never depends on the user's original file staying put.
+    try {
+      fs.copyFileSync(localZip, zipPath);
+    } catch (e) {
+      try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {}
+      return { ok: false, reason: 'local_zip_unreadable', message: String((e && e.message) || e) };
+    }
+  } else {
+    stage('download');
+    // Each stage reports ITS OWN reason: a generic install_failed tells the user
+    // nothing about which step broke (and the throw used to escape here).
+    try {
+      await module.exports.downloadFile(rel.url, zipPath, onProgress);
+    } catch (e) {
+      try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {}
+      return { ok: false, reason: 'download_failed', message: String((e && e.message) || e) };
+    }
   }
   stage('security');
   // Safety gate: refuse tampered / malware-looking distributions before any
@@ -541,6 +567,8 @@ module.exports = {
   installZapret,
   downloadFile,
   verifyReleaseSecurity,
+  extractOneFromZip,
+  fileSignature,
   vtLookup,
   sha256File,
   setVtKeyProvider,

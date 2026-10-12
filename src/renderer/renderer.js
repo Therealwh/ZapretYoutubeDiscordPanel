@@ -326,13 +326,15 @@ function bindSetup() {
     $('#setup-install-form').scrollIntoView({ behavior: 'smooth', block: 'center' });
     validateSetupPath($('#setup-path').value);
   });
-  $('#setup-download').addEventListener('click', async () => {
-    let dir = $('#setup-path').value.trim().replace(/[\\/]+$/, '');
+  // Shared installer flow: network download or a zip already on disk.
+async function runSetupInstall(localZipPath) {
+    const dir = $('#setup-path').value.trim().replace(/[\\/]+$/, '');
     if (!/^[a-zA-Z]:\\.+/i.test(dir)) {
       toast(t('setup_path_invalid'), 'err');
       return;
     }
     $('#setup-download').disabled = true;
+    $('#setup-download-local').disabled = true;
     $('#setup-progress-wrap').classList.remove('hidden');
     $('#setup-stage').textContent = t('setup_stage_resolve');
     const offStage = window.api.on('install:stage', (s) => {
@@ -343,9 +345,9 @@ function bindSetup() {
     });
     let res;
     try {
-      res = await window.api.installZapret(dir);
-    } catch {
-      res = { ok: false, reason: 'install_failed' };
+      res = await window.api.installZapret(dir, localZipPath || null);
+    } catch (e) {
+      res = { ok: false, reason: 'install_failed', message: String((e && e.message) || e) };
     }
     offStage?.();
     offProg?.();
@@ -363,8 +365,16 @@ function bindSetup() {
       if (res.reason === 'security_rejected') {
         $('#setup-stage').textContent = t('setup_sec_red');
       }
-      $('#setup-download').disabled = false;
     }
+    $('#setup-download').disabled = false;
+    $('#setup-download-local').disabled = false;
+  }
+
+  $('#setup-download').addEventListener('click', () => runSetupInstall(null));
+  $('#setup-download-local').addEventListener('click', async () => {
+    const zip = await window.api.chooseZip();
+    if (!zip) return;
+    await runSetupInstall(zip);
   });
   $('#setup-done').addEventListener('click', () => enterApp());
 }

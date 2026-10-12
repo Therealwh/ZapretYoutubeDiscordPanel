@@ -339,6 +339,16 @@ function registerIpc() {
     return res.filePaths[0];
   });
 
+  ipcMain.handle('dialog:chooseZip', async () => {
+    const res = await dialog.showOpenDialog(win, {
+      title: 'zapret-discord-youtube archive',
+      properties: ['openFile'],
+      filters: [{ name: 'Zip archive', extensions: ['zip'] }],
+    });
+    if (res.canceled || !res.filePaths.length) return null;
+    return res.filePaths[0];
+  });
+
   ipcMain.handle('admin:restartElevated', (_e, pendingAction) => {
     if (pendingAction) config.set('pendingAction', pendingAction);
     restartElevated();
@@ -464,9 +474,9 @@ function registerIpc() {
   ipcMain.handle('diag:run', () => diagnostics.runDiagnostics(rootDir()));
 
   ipcMain.handle('updates:checkVersion', () => updates.checkVersion(rootDir()));
-  ipcMain.handle('updates:installZapret', async (_e, targetDir) => {
-    logger.info(`zapret install requested → ${targetDir}`);
-    const r = await updates.installZapret(targetDir, (f) => emitToWindow('install:progress', f), (s) => emitToWindow('install:stage', s));
+  ipcMain.handle('updates:installZapret', async (_e, targetDir, localZip) => {
+    logger.info(`zapret install requested → ${targetDir}${localZip ? ' (local zip)' : ''}`);
+    const r = await updates.installZapret(targetDir, (f) => emitToWindow('install:progress', f), (s) => emitToWindow('install:stage', s), { localZip: localZip || null });
     if (r.ok) {
       logger.info(`zapret installed: ${r.version}${r.merged ? ' (merged)' : ''}`);
       // The pre-swap security gate in installZapret already refused red
