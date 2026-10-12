@@ -76,7 +76,8 @@ const DICT = {
     setup_err_install_failed: 'Установка прервана. Подробности — в разделе «Логи».',
     setup_err_no_root: 'Папка zapret не настроена.',
     setup_download_local: 'Установить из файла',
-    setup_download_local_hint: 'Если GitHub недоступен с этого ПК — скачайте zapret-discord-youtube-*.zip на другом устройстве и установите из него.',
+    setup_download_local_hint: 'В кнопке выше используется zapret, встроенный в панель — установка работает без интернета. Новые версии zapret ставятся на странице «Обновления».',
+    setup_err_target_is_panel_dir: 'Нельзя ставить zapret в папку самой панели — обновление панели её перезапишет. Выберите отдельную папку, например C:\\zapret.',
 
     logs_title: 'Живые логи',
     logs_search: 'Поиск по тексту...',

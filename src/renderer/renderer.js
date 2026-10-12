@@ -326,7 +326,7 @@ function bindSetup() {
     $('#setup-install-form').scrollIntoView({ behavior: 'smooth', block: 'center' });
     validateSetupPath($('#setup-path').value);
   });
-  // Shared installer flow: network download or a zip already on disk.
+  // Shared installer flow: bundled copy, a zip already on disk, or the network.
 async function runSetupInstall(localZipPath) {
     const dir = $('#setup-path').value.trim().replace(/[\\/]+$/, '');
     if (!/^[a-zA-Z]:\\.+/i.test(dir)) {
@@ -345,7 +345,8 @@ async function runSetupInstall(localZipPath) {
     });
     let res;
     try {
-      res = await window.api.installZapret(dir, localZipPath || null);
+      // First run: use the copy bundled with the panel (works with no network).
+      res = await window.api.installZapret(dir, localZipPath || null, { preferBundled: true });
     } catch (e) {
       res = { ok: false, reason: 'install_failed', message: String((e && e.message) || e) };
     }

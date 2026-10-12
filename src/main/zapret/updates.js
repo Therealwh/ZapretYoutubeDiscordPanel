@@ -334,7 +334,6 @@ async function latestReleaseAsset() {
 // download so a permission problem does not waste 2 MB of traffic first.
 function assertTargetWritable(targetDir) {
   const parent = path.dirname(targetDir);
-  let probeDir = null;
   try {
     fs.mkdirSync(parent, { recursive: true });
   } catch (e) {
@@ -345,21 +344,72 @@ function assertTargetWritable(targetDir) {
   }
   if (!exists(targetDir)) {
     try {
-      probeDir = path.join(parent, `.ydp-write-test-${process.pid}`);
+      const probeDir = path.join(parent, `.ydp-write-test-${process.pid}`);
       fs.mkdirSync(probeDir);
       fs.rmSync(probeDir, { recursive: true, force: true });
     } catch (e) {
-      try { if (probeDir) fs.rmSync(probeDir, { recursive: true, force: true }); } catch { /* ignore */ }
       return { ok: false, reason: 'target_unwritable', message: String((e && e.message) || e) };
     }
   }
   return { ok: true };
 }
 
-// Full install/refresh: download zip to temp, extract with PowerShell, swap folder.
-// `opts.localZip` installs from a zip the user already has on disk — the only
-// option on a machine where github.com itself is blocked/throttled, which is
-// exactly the machine that needs the setup wizard in the first place.
+// Installing zapret INTO the panel's own folder looks tempting ("same Program
+// Files tree"), but every panel update rewrites that folder and silently
+// destroys the bypass — which is exactly how an install ends up as
+// "version: unknown" with a dead engine. Refuse unless the user insists.
+function assertNotPanelDir(targetDir, panelDir) {
+  if (!panelDir) return { ok: true };
+  const norm = (p) => path.resolve(p).replace(/[\\/]+$/, '').toLowerCase();
+  const t = norm(targetDir);
+  const p = norm(panelDir);
+  if (t === p || t.startsWith(`${p}\\`) || p.startsWith(`${t}\\`)) {
+    return { ok: false, reason: 'target_is_panel_dir', message: `${targetDir} vs ${panelDir}` };
+  }
+  return { ok: true };
+}
+
+// ---- bundled zapret payload ----
+// The panel ships the official zapret zip so a fresh install works with NO
+// network at all (the machines that need the bypass are usually the ones where
+// github.com is throttled or blocked). The bundled archive is verified with the
+// same SHA-256 whitelist as a download, so trust is identical.
+const BUNDLED_DIR_NAME = 'zapret';
+const BUNDLED_ZIP_RE = /^zapret-discord-youtube-[\d.]+\.zip$/i;
+
+function bundledDir() {
+  const candidates = [];
+  // Packaged: <app>/resources/zapret (electron-builder extraResources)
+  if (process.resourcesPath) candidates.push(path.join(process.resourcesPath, BUNDLED_DIR_NAME));
+  // Unpacked dev run
+  candidates.push(path.join(__dirname, '..', '..', '..', 'resources', BUNDLED_DIR_NAME));
+  for (const dir of candidates) {
+    try {
+      if (fs.existsSync(dir)) return dir;
+    } catch { /* try next */ }
+  }
+  return null;
+}
+
+// Find the bundled zip and its version from the file name.
+function findBundledZip() {
+  const dir = bundledDir();
+  if (!dir) return null;
+  let names;
+  try {
+    names = fs.readdirSync(dir);
+  } catch {
+    return null;
+  }
+  const zip = names.find((n) => BUNDLED_ZIP_RE.test(n));
+  if (!zip) return null;
+  const m = zip.match(/zapret-discord-youtube-([\d.]+)\.zip/i);
+  return { path: path.join(dir, zip), name: zip, version: m ? m[1] : null, dir };
+}
+
+// Full install/refresh: obtain a zapret zip, extract it, swap the folder.
+// Source priority: opts.localZip (user-picked) > opts.preferBundled (first
+// install, offline) > network (Updates page always wants the newest release).
 async function installZapret(targetDir, onProgress, onStage, opts) {
   // Never let an error escape: the renderer awaits this over IPC, and a
   // rejected promise would freeze its UI mid-install.
@@ -384,6 +434,8 @@ async function installZapretInner(targetDir, onProgress, onStage, opts = {}) {
     }
   } catch {}
   stage('resolve');
+  const notPanel = assertNotPanelDir(targetDir, opts.panelDir);
+  if (!notPanel.ok) return { ...notPanel };
   // Fail fast on an unwritable destination (e.g. C:\ without admin rights) —
   // otherwise the user waits for a download that could never be installed.
   const writable = assertTargetWritable(targetDir);
@@ -400,8 +452,15 @@ async function installZapretInner(targetDir, onProgress, onStage, opts = {}) {
   if (localZip) {
     rel = { ok: true, version: null, name: path.basename(localZip), url: null, size: 0, local: true };
   } else {
-    rel = await module.exports.latestReleaseAsset();
-    if (!rel.ok) return { ok: false, reason: rel.reason };
+    // Offline-first only when the caller asks for it (first-run setup); the
+    // Updates page must always fetch the newest release from GitHub.
+    const bundled = opts.preferBundled ? findBundledZip() : null;
+    if (bundled) {
+      rel = { ok: true, version: bundled.version, name: bundled.name, url: null, size: 0, bundled: bundled.path };
+    } else {
+      rel = await module.exports.latestReleaseAsset();
+      if (!rel.ok) return { ok: false, reason: rel.reason };
+    }
   }
   const tmp = path.join(require('node:os').tmpdir(), `ydp-${Date.now()}`);
   fs.mkdirSync(tmp, { recursive: true });
@@ -414,6 +473,14 @@ async function installZapretInner(targetDir, onProgress, onStage, opts = {}) {
     } catch (e) {
       try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {}
       return { ok: false, reason: 'local_zip_unreadable', message: String((e && e.message) || e) };
+    }
+  } else if (rel.bundled) {
+    stage('copy');
+    try {
+      fs.copyFileSync(rel.bundled, zipPath);
+    } catch (e) {
+      try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {}
+      return { ok: false, reason: 'bundled_zip_unreadable', message: String((e && e.message) || e) };
     }
   } else {
     stage('download');
@@ -514,7 +581,7 @@ async function installZapretInner(targetDir, onProgress, onStage, opts = {}) {
       try {
         fs.cpSync(src, targetDir, { recursive: true, force: true });
         try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {}
-        return { ok: true, merged: true, version: rel.version, backup: null, releaseUrl: rel.url, releaseZip: zipPath };
+        return { ok: true, merged: true, version: rel.version, backup: null, releaseUrl: rel.url, releaseZip: zipPath, security: sec, source: rel.bundled ? 'bundled' : (rel.local ? 'local' : 'network') };
       } catch (e2) {
         try { fs.rmSync(tmp, { recursive: true, force: true }); } catch {}
         return {
@@ -545,7 +612,7 @@ async function installZapretInner(targetDir, onProgress, onStage, opts = {}) {
   } catch {
     /* best effort */
   }
-  return { ok: true, version: rel.version, backup, releaseUrl: rel.url, releaseZip: zipPath };
+  return { ok: true, version: rel.version, backup, releaseUrl: rel.url, releaseZip: zipPath, security: sec, source: rel.bundled ? 'bundled' : (rel.local ? 'local' : 'network') };
 }
 
 // ---- ipset list update ----
@@ -607,6 +674,10 @@ module.exports = {
   latestReleaseAsset,
   KNOWN_GOOD_SHA256,
   WINDIVERT_TBS_SHA1,
+  findBundledZip,
+  bundledDir,
+  assertTargetWritable,
+  assertNotPanelDir,
   LOCAL_VERSION,
   VERSION_URL,
   RELEASES_URL,

@@ -475,11 +475,17 @@ function registerIpc() {
   ipcMain.handle('diag:run', () => diagnostics.runDiagnostics(rootDir()));
 
   ipcMain.handle('updates:checkVersion', () => updates.checkVersion(rootDir()));
-  ipcMain.handle('updates:installZapret', async (_e, targetDir, localZip) => {
+  ipcMain.handle('updates:installZapret', async (_e, targetDir, localZip, opts) => {
     logger.info(`zapret install requested → ${targetDir}${localZip ? ' (local zip)' : ''}`);
-    const r = await updates.installZapret(targetDir, (f) => emitToWindow('install:progress', f), (s) => emitToWindow('install:stage', s), { localZip: localZip || null });
+    const r = await updates.installZapret(targetDir, (f) => emitToWindow('install:progress', f), (s) => emitToWindow('install:stage', s), {
+      localZip: localZip || null,
+      // Installing zapret into the panel's own folder gets wiped by the next
+      // panel update, so it is refused unless the caller passes force.
+      panelDir: app.getAppPath(),
+      preferBundled: !!(opts && opts.preferBundled),
+    });
     if (r.ok) {
-      logger.info(`zapret installed: ${r.version}${r.merged ? ' (merged)' : ''}`);
+      logger.info(`zapret installed: ${r.version} (${r.source || 'network'})${r.merged ? ' [merged]' : ''}`);
       // The pre-swap security gate in installZapret already refused red
       // distributions, so no post-swap rollback is needed here.
       config.set('zapretRoot', targetDir);

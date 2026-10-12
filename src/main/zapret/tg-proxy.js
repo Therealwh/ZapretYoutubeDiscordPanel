@@ -189,6 +189,27 @@ function readExactly(socket, n, timeoutMs = 10000) {
   });
 }
 
+// Plain TCP connect helper (used by the direct-DC fallback).
+function connectTcp(host, port, timeoutMs = 10000) {
+  return new Promise((resolve, reject) => {
+    const sock = net.connect({ host, port });
+    sock.setNoDelay(true);
+    const timer = setTimeout(() => {
+      sock.destroy();
+      reject(new Error('tcp_timeout'));
+    }, timeoutMs);
+    if (typeof timer.unref === 'function') timer.unref();
+    sock.once('connect', () => {
+      clearTimeout(timer);
+      resolve(sock);
+    });
+    sock.once('error', (e) => {
+      clearTimeout(timer);
+      reject(e);
+    });
+  });
+}
+
 async function handleClient(socket, secret) {
   socket.setNoDelay(true);
   socket.on('error', () => { /* handled by the bridge teardown */ });
@@ -222,11 +243,12 @@ async function handleClient(socket, secret) {
   const ctx = tg.buildCryptoCtx(parsed.decPrekeyIv, secret, relayInit);
   const splitter = new tg.MsgSplitter(tg.protoIntOf(parsed.protoTag));
 
-  let ws = null;
-  let lastErr = null;
+  let transport = null;
+
+  // 1) WebSocket relays (the DPI-friendly path on most providers).
   for (const domain of wsDomains(dc, parsed.isMedia)) {
     try {
-      ws = await RawWebSocket.connect(domain, domain, WS_PATH);
+      transport = { kind: 'ws', ws: await RawWebSocket.connect(domain, domain, WS_PATH) };
       lastErr = null;
       break;
     } catch (e) {
@@ -234,22 +256,49 @@ async function handleClient(socket, secret) {
       log(`${tag}: ws ${domain} failed (${e.message})`, 'warn');
     }
   }
-  if (!ws) {
-    state.lastError = `ws_connect_failed: ${lastErr ? lastErr.message : 'no domain'}`;
-    log(`${tag}: no upstream WebSocket available`, 'error');
+
+  // 2) Direct TCP to the DC address. kws*.web.telegram.org is blocked more
+  //    often than the DC endpoints themselves, so this fallback is what keeps
+  //    the proxy usable on hostile networks (see tg-ws-proxy do_fallback).
+  if (!transport) {
+    const ip = DC_DEFAULT_IPS[dc];
+    if (ip) {
+      try {
+        const sock = await connectTcp(ip, 443, 10000);
+        transport = { kind: 'tcp', ws: null, sock };
+        log(`${tag}: falling back to direct TCP ${ip}:443`, 'info');
+      } catch (e) {
+        lastErr = e;
+        log(`${tag}: direct TCP ${ip} failed (${e.message})`, 'warn');
+      }
+    }
+  }
+
+  if (!transport) {
+    state.lastError = `upstream_failed: ${lastErr ? lastErr.message : 'no route'}`;
+    log(`${tag}: no upstream available`, 'error');
     try { socket.destroy(); } catch { /* ignore */ }
     return;
   }
 
-  log(`${tag}: WebSocket established`, 'info');
-  // Our handshake must be the first frame towards the DC.
-  ws.send(relayInit);
+  // Both transports carry the same re-encrypted byte stream; only the framing
+  // differs (WebSocket binary frames vs a raw TCP pipe).
+  const ws = transport.kind === 'ws' ? transport.ws : null;
+  const upstream = ws || transport.sock;
+  const sendUp = (buf) => {
+    if (ws) ws.send(buf);
+    else upstream.write(buf);
+  };
+
+  log(`${tag}: upstream ready via ${transport.kind}`, 'info');
+  // Our handshake must be the first thing the DC sees.
+  sendUp(relayInit);
 
   let closed = false;
   const teardown = () => {
     if (closed) return;
     closed = true;
-    try { ws.destroy(); } catch { /* ignore */ }
+    try { if (ws) ws.destroy(); else upstream.destroy(); } catch { /* ignore */ }
     try { socket.destroy(); } catch { /* ignore */ }
     log(`${tag}: closed`, 'info');
   };
@@ -260,9 +309,12 @@ async function handleClient(socket, secret) {
     try {
       const plain = ctx.cltDec(chunk);
       const reencrypted = ctx.tgEnc(plain);
-      const parts = splitter.push(reencrypted, plain);
-      if (!parts.length) return;
-      for (const p of parts) ws.send(p);
+      if (ws) {
+        const parts = splitter.push(reencrypted, plain);
+        for (const p of parts) ws.send(p);
+      } else {
+        sendUp(reencrypted);
+      }
       state.bytesUp += chunk.length;
     } catch (e) {
       log(`${tag}: upstream send failed (${e.message})`, 'error');
@@ -275,7 +327,7 @@ async function handleClient(socket, secret) {
   socket.resume();
 
   // Telegram -> client
-  ws.on('message', (data) => {
+  const onDown = (data) => {
     if (closed) return;
     try {
       const plain = ctx.tgDec(data);
@@ -285,12 +337,26 @@ async function handleClient(socket, secret) {
       log(`${tag}: downstream decrypt failed (${e.message})`, 'error');
       teardown();
     }
-  });
-  ws.on('close', teardown);
-  ws.on('error', (e) => {
-    log(`${tag}: ws error (${e.message})`, 'warn');
+  };
+  const onDownEnd = () => {
+    log(`${tag}: upstream closed the stream`, 'info');
     teardown();
-  });
+  };
+  const onDownErr = (e) => {
+    log(`${tag}: upstream error (${e && e.message})`, 'warn');
+    teardown();
+  };
+
+  if (ws) {
+    ws.on('message', onDown);
+    ws.on('close', teardown);
+    ws.on('error', onDownErr);
+  } else {
+    upstream.on('data', onDown);
+    upstream.on('close', onDownEnd);
+    upstream.on('end', onDownEnd);
+    upstream.on('error', onDownErr);
+  }
 }
 
 module.exports = {
