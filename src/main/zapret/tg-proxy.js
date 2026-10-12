@@ -48,6 +48,7 @@ const state = {
   bytesDown: 0,
   lastError: null,
   startedAt: null,
+  upstreamDisabled: false,
 };
 
 let log = () => {};
@@ -63,6 +64,13 @@ function genSecret() {
 function ensureSecret() {
   if (!state.secret) state.secret = genSecret();
   return state.secret;
+}
+
+// Test seam: skip the upstream dial entirely. Used by the automated tests so
+// they assert the handshake stage hermetically — no DNS, no TLS, no Telegram,
+// and no sockets left behind to surface as stray errors after the test ends.
+function setUpstreamDisabled(disabled) {
+  state.upstreamDisabled = !!disabled;
 }
 
 function getStats() {
@@ -252,6 +260,13 @@ async function handleClient(socket, secret) {
 
   let transport = null;
 
+  // Tests skip the network entirely; the handshake stage above still runs.
+  if (state.upstreamDisabled) {
+    log(`${tag}: upstream dial disabled (test mode)`, 'info');
+    try { socket.destroy(); } catch { /* ignore */ }
+    return;
+  }
+
   // 1) WebSocket relays (the DPI-friendly path on most providers).
   for (const domain of wsDomains(dc, parsed.isMedia)) {
     try {
@@ -373,6 +388,7 @@ module.exports = {
   getStats,
   setLogger,
   regenerateSecret,
+  setUpstreamDisabled,
   proxyLink,
   ensureSecret,
   wsDomains,

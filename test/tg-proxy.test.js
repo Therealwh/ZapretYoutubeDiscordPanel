@@ -63,6 +63,9 @@ test('start/stop toggles the running state and reports stats', async () => {
 
 test('a real obfuscated2 handshake is accepted and the DC is detected', async () => {
   const port = 14562;
+  // Hermetic: no upstream dial, so the test needs no DNS/TLS/Telegram and
+  // leaves no socket behind that could fire a late ECONNRESET.
+  tgProxy.setUpstreamDisabled(true);
   await tgProxy.start({ port });
   try {
     const secret = tgProxy.ensureSecret();
@@ -97,9 +100,10 @@ test('a real obfuscated2 handshake is accepted and the DC is detected', async ()
       logs.some((l) => l.includes('DC4')),
       `DC must be reported, got: ${logs.join(' | ')}`
     );
-    // Let the upstream attempt finish so no async work outlives the test.
-    await waitForLog(logs, 'no upstream', 20000);
+    // Let the (disabled) upstream attempt finish so no async work outlives the test.
+    await waitForLog(logs, 'upstream dial disabled', 5000);
   } finally {
+    tgProxy.setUpstreamDisabled(false);
     tgProxy.setLogger(null);
     await tgProxy.stop();
   }
