@@ -83,12 +83,18 @@ async function detectOwnership(managedRoot) {
   out.processPath = procPath;
   out.processRoot = rootOfExe(procPath);
 
-  // Portable case: winws runs but belongs to another root (or no service).
+  // A winws running from the folder the panel manages is OURS, even without a
+  // service (process mode). Only call it "portable" when it runs from somewhere
+  // else, or when the panel has no root configured at all — otherwise the
+  // banner would never disappear after the user adopts the folder.
   if (out.processPath) {
     if (out.ownership === 'none' || out.ownership === 'own') {
       if (out.processRoot && !sameRoot(out.processRoot, managedRoot)) {
         out.ownership = 'portable';
         out.reason = 'winws_outside_root';
+      } else if (out.processRoot && sameRoot(out.processRoot, managedRoot)) {
+        out.ownership = 'own';
+        out.reason = 'winws_in_managed_root';
       } else if (!out.servicePath) {
         out.ownership = 'portable';
         out.reason = 'winws_without_service';

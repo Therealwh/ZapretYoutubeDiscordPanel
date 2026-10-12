@@ -632,7 +632,15 @@ ipcMain.handle('zapret:repair', async (_e, targetDir) => {
         const winwsUp = await status.processRunning('winws.exe');
         if (preferService) {
           const res = await service.installStrategyAsService(root, r.winnerFile);
-          return { ok: !!res.ok, strategy: r.winner, mode: 'service', reason: res.reason };
+          if (res.ok) return { ok: true, strategy: r.winner, mode: 'service' };
+          // The service could not be installed (e.g. a folder with spaces),
+          // but the working strategy is ALREADY running — keep it rather than
+          // reporting a failure and leaving the user without a bypass.
+          if (winwsUp) {
+            logger.warn(`Strategy ${r.winner} works but service install failed (${res.reason}); keeping process mode`);
+            return { ok: true, strategy: r.winner, mode: 'process-kept', reason: res.reason };
+          }
+          return { ok: false, strategy: r.winner, mode: 'service', reason: res.reason };
         }
         if (winwsUp) return { ok: true, strategy: r.winner, mode: 'process-kept' };
         const res = await service.launchStrategyProcess(root, r.winnerFile);
@@ -648,6 +656,11 @@ ipcMain.handle('zapret:repair', async (_e, targetDir) => {
       let res;
       if (preferService) res = await service.installStrategyAsService(root, winner.file);
       else res = await service.launchStrategyProcess(root, winner.file);
+      if (!res.ok && preferService) {
+        // Fall back to process mode so the best available strategy is usable.
+        const proc = await service.launchStrategyProcess(root, winner.file);
+        if (proc.ok) return { ok: true, strategy: winner.name, fallback: true, mode: 'process' };
+      }
       return { ok: !!res.ok, strategy: winner.name, fallback: true, reason: res.reason };
     } catch (e) {
       return { ok: false, reason: e.code || e.message || 'error' };
