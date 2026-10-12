@@ -549,6 +549,8 @@ function registerIpc() {
     return link;
   });
 
+  ipcMain.handle('tester:lastResults', () => tester.loadLastResults(rootDir()));
+
   ipcMain.handle('tester:run', () => {
     const root = rootDir();
     if (!root) return { ok: false, reason: 'no_root' };

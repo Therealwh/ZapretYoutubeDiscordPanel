@@ -517,6 +517,21 @@ let lastTestResults = null;
 
 async function renderStrategies() {
   const list = await window.api.listStrategies();
+  // After a restart there is no in-memory run: fall back to the last saved one
+  // so the verdict of every strategy is still visible (issue #3).
+  if (!lastTestResults) {
+    try {
+      const saved = await window.api.lastTestResults();
+      if (saved && saved.results && saved.results.length) {
+        lastTestResults = { results: saved.results, winner: saved.winner };
+        const hint = $('#strat-saved-hint');
+        if (hint) {
+          hint.textContent = t('strat_saved_results');
+          hint.classList.remove('hidden');
+        }
+      }
+    } catch { /* no saved run yet */ }
+  }
   const wrap = $('#strategy-list');
   wrap.textContent = '';
   if (!list.length) {

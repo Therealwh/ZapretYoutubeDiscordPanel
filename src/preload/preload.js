@@ -64,6 +64,7 @@ const api = {
   exportLogs: (filter) => ipcRenderer.invoke('logs:export', filter),
 
   runTests: () => ipcRenderer.invoke('tester:run'),
+  lastTestResults: () => ipcRenderer.invoke('tester:lastResults'),
   abortTests: () => ipcRenderer.invoke('tester:abort'),
   autoConnect: () => ipcRenderer.invoke('autoconnect:run'),
 

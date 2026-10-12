@@ -320,4 +320,22 @@ async function checkReachability(rootDir, onEvent) {
   return { groups: groupStats(targetResults), targets: targetResults };
 }
 
-module.exports = { runStrategyTests, checkReachability, loadTargets, scoreResults, groupStats, DEFAULT_TARGETS, abort };
+// Read the most recent saved run so the results survive a panel restart
+// (issue #3 asked to keep looking at them after the test window closes).
+function loadLastResults(rootDir) {
+  try {
+    const dir = path.join(rootDir, 'utils', 'test results');
+    const files = fs
+      .readdirSync(dir)
+      .filter((f) => /^test_results_.*\.json$/i.test(f))
+      .sort();
+    const last = files[files.length - 1];
+    if (!last) return { ok: true, results: [], winner: null, file: null };
+    const data = JSON.parse(fs.readFileSync(path.join(dir, last), 'utf8'));
+    return { ok: true, results: data.results || [], winner: data.winner || null, at: data.at || null, file: last };
+  } catch {
+    return { ok: false, results: [], winner: null, file: null };
+  }
+}
+
+module.exports = { runStrategyTests, checkReachability, loadTargets, scoreResults, groupStats, DEFAULT_TARGETS, abort, loadLastResults, saveResults };

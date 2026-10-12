@@ -31,6 +31,7 @@ const DICT = {
     strat_import_badname: 'недопустимое имя файла',
     strat_delete: 'Удалить',
     strat_deleted: 'Стратегия удалена',
+    strat_saved_results: 'Показаны результаты последнего сохранённого теста',
 
     engine_title: 'Движок bol-van/zapret',
     engine_hint: 'Выбор версии winws. Обновляются только файлы движка в bin/, ваши настройки и ACTIVE_*.bin не трогаются.',
@@ -75,6 +76,7 @@ const DICT = {
     setup_err_security_check_failed: 'Не удалось выполнить проверку безопасности файла.',
     setup_err_install_failed: 'Установка прервана. Подробности — в разделе «Логи».',
     setup_err_no_root: 'Папка zapret не настроена.',
+    test_nav_blocked: 'Идёт тестирование стратегий. Дождитесь окончания или нажмите «Остановить».',
     setup_download_local: 'Установить из файла',
     setup_download_local_hint: 'В кнопке выше используется zapret, встроенный в панель — установка работает без интернета. Новые версии zapret ставятся на странице «Обновления».',
     setup_err_target_is_panel_dir: 'Нельзя ставить zapret в папку самой панели — обновление панели её перезапишет. Выберите отдельную папку, например C:\\zapret.',
@@ -378,6 +380,7 @@ const DICT = {
     strat_import_badname: 'invalid file name',
     strat_delete: 'Delete',
     strat_deleted: 'Strategy deleted',
+    strat_saved_results: 'Showing results from the last saved test run',
 
     engine_title: 'bol-van/zapret engine',
     engine_hint: 'Pick a winws release. Only engine files in bin/ are replaced — your settings and ACTIVE_*.bin are left alone.',
@@ -422,6 +425,7 @@ const DICT = {
     setup_err_security_check_failed: 'The file security check could not be completed.',
     setup_err_install_failed: 'Setup was interrupted. See the Logs page for details.',
     setup_err_no_root: 'The zapret folder is not configured.',
+    test_nav_blocked: 'Strategy testing is running. Wait for it to finish, or press "Stop".',
     setup_download_local: 'Install from file',
     setup_download_local_hint: 'If github.com is unreachable from this PC — download zapret-discord-youtube-*.zip on another device and install it here.',
 
