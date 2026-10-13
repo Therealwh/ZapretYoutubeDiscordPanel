@@ -1,6 +1,21 @@
+# ---- Node / Electron (v1 line) ----
 node_modules/
 dist/
-out/
+release/
+smoke.log
+footprint-*.json
+
+# ---- Rust (Tauri spike kept only as a measurement artifact) ----
+tauri-spike/node_modules/
+tauri-spike/src-tauri/target/
+tauri-spike/src-tauri/gen/
+src-tauri/target/
+
+# ---- .NET / WPF (v2 line) ----
+wpf/bin/
+wpf/obj/
+*.user
+
+# ---- misc ----
 *.log
-.DS_Store
-website/
+Thumbs.db

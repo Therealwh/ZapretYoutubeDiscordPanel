@@ -1,0 +1,35 @@
+[package]
+name = "zapret-panel"
+version = "2.0.0"
+description = "YoutubeDiscordPanel — Tauri edition"
+authors = ["Therealwh"]
+edition = "2021"
+rust-version = "1.77"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon", "protocol-asset"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+windows = { version = "0.62", features = [
+  "Win32_Foundation",
+  "Win32_Security",
+  "Win32_System_Memory",
+  "Win32_System_Registry",
+  "Win32_System_Services",
+  "Win32_System_SystemServices",
+  "Win32_System_Threading",
+] }
+zip = { version = "4", default-features = false, features = ["deflate"] }
+reqwest = { version = "0.12", default-features = false, features = ["blocking", "rustls-tls", "gzip"] }
+sha2 = "0.10"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
+incremental = false

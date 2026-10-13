@@ -1,0 +1,12 @@
+{
+  "name": "ydp-tauri-spike",
+  "version": "1.9.2",
+  "private": true,
+  "description": "Tauri v2 spike for YoutubeDiscordPanel",
+  "scripts": {
+    "tauri": "tauri"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.9.1"
+  }
+}

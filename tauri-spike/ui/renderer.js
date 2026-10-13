@@ -1,0 +1,1696 @@
+'use strict';
+(function () {
+const { t, setLang, detectLang, DICT } = window.I18N;
+
+const $ = (sel) => document.querySelector(sel);
+const $$ = (sel) => [...document.querySelectorAll(sel)];
+
+let cfg = {};
+let appInfo = {};
+let currentList = 'general';
+let listsEditable = ['general', 'exclude', 'ipsetExclude'];
+let testing = false;
+let lastBanner = { active: false };
+
+// ---------- i18n binding ----------
+function applyI18n() {
+  document.querySelectorAll('[data-i18n]').forEach((el) => {
+    el.textContent = t(el.getAttribute('data-i18n'));
+  });
+  document.querySelectorAll('[data-i18n-ph]').forEach((el) => {
+    el.setAttribute('placeholder', t(el.getAttribute('data-i18n-ph')));
+  });
+  document.documentElement.lang = currentLang;
+  $('#lang-toggle').textContent = currentLang.toUpperCase();
+}
+let currentLang = 'ru';
+
+// ---------- theme ----------
+const ICON_SUN = '\uE706';
+const ICON_MOON = '\uE708';
+function applyTheme(theme) {
+  document.documentElement.classList.remove('dark', 'light');
+  document.documentElement.classList.add(theme === 'light' ? 'light' : 'dark');
+  const btn = $('#theme-toggle');
+  if (btn) btn.textContent = theme === 'light' ? ICON_MOON : ICON_SUN;
+}
+
+// ---------- toasts ----------
+function toast(msg, kind = '') {
+  const box = document.createElement('div');
+  box.className = `toast ${kind}`;
+  box.textContent = msg;
+  $('#toasts').appendChild(box);
+  setTimeout(() => {
+    box.classList.add('out');
+    setTimeout(() => box.remove(), 300);
+  }, 2600);
+}
+
+// Honest result toast for bypass actions (install service / launch process):
+// explains WHY nothing happened instead of a generic "error".
+function actionToast(r) {
+  if (r && r.ok) {
+    toast(t('toast_done'), 'ok');
+    return;
+  }
+  const reason = r && r.reason;
+  if (reason === 'elevate_cancelled' || reason === 'cancelled') toast(t('toast_uac_cancelled'), 'err');
+  else if (reason === 'service_start_failed') toast(t('err_service_start'), 'err');
+  else if (reason === 'admin_required') toast(t('test_need_admin'), 'err');
+  else toast(`${t('toast_error')}${reason ? `: ${reason}` : ''}`, 'err');
+}
+
+// ---------- navigation ----------
+function showPage(name) {
+  // A strategy run kills/restarts winws on every step: navigating away mid-run
+  // would leave the bypass down with no winner applied (issue #3).
+  if (testing && name !== 'strategies') {
+    toast(t('test_nav_blocked'), 'err');
+    return;
+  }
+  $$('.nav-item').forEach((b) => b.classList.toggle('active', b.dataset.page === name));
+  $$('.page').forEach((p) => p.classList.add('hidden'));
+  $(`#page-${name}`).classList.remove('hidden');
+  $(`#page-${name}`).style.animation = 'none';
+  void $(`#page-${name}`).offsetWidth;
+  $(`#page-${name}`).style.animation = '';
+  if (name === 'strategies') renderStrategies();
+  if (name === 'filters') renderFilters();
+  if (name === 'lists') renderLists();
+  if (name === 'updates') renderUpdates().then(renderEngine);
+  if (name === 'diagnostics') renderDiagnostics();
+  if (name === 'logs') renderLogs();
+  if (name === 'settings') renderSettings();
+  if (name === 'dashboard') { refreshStatus(); renderTelegram(); }
+}
+
+// ---------- status ----------
+const stateWord = (st, runningKey, absentKey, stoppedKey) =>
+  st === null ? t(absentKey) : st ? t(runningKey) : t(stoppedKey);
+
+async function refreshStatus() {
+  const root = cfg.zapretRoot;
+  if (!root) return;
+  const { status: st, banner } = await window.api.getStatus();
+  lastBanner = banner;
+  renderBanner(banner, st);
+  const on = st.activeMode !== 'off';
+  $('#power-switch').setAttribute('aria-checked', String(on));
+  $('#power-state').textContent = on ? t('dash_on') : t('dash_off');
+  $('#power-state').className = `power-state ${on ? 'ok' : ''}`;
+
+  $('#stat-strategy').textContent = st.serviceStrategy || t('dash_no_strategy');
+  $('#stat-mode').textContent =
+    st.activeMode === 'service' ? t('dash_mode_service') : st.activeMode === 'process' ? t('dash_mode_process') : '—';
+  const svc = st.service.exists ? stateWord(st.service.running, 'dash_state_running', 'dash_state_absent', 'dash_state_stopped') : t('dash_state_absent');
+  $('#stat-zapret').textContent = svc;
+  $('#stat-zapret').className = `stat-value ${st.service.running ? 'ok' : st.service.exists ? 'err' : 'dim'}`;
+  const wd = st.winDivert.exists ? stateWord(st.winDivert.running, 'dash_state_running', 'dash_state_absent', 'dash_state_stopped') : t('dash_state_absent');
+  $('#stat-windivert').textContent = wd;
+  $('#stat-windivert').className = `stat-value ${st.winDivert.running ? 'ok' : st.winDivert.exists ? 'err' : 'dim'}`;
+  $('#stat-winws').textContent = st.winwsProcess ? t('dash_state_running') : t('dash_state_stopped');
+  $('#stat-winws').className = `stat-value ${st.winwsProcess ? 'ok' : 'dim'}`;
+  const pathEl = $('#stat-winws-path');
+  if (pathEl) pathEl.textContent = st.winwsProcessPath || '';
+  refreshOwnershipBanner();
+}
+
+// ---------- banners ----------
+function renderBanner(banner, st) {
+  const el = $('#banner-active');
+  if (banner.active && !sessionStorage.getItem('bannerDismissed')) {
+    let text;
+    if (banner.kind === 'service') text = t('banner_active_service');
+    else if (banner.kind === 'process') text = t('banner_active_process');
+    else text = t('banner_conflict', { name: banner.name });
+    $('#banner-active-text').textContent = text;
+    el.classList.remove('hidden');
+  } else {
+    el.classList.add('hidden');
+  }
+  $('#banner-admin').classList.toggle('hidden', !!appInfo.admin);
+}
+
+// Foreign/portable zapret banner — a bypass we cannot control breaks the
+// "everything is green but nothing works" case, so it must stay visible.
+async function refreshOwnershipBanner() {
+  const el = $('#banner-foreign');
+  if (!el) return;
+  let det = null;
+  try {
+    det = await window.api.ownership();
+  } catch {
+    return;
+  }
+  if (!det || (det.ownership !== 'foreign' && det.ownership !== 'portable')) {
+    el.classList.add('hidden');
+    return;
+  }
+  if (sessionStorage.getItem('foreignDismissed') === det.ownership) {
+    el.classList.add('hidden');
+    return;
+  }
+  const btn = $('#banner-foreign-takeover');
+  const title = $('#banner-foreign-title');
+  if (det.ownership === 'foreign') {
+    title.textContent = t('banner_foreign_title');
+    $('#banner-foreign-text').textContent = t('banner_foreign_body', { path: det.servicePath || '?' });
+    btn.classList.remove('hidden');
+    btn.textContent = t('banner_foreign_takeover');
+  } else {
+    title.textContent = t('banner_portable_title');
+    $('#banner-foreign-text').textContent = t('banner_portable_body', { path: det.processPath || '?' });
+    btn.classList.remove('hidden');
+    btn.textContent = t('banner_portable_adopt');
+  }
+  el.classList.remove('hidden');
+}
+
+function bindOwnershipBanner() {
+  const el = $('#banner-foreign');
+  if (!el) return;
+  $('#banner-foreign-takeover').addEventListener('click', async () => {
+    const foreign = !$('#banner-foreign-title').textContent.startsWith(t('banner_portable_title'));
+    if (foreign) {
+      const ok = await confirmDialog(t('banner_foreign_confirm', { path: $('#banner-foreign-text').textContent }));
+      if (!ok) return;
+      const r = await window.api.takeoverForeign();
+      toast(r.ok ? t('banner_foreign_done') : `${t('toast_error')}: ${r.reason}`, r.ok ? 'ok' : 'err');
+    } else {
+      const r = await window.api.adoptPortable();
+      toast(r.ok ? t('banner_portable_done') : `${t('toast_error')}: ${r.reason}`, r.ok ? 'ok' : 'err');
+      if (r.ok) {
+        cfg = await window.api.getConfig();
+        setupDone();
+        refreshStatus();
+      }
+    }
+    refreshOwnershipBanner();
+  });
+  $('#banner-foreign-dismiss').addEventListener('click', () => {
+    const title = $('#banner-foreign-title').textContent;
+    sessionStorage.setItem('foreignDismissed', title.startsWith(t('banner_portable_title')) ? 'portable' : 'foreign');
+    el.classList.add('hidden');
+  });
+}
+
+// Small promise-based confirm in the renderer (no native dialog round-trip).
+function confirmDialog(message) {
+  return new Promise((resolve) => {
+    const box = document.createElement('div');
+    box.className = 'confirm-overlay';
+    box.innerHTML = `<div class="confirm-box"><p></p><div class="btn-row"><button class="btn btn-ghost" data-no></button><button class="btn btn-danger" data-yes></button></div></div>`;
+    box.querySelector('p').textContent = message;
+    box.querySelector('[data-no]').textContent = t('banner_dismiss');
+    box.querySelector('[data-yes]').textContent = t('banner_confirm_yes');
+    box.querySelector('[data-no]').addEventListener('click', () => {
+      box.remove();
+      resolve(false);
+    });
+    box.querySelector('[data-yes]').addEventListener('click', () => {
+      box.remove();
+      resolve(true);
+    });
+    document.body.append(box);
+  });
+}
+
+// ---------- setup ----------
+async function setupInit() {
+  const found = await window.api.discoverZapret();
+  if (found) {
+    $('#setup-found').classList.remove('hidden');
+    $('#setup-found-path').textContent = found;
+    $('#setup-use-existing').classList.remove('hidden');
+    $('#setup-notfound').classList.add('hidden');
+  } else {
+    $('#setup-notfound').classList.remove('hidden');
+    // Don't insist "not found" when a bypass is visibly running: offer to
+    // adopt the install dir of the running winws.exe.
+    try {
+      const runInfo = await window.api.runningInfo();
+      if (runInfo && runInfo.running && runInfo.winwsRoot) {
+        $('#setup-running-path').textContent = runInfo.winwsRoot;
+        $('#setup-running').classList.remove('hidden');
+        $('#setup-running-use').addEventListener('click', async () => {
+          const v = await window.api.validateRoot(runInfo.winwsRoot);
+          if (v.ok) {
+            cfg = await window.api.setConfig({ zapretRoot: runInfo.winwsRoot });
+            enterApp();
+          } else {
+            toast(t('setup_not_found'), 'err');
+          }
+        });
+        $('#setup-running-stop').addEventListener('click', async () => {
+          await window.api.stopService();
+          await window.api.killWinws();
+          $('#setup-running').classList.add('hidden');
+          toast(t('toast_cmd_sent'), 'ok');
+        });
+      }
+    } catch {
+      /* running info optional */
+    }
+  }
+}
+
+// ---- release security: render results after download ----
+function renderSecurity(res) {
+  const box = $('#setup-security');
+  const list = $('#setup-sec-list');
+  const verdict = $('#setup-sec-verdict');
+  list.textContent = '';
+  if (!res || !res.security || !Array.isArray(res.security.checks) || !res.security.checks.length) {
+    box.classList.add('hidden');
+    return;
+  }
+  box.classList.remove('hidden');
+  const tMap = {
+    hash: (c) => (c.verdict === 'pass' ? t('setup_sec_sha') : t('setup_sec_hash_unknown')),
+    windivert_sig: (c) => {
+      if (c.verdict === 'fail' && c.detail === 'sys_missing') return t('setup_sec_sig_missing');
+      return c.verdict === 'pass' ? t('setup_sec_sig_ok') : t('setup_sec_sig_bad');
+    },
+    virustotal: (c) =>
+      c.verdict === 'skip'
+        ? t('setup_sec_vt_skip', { detail: c.detail || '' })
+        : c.verdict === 'fail'
+          ? t('setup_sec_vt_bad', { malicious: c.malicious, total: c.total })
+          : t('setup_sec_vt_ok', { malicious: c.malicious, total: c.total }),
+  };
+  for (const c of res.security.checks) {
+    const li = document.createElement('li');
+    li.className = c.verdict === 'pass' ? 'tl-ok' : c.verdict === 'fail' ? 'tl-err' : 'tl-warn';
+    li.textContent = tMap[c.id] ? tMap[c.id](c) : c.id;
+    list.appendChild(li);
+  }
+  const lvl = res.security.level;
+  if (res.security.ok === true || lvl === 'green') {
+    verdict.textContent = t('setup_sec_green');
+    verdict.className = 'sec-verdict green';
+  } else if (res.security.ok === false && lvl === 'red') {
+    verdict.textContent = t('setup_sec_red');
+    verdict.className = 'sec-verdict red';
+  } else {
+    verdict.textContent = t('setup_sec_yellow');
+    verdict.className = 'sec-verdict yellow';
+  }
+}
+
+function validateSetupPath(p) {
+  const warns = [];
+  if (/[\u0430-\u044F\u0410-\u042F\u0451\u0401]/.test(p)) warns.push(t('setup_warn_cyrillic'));
+  if (/\s/.test(p)) warns.push(t('setup_warn_spaces'));
+  const warn = $('#setup-warn');
+  if (warns.length) {
+    warn.textContent = warns.join(' ');
+    warn.classList.remove('hidden');
+  } else {
+    warn.classList.add('hidden');
+  }
+}
+
+function bindSetup() {
+  $('#setup-install-new').addEventListener('click', () => {
+    $('#setup-install-form').classList.remove('hidden');
+    validateSetupPath($('#setup-path').value);
+  });
+  $('#setup-path').addEventListener('input', (e) => validateSetupPath(e.target.value));
+  $('#setup-browse').addEventListener('click', async () => {
+    const dir = await window.api.chooseDir();
+    if (dir) {
+      $('#setup-path').value = dir;
+      validateSetupPath(dir);
+    }
+  });
+  $('#setup-use-existing').addEventListener('click', () => {
+    // Existing install found: the panel only works with a fresh zapret, so
+    // "use existing" actually means "update it to the latest version" —
+    // the install flow stops the running bypass and swaps the folder.
+    $('#setup-install-form').classList.remove('hidden');
+    $('#setup-install-form').scrollIntoView({ behavior: 'smooth', block: 'center' });
+    validateSetupPath($('#setup-path').value);
+  });
+  // Shared installer flow: bundled copy, a zip already on disk, or the network.
+async function runSetupInstall(localZipPath) {
+    const dir = $('#setup-path').value.trim().replace(/[\\/]+$/, '');
+    if (!/^[a-zA-Z]:\\.+/i.test(dir)) {
+      toast(t('setup_path_invalid'), 'err');
+      return;
+    }
+    $('#setup-download').disabled = true;
+    $('#setup-download-local').disabled = true;
+    $('#setup-progress-wrap').classList.remove('hidden');
+    $('#setup-stage').textContent = t('setup_stage_resolve');
+    const offStage = window.api.on('install:stage', (s) => {
+      $('#setup-stage').textContent = t(`setup_stage_${s}`) || s;
+    });
+    const offProg = window.api.on('install:progress', (frac) => {
+      $('#setup-progress').style.width = `${Math.round(frac * 100)}%`;
+    });
+    let res;
+    try {
+      // First run: use the copy bundled with the panel (works with no network).
+      res = await window.api.installZapret(dir, localZipPath || null, { preferBundled: true });
+    } catch (e) {
+      res = { ok: false, reason: 'install_failed', message: String((e && e.message) || e) };
+    }
+    offStage?.();
+    offProg?.();
+    renderSecurity(res);
+    if (res.ok) {
+      cfg = await window.api.setConfig({ zapretRoot: dir });
+      $('#setup-done').classList.remove('hidden');
+      toast(t('setup_done'), 'ok');
+    } else {
+      // "install_failed" alone told the user nothing — always surface the
+      // underlying reason/message and keep it on the stage line.
+      const detail = [res.reason || '', res.message || ''].filter(Boolean).join(' — ');
+      toast(`${t('toast_error')}: ${detail}`, 'err');
+      $('#setup-stage').textContent = t(`setup_err_${res.reason}`) || detail;
+      if (res.reason === 'security_rejected') {
+        $('#setup-stage').textContent = t('setup_sec_red');
+      }
+      // No write access to the install folder (usually C:\ without admin):
+      // one UAC restart, then the install resumes by itself.
+      if (res.reason === 'target_unwritable' && !appInfo.admin) {
+        $('#setup-stage').textContent = t('setup_err_needs_admin');
+        const btn = document.createElement('button');
+        btn.className = 'btn btn-primary btn-sm';
+        btn.textContent = t('banner_admin_fix');
+        btn.addEventListener('click', () => window.api.restartElevated({ type: 'install-zapret', dir, localZip: localZipPath || null }));
+        const actions = $('#setup-download').parentElement;
+        if (!actions.querySelector('.setup-admin-btn')) {
+          btn.classList.add('setup-admin-btn');
+          actions.appendChild(btn);
+        }
+      }
+    }
+    $('#setup-download').disabled = false;
+    $('#setup-download-local').disabled = false;
+  }
+
+  $('#setup-download').addEventListener('click', () => runSetupInstall(null));
+  $('#setup-download-local').addEventListener('click', async () => {
+    const zip = await window.api.chooseZip();
+    if (!zip) return;
+    await runSetupInstall(zip);
+  });
+  $('#setup-done').addEventListener('click', () => enterApp());
+}
+
+function enterApp() {
+  $('#setup-view').classList.add('hidden');
+  $('#main-view').classList.remove('hidden');
+  if (cfg.zapretRoot) window.api.ensureLists();
+  refreshStatus();
+  if (!enterApp._timer) {
+    enterApp._timer = setInterval(() => {
+      if (!$('#main-view').classList.contains('hidden')) refreshStatus();
+    }, 4000);
+  }
+}
+
+// ---------- telegram proxy ----------
+async function renderTelegram() {
+  let st = null;
+  try {
+    st = await window.api.tgStatus();
+  } catch {
+    return;
+  }
+  const stateEl = $('#tg-state');
+  if (stateEl) {
+    stateEl.textContent = st.running ? t('tg_running') : t('tg_stopped');
+    stateEl.className = `power-state ${st.running ? 'ok' : ''}`;
+  }
+  const statsEl = $('#tg-stats');
+  if (statsEl) {
+    const up = (st.bytesUp / 1024).toFixed(1);
+    const down = (st.bytesDown / 1024).toFixed(1);
+    statsEl.textContent = `${st.host}:${st.port} · ${t('tg_connections')}: ${st.connections} · ↑${up} KB ↓${down} KB`;
+  }
+  const linkEl = $('#tg-link');
+  if (linkEl) linkEl.textContent = st.proxyUrl || '';
+  const btn = $('#btn-tg-toggle');
+  if (btn) btn.textContent = st.running ? t('tg_stop') : t('tg_start');
+  if (st.lastError && !st.running) {
+    const hint = $('#tg-hint');
+    if (hint) hint.textContent = st.lastError;
+  }
+}
+
+function bindTelegram() {
+  $('#btn-tg-toggle').addEventListener('click', async () => {
+    const st = await window.api.tgStatus();
+    const btn = $('#btn-tg-toggle');
+    btn.disabled = true;
+    const r = st.running ? await window.api.tgStop() : await window.api.tgStart();
+    btn.disabled = false;
+    if (!r.ok) toast(`${t('toast_error')}: ${r.reason || 'error'}`, 'err');
+    else toast(r.running ? t('tg_started') : t('tg_stopped'), 'ok');
+    renderTelegram();
+  });
+  $('#btn-tg-open').addEventListener('click', () => window.api.tgOpen());
+  $('#btn-tg-copy').addEventListener('click', async () => {
+    const st = await window.api.tgStatus();
+    if (!st.proxyUrl) return;
+    await navigator.clipboard.writeText(st.proxyUrl).catch(() => {});
+    toast(t('tg_copied'), 'ok');
+  });
+  $('#btn-tg-regen').addEventListener('click', async () => {
+    if (!confirm(t('tg_regen_confirm'))) return;
+    const r = await window.api.tgRegenerate();
+    const wasRunning = (await window.api.tgStatus()).running;
+    if (wasRunning) await window.api.tgRestart();
+    toast(t('tg_regen_done'), 'ok');
+    void r;
+    renderTelegram();
+  });
+  setInterval(() => {
+    if (!$('#page-dashboard').classList.contains('hidden')) renderTelegram();
+  }, 5000);
+}
+
+// ---------- strategies ----------
+// Verdict from test results: red = nothing works, orange = only one of
+// Discord/YouTube works (or YouTube throttled), green = both work.
+function ytStateOf(groups) {
+  const y = (groups && groups.youtube) || {};
+  if (y.state) return y.state;
+  return y.works ? 'ok' : 'dead';
+}
+
+function verdictOf(res) {
+  if (!res || res.failed) return 'red';
+  const g = res.groups || {};
+  const d = !!g.discord?.works;
+  const y = ytStateOf(g);
+  if (d && y === 'ok') return 'green';
+  if (d || y === 'ok' || y === 'throttled') return 'orange';
+  return 'red';
+}
+
+function verdictText(res) {
+  if (!res || res.failed) return t('verdict_dead');
+  const g = res.groups || {};
+  const d = !!g.discord?.works;
+  const y = ytStateOf(g);
+  const spd = g.youtube?.speed;
+  const speedPart = spd && spd.bytesPerSec ? ` (${fmtSpeed(spd.bytesPerSec)})` : '';
+  if (d && y === 'ok') return t('verdict_both') + speedPart;
+  if (d && y === 'throttled') return t('verdict_discord_yt_throttled') + speedPart;
+  if (y === 'throttled') return t('verdict_yt_throttled') + speedPart;
+  if (d) return t('verdict_discord_only');
+  if (y === 'ok') return t('verdict_youtube_only') + speedPart;
+  return t('verdict_dead') + (spd && spd.bytesPerSec ? speedPart : '');
+}
+
+function fmtSpeed(bps) {
+  if (!bps || bps <= 0) return '';
+  if (bps >= 1024 * 1024) return `${(bps / 1024 / 1024).toFixed(1)} ${t('speed_mbs')}`;
+  return `${Math.round(bps / 1024)} ${t('speed_kbs')}`;
+}
+
+let lastTestResults = null;
+
+async function renderStrategies() {
+  const list = await window.api.listStrategies();
+  // After a restart there is no in-memory run: fall back to the last saved one
+  // so the verdict of every strategy is still visible (issue #3).
+  if (!lastTestResults) {
+    try {
+      const saved = await window.api.lastTestResults();
+      if (saved && saved.results && saved.results.length) {
+        lastTestResults = { results: saved.results, winner: saved.winner };
+        const hint = $('#strat-saved-hint');
+        if (hint) {
+          hint.textContent = t('strat_saved_results');
+          hint.classList.remove('hidden');
+        }
+      }
+    } catch { /* no saved run yet */ }
+  }
+  const wrap = $('#strategy-list');
+  wrap.textContent = '';
+  if (!list.length) {
+    wrap.innerHTML = `<p class="muted">${t('strat_none')}</p>`;
+    return;
+  }
+  const { status: st } = await window.api.getStatus();
+  const resByName = new Map((lastTestResults?.results || []).map((r) => [r.name, r]));
+  const winnerName = lastTestResults?.winner;
+  for (const s of list) {
+    const res = resByName.get(s.name);
+    const v = verdictOf(res);
+    const card = document.createElement('div');
+    card.className = 'strat-card'
+      + (st.serviceStrategy === s.name ? ' active' : '')
+      + (lastTestResults ? ` verdict-${v}` : '');
+    card.dataset.strategy = s.name;
+
+    // main row: name + badges + actions
+    const main = document.createElement('div');
+    main.className = 'strat-main';
+    const left = document.createElement('div');
+    const name = document.createElement('div');
+    name.className = 'strat-name';
+    name.textContent = s.name;
+    left.appendChild(name);
+    const badges = document.createElement('div');
+    badges.className = 'strat-badges';
+    if (st.serviceStrategy === s.name) {
+      const b = document.createElement('span');
+      b.className = 'badge';
+      b.textContent = t('strat_active_badge');
+      badges.appendChild(b);
+    }
+    if (winnerName === s.name) {
+      const b = document.createElement('span');
+      b.className = 'badge ok';
+      b.textContent = t('strat_recommended');
+      badges.appendChild(b);
+    }
+    if (res) {
+      const vd = document.createElement('span');
+      vd.className = `strat-verdict ${v}`;
+      vd.textContent = verdictText(res);
+      badges.appendChild(vd);
+    }
+    // Desync-method badges parsed out of the strategy's winws arguments.
+    for (const m of s.badges || []) {
+      const b = document.createElement('span');
+      b.className = 'badge tech';
+      b.textContent = m;
+      badges.appendChild(b);
+    }
+    if (window.api.isImportedName?.(s.name)) {
+      const b = document.createElement('span');
+      b.className = 'badge imported';
+      b.textContent = t('strat_imported_badge');
+      badges.appendChild(b);
+    }
+    left.appendChild(badges);
+
+    const actions = document.createElement('div');
+    actions.className = 'strat-actions';
+    const runBtn = mkBtn(t('strat_run'), 'btn btn-secondary btn-sm', async () => {
+      await window.api.setConfig({ lastStrategyFile: s.file, preferServiceMode: false });
+      const r = await window.api.launchProcess(s.file);
+      actionToast(r);
+      refreshStatus();
+    });
+    const svcBtn = mkBtn(t('strat_install'), 'btn btn-primary btn-sm', async () => {
+      await window.api.setConfig({ lastStrategyFile: s.file, preferServiceMode: true });
+      const r = await window.api.installService(s.file);
+      actionToast(r);
+      refreshStatus();
+    });
+    actions.append(runBtn, svcBtn);
+    // Imported strategies can be removed; upstream ones are protected.
+    if (window.api.isImportedName?.(s.name)) {
+      const delBtn = mkBtn(t('strat_delete'), 'btn btn-danger btn-sm', async () => {
+        const r = await window.api.deleteStrategy(s.file);
+        toast(r.ok ? t('strat_deleted') : `${t('toast_error')}: ${r.reason}`, r.ok ? 'ok' : 'err');
+        if (r.ok) {
+          const c = await window.api.getConfig();
+          if (c.lastStrategyFile === s.file) await window.api.setConfig({ lastStrategyFile: null });
+          renderStrategies();
+        }
+      });
+      actions.appendChild(delBtn);
+    }
+    main.append(left, actions);
+    card.appendChild(main);
+
+    // spoiler with per-target detail
+    const spoiler = document.createElement('div');
+    spoiler.className = 'strat-spoiler';
+    const inner = document.createElement('div');
+    inner.className = 'strat-spoiler-inner';
+    spoiler.appendChild(inner);
+    card.appendChild(spoiler);
+    main.addEventListener('click', (e) => {
+      if (e.target.closest('button')) return;
+      spoiler.classList.toggle('open');
+      fillSpoiler(inner, s, res);
+    });
+    if (res) fillSpoiler(inner, s, res);
+
+    wrap.appendChild(card);
+  }
+}
+
+function fillSpoiler(inner, strat, res) {
+  inner.textContent = '';
+  if (!res) {
+    const p = document.createElement('p');
+    p.className = 'muted';
+    p.style.fontSize = '12.5px';
+    p.textContent = t('strat_not_tested');
+    inner.appendChild(p);
+    return;
+  }
+  if (res.failed) {
+    const p = document.createElement('p');
+    p.className = 'tl-err';
+    p.style.fontSize = '12.5px';
+    p.textContent = t('test_failed');
+    inner.appendChild(p);
+    return;
+  }
+  const vd = document.createElement('div');
+  vd.className = `strat-verdict ${verdictOf(res)}`;
+  vd.textContent = verdictText(res);
+  inner.appendChild(vd);
+  for (const tg of res.targets || []) {
+    const row = document.createElement('div');
+    row.className = 'tl-row';
+    const name = document.createElement('span');
+    name.className = 'tl-target';
+    name.textContent = tg.name;
+    row.appendChild(name);
+    if (tg.kind === 'ping') {
+      const s2 = document.createElement('span');
+      s2.className = tg.result === 'Timeout' ? 'tl-err' : 'tl-ok';
+      s2.textContent = tg.result;
+      row.appendChild(s2);
+    } else if (tg.kind === 'speed') {
+      const r = tg.result || {};
+      const s2 = document.createElement('span');
+      s2.className = r.verdict === 'ok' ? 'tl-ok' : r.verdict === 'slow' ? 'tl-warn' : 'tl-err';
+      s2.textContent = r.verdict === 'ok'
+        ? `${fmtSpeed(r.bytesPerSec)} — ${t('yt_ok')}`
+        : r.verdict === 'slow'
+          ? `${fmtSpeed(r.bytesPerSec)} — ${t('yt_throttled')}`
+          : r.verdict === 'unavailable' ? t('yt_unavailable') : t('yt_fail');
+      row.appendChild(s2);
+      if (r.host) {
+        const s3 = document.createElement('span');
+        s3.className = 'tl-dim';
+        s3.textContent = r.host;
+        row.appendChild(s3);
+      }
+    } else {
+      for (const [k, v] of Object.entries(tg.results)) {
+        const s2 = document.createElement('span');
+        s2.className = v === 'OK' ? 'tl-ok' : v === 'UNSUP' ? 'tl-warn' : 'tl-err';
+        s2.textContent = `${k}:${v}`;
+        row.appendChild(s2);
+      }
+    }
+    inner.appendChild(row);
+  }
+}
+
+function mkBtn(label, cls, onClick) {
+  const b = document.createElement('button');
+  b.className = cls;
+  b.textContent = label;
+  b.addEventListener('click', onClick);
+  return b;
+}
+
+// ---------- strategy testing ----------
+function bindTester() {
+  $('#btn-strat-import').addEventListener('click', async () => {
+    const r = await window.api.importStrategy();
+    if (r.reason === 'canceled') return;
+    if (r.ok) {
+      toast(`${t('strat_imported')}: ${r.name}`, 'ok');
+      renderStrategies();
+    } else {
+      const map = { exists: t('strat_import_exists'), no_winws: t('strat_import_nowinws'), bad_name: t('strat_import_badname') };
+      toast(`${t('toast_error')}: ${map[r.reason] || r.reason}`, 'err');
+    }
+  });
+  const setButtons = (running) => {
+    $('#btn-find-working').disabled = running;
+    $('#btn-test-stop').classList.toggle('hidden', !running);
+  };
+  $('#btn-find-working').addEventListener('click', async () => {
+    if (testing) return;
+    if (!appInfo.admin) {
+      // One-UAC flow: remember intent, restart elevated, auto-run tests.
+      await window.api.setConfig({ pendingAction: 'run-tests' });
+      window.api.restartElevated();
+      toast(t('banner_admin_fix'), 'ok');
+      return;
+    }
+    testing = true;
+    $('#testing-note').classList.remove('hidden');
+    $('#test-progress').classList.remove('hidden');
+    setButtons(true);
+    // Live detail for the strategy under test: rows appended into its card
+    // spoiler, which is opened automatically while that strategy runs.
+    let liveCard = null;
+    const liveRow = (card, text, cls) => {
+      const inner = card.querySelector('.strat-spoiler-inner');
+      if (!inner) return;
+      const row = document.createElement('div');
+      row.className = `tl-row ${cls || ''}`;
+      row.textContent = text;
+      inner.appendChild(row);
+      inner.parentElement.scrollTop = inner.scrollHeight;
+    };
+    const openLiveSpoiler = (name) => {
+      const card = document.querySelector(`[data-strategy="${CSS.escape(name)}"]`);
+      if (!card) return null;
+      card.classList.add('testing');
+      const sp = card.querySelector('.strat-spoiler');
+      if (sp) sp.classList.add('open');
+      return card;
+    };
+    const off = window.api.on('tester:event', (ev) => {
+      if (ev.type === 'strategy-start') {
+        document.querySelectorAll('.strat-card.testing').forEach((c) => c.classList.remove('testing'));
+        liveCard = openLiveSpoiler(ev.name);
+      } else if (ev.type === 'strategy-fail') {
+        if (liveCard) {
+          liveCard.classList.remove('testing');
+          liveCard.classList.add('verdict-red');
+          const badges = liveCard.querySelector('.strat-badges');
+          if (badges && !badges.querySelector('.strat-verdict')) {
+            const vd = document.createElement('span');
+            vd.className = 'strat-verdict red';
+            vd.textContent = t('verdict_dead');
+            badges.appendChild(vd);
+          }
+          liveCard = null;
+        }
+      } else if (ev.type === 'target') {
+        if (!liveCard) return;
+        const res = ev.result;
+        if (typeof res === 'string') {
+          liveRow(liveCard, `${ev.target}: ${res}`, res === 'Timeout' ? 'tl-err' : 'tl-ok');
+        } else if (ev.target === 'YouTubeVideoSpeed') {
+          const v = res.verdict;
+          const txt = v === 'ok'
+            ? `YouTubeVideoSpeed: ${fmtSpeed(res.bytesPerSec)} — OK`
+            : v === 'slow'
+              ? `YouTubeVideoSpeed: ${fmtSpeed(res.bytesPerSec)} — ${t('yt_throttled').toUpperCase()}`
+              : v === 'unavailable' ? `YouTubeVideoSpeed: ${t('yt_unavailable')}` : `YouTubeVideoSpeed: ${t('yt_fail')} (HTTP ${res.http})`;
+          liveRow(liveCard, txt, v === 'ok' ? 'tl-ok' : v === 'slow' ? 'tl-warn' : 'tl-err');
+        } else {
+          const parts = Object.entries(res).map(([k, v]) => `${k}:${v}`).join('  ');
+          liveRow(liveCard, `${ev.target}  ${parts}`);
+        }
+      } else if (ev.type === 'stage') {
+        if (liveCard) liveRow(liveCard, ev.stage === 'yt_resolve' ? t('stage_yt_resolve') : t('stage_yt_speed'), 'tl-dim');
+      } else if (ev.type === 'strategy-done') {
+        if (liveCard) {
+          liveCard.classList.remove('testing');
+          const v = verdictOf({ failed: false, groups: ev.groups });
+          liveCard.classList.add(`verdict-${v}`);
+          const badges = liveCard.querySelector('.strat-badges');
+          if (badges && !badges.querySelector('.strat-verdict')) {
+            const vd = document.createElement('span');
+            vd.className = `strat-verdict ${v}`;
+            vd.textContent = verdictText({ failed: false, groups: ev.groups });
+            badges.appendChild(vd);
+          }
+          liveCard = null;
+        }
+      } else if (ev.type === 'aborted') {
+        if (liveCard) liveCard.classList.remove('testing');
+      } else if (ev.type === 'complete') {
+        $('#testing-note').classList.add('hidden');
+        $('#test-progress').classList.add('hidden');
+      }
+    });
+    const r = await window.api.runTests();
+    off?.();
+    testing = false;
+    setButtons(false);
+    document.querySelectorAll('.strat-card.testing').forEach((c) => c.classList.remove('testing'));
+    if (r && r.ok) {
+      lastTestResults = { results: r.results, winner: r.winner };
+      await renderStrategies();
+    } else if (r && r.reason === 'admin_required') {
+      toast(t('test_need_admin'), 'err');
+    }
+  });
+  $('#btn-test-stop').addEventListener('click', () => window.api.abortTests());
+}
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+// ---------- filters ----------
+async function renderFilters() {
+  const f = await window.api.getFilters();
+  if (!f) return;
+  $$('.seg-btn[data-gf]').forEach((b) => b.classList.toggle('active', b.dataset.gf === f.game.mode));
+  $('#gf-tcp').value = f.game.tcp;
+  $('#gf-udp').value = f.game.udp;
+  $$('.seg-btn[data-ipset]').forEach((b) => b.classList.toggle('active', b.dataset.ipset === f.ipset));
+  $('#ipset-backup-note').classList.toggle('hidden', f.ipsetBackup || f.ipset !== 'loaded');
+}
+
+function bindFilters() {
+  $$('.seg-btn[data-gf]').forEach((b) =>
+    b.addEventListener('click', async () => {
+      const gf = { mode: b.dataset.gf, tcp: $('#gf-tcp').value, udp: $('#gf-udp').value };
+      const r = await window.api.setGameFilter(gf);
+      toast(r.ok ? t('toast_saved') : t('toast_error'), r.ok ? 'ok' : 'err');
+      renderFilters();
+    })
+  );
+  $$('.seg-btn[data-ipset]').forEach((b) =>
+    b.addEventListener('click', async () => {
+      const r = await window.api.setIpsetMode(b.dataset.ipset);
+      toast(r.ok ? t('toast_saved') : `${t('toast_error')}: ${r.reason || ''}`, r.ok ? 'ok' : 'err');
+      renderFilters();
+    })
+  );
+}
+
+// ---------- lists ----------
+async function renderLists() {
+  await window.api.ensureLists();
+  loadList(currentList);
+}
+
+async function loadList(key) {
+  currentList = key;
+  $$('.tab').forEach((b) => b.classList.toggle('active', b.dataset.list === key));
+  const editor = $('#list-editor');
+  const isEditable = listsEditable.includes(key);
+  if (key === 'ipsetAll') {
+    const r = await window.api.readIpsetAll();
+    editor.value = r.ok ? r.content : '';
+  } else {
+    const r = await window.api.readList(key);
+    editor.value = r.ok ? r.content : '';
+  }
+  editor.readOnly = !isEditable;
+  $('#lists-hint').textContent = key === 'general' ? t('lists_hint_general') : '';
+  $('#list-save').classList.toggle('hidden', !isEditable);
+  $('.list-toolbar').classList.toggle('hidden', !isEditable);
+  refreshListStats();
+}
+
+// Live counters: entries / duplicates / size.
+async function refreshListStats() {
+  const el = $('#lists-stats');
+  if (!el || !listsEditable.includes(currentList)) {
+    if (el) el.textContent = '';
+    return;
+  }
+  const r = await window.api.listStats(currentList);
+  if (!r.ok) {
+    el.textContent = '';
+    return;
+  }
+  const s = r.stats;
+  const parts = [`${t('lists_stat_entries')}: ${s.total}`];
+  if (s.duplicates) parts.push(`${t('lists_stat_dupes')}: ${s.duplicates}`);
+  if (s.comments) parts.push(`${t('lists_stat_comments')}: ${s.comments}`);
+  parts.push(`${Math.round(s.bytes / 102.4) / 10} KB`);
+  el.textContent = parts.join(' · ');
+}
+
+// Run a smart operation in main, then reload the editor from disk.
+async function runListOp(op, payload) {
+  const r = await window.api.listOp(currentList, op, payload);
+  if (!r.ok) {
+    const map = { duplicate: t('lists_err_dup'), invalid: t('lists_err_invalid'), not_found: t('lists_err_nofind'), too_big: t('lists_err_big') };
+    toast(`${t('toast_error')}: ${map[r.reason] || r.reason}`, 'err');
+    return false;
+  }
+  if (r.content !== undefined) $('#list-editor').value = r.content;
+  if (op === 'dedupe') toast(`${t('lists_deduped')}: ${r.removed}`, 'ok');
+  else if (op === 'sort') toast(`${t('lists_sorted')}: ${r.count}`, 'ok');
+  else if (op === 'add') toast(`${t('lists_added')}: ${r.added}`, 'ok');
+  else if (op === 'remove') toast(`${t('lists_removed')}: ${r.removed}`, 'ok');
+  else if (op === 'stripPlaceholder') toast(t('lists_stripped'), 'ok');
+  await loadList(currentList);
+  return true;
+}
+
+function bindLists() {
+  $$('.tab').forEach((b) => b.addEventListener('click', () => loadList(b.dataset.list)));
+  $('#list-save').addEventListener('click', async () => {
+    const r = await window.api.writeList(currentList, $('#list-editor').value);
+    toast(r.ok ? t('lists_saved') : t('toast_error'), r.ok ? 'ok' : 'err');
+    if (r.ok) refreshListStats();
+  });
+  const addInput = $('#list-add-input');
+  const doAdd = async () => {
+    const value = addInput.value.trim();
+    if (!value) return;
+    if (await runListOp('add', { entry: value })) addInput.value = '';
+  };
+  $('#list-add-btn').addEventListener('click', doAdd);
+  addInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      doAdd();
+    }
+  });
+  $('#list-dedupe').addEventListener('click', () => runListOp('dedupe'));
+  $('#list-sort').addEventListener('click', () => runListOp('sort'));
+  $('#list-strip').addEventListener('click', () => runListOp('stripPlaceholder'));
+  $('#list-editor').addEventListener('input', debounceLocalStats);
+}
+
+// Cheap local counter while typing (no IPC per keystroke).
+let listStatsTimer = null;
+function debounceLocalStats() {
+  clearTimeout(listStatsTimer);
+  listStatsTimer = setTimeout(() => {
+    const el = $('#lists-stats');
+    if (!el) return;
+    const lines = $('#list-editor').value.split(/\r?\n/).map((l) => l.trim());
+    const entries = lines.filter((l) => l && !l.startsWith('#') && !l.startsWith(';'));
+    const seen = new Set();
+    let dupes = 0;
+    for (const e of entries) {
+      const k = e.toLowerCase().replace(/^\^/, '');
+      if (seen.has(k)) dupes++;
+      else seen.add(k);
+    }
+    const parts = [`${t('lists_stat_entries')}: ${entries.length}`];
+    if (dupes) parts.push(`${t('lists_stat_dupes')}: ${dupes}`);
+    el.textContent = parts.join(' · ') + ' •';
+  }, 400);
+}
+
+async function renderEngineCurrent() {
+  try {
+    const r = await window.api.engineCurrent();
+    const el = $('#engine-current');
+    if (el) el.textContent = r.version || t('engine_unknown');
+  } catch { /* offline — keep placeholder */ }
+}
+
+async function loadEngineReleases() {
+  const sel = $('#engine-select');
+  const status = $('#engine-status');
+  if (!sel) return;
+  sel.textContent = '';
+  const loading = document.createElement('option');
+  loading.textContent = t('engine_loading');
+  loading.value = '';
+  sel.appendChild(loading);
+  try {
+    const list = await window.api.engineReleases();
+    sel.textContent = '';
+    if (!list || !list.length) {
+      const none = document.createElement('option');
+      none.textContent = t('engine_none');
+      none.value = '';
+      sel.appendChild(none);
+      if (status) status.textContent = t('engine_no_releases');
+      return;
+    }
+    for (const r of list) {
+      const opt = document.createElement('option');
+      opt.value = r.tag;
+      opt.textContent = r.tag;
+      sel.appendChild(opt);
+    }
+    if (status) status.textContent = t('engine_releases_found', { count: list.length });
+  } catch (e) {
+    sel.textContent = '';
+    const none = document.createElement('option');
+    none.textContent = t('engine_none');
+    none.value = '';
+    sel.appendChild(none);
+    if (status) status.textContent = t('engine_failed', { reason: e.message });
+  }
+}
+
+async function renderEngine() {
+  await renderEngineCurrent();
+  await loadEngineReleases();
+}
+
+// ---------- updates ----------
+const PANEL_RELEASES_URL = 'https://github.com/Therealwh/ZapretYoutubeDiscordPanel/releases/latest';
+
+// Panel self-update card: reflects updater state machine + actions.
+async function renderPanelUpdater() {
+  const st = await window.api.updaterState();
+  $('#panel-current').textContent = st.current;
+  $('#panel-latest').textContent = st.version || '—';
+  const status = $('#panel-status');
+  const btnCheck = $('#btn-panel-check');
+  const btnDl = $('#btn-panel-download');
+  const btnInst = $('#btn-panel-install');
+  const btnOpen = $('#btn-panel-open');
+  const progWrap = $('#panel-progress-wrap');
+  btnDl.classList.add('hidden');
+  btnInst.classList.add('hidden');
+  progWrap.classList.add('hidden');
+  switch (st.status) {
+    case 'available':
+      status.textContent = t('panel_available', { version: st.version });
+      status.className = 'ver-status warn';
+      btnDl.classList.remove('hidden');
+      btnOpen.classList.remove('hidden');
+      break;
+    case 'progress':
+      status.textContent = t('panel_downloading', { percent: st.percent || 0 });
+      status.className = 'ver-status';
+      progWrap.classList.remove('hidden');
+      $('#panel-progress').style.width = `${st.percent || 0}%`;
+      break;
+    case 'downloaded':
+      status.textContent = t('panel_downloaded');
+      status.className = 'ver-status ok';
+      btnInst.classList.remove('hidden');
+      break;
+    case 'checking':
+      status.textContent = t('panel_checking');
+      status.className = 'ver-status';
+      break;
+    case 'error':
+      // Show WHY the check failed (no network / proxy / TLS) instead of a
+      // generic message — issue #3 asked for real reasons.
+      status.textContent = `${t('panel_error')}${st.message ? `: ${st.message}` : ''}`;
+      status.className = 'ver-status err';
+      status.title = st.message || '';
+      break;
+    default:
+      status.textContent = t('panel_uptodate');
+      status.className = 'ver-status ok';
+  }
+  btnCheck.disabled = st.status === 'progress' || st.status === 'checking';
+  $('#panel-portable-note').classList.toggle('hidden', !st.portable);
+}
+
+function bindPanelUpdater() {
+  $('#btn-panel-check').addEventListener('click', async () => {
+    renderPanelUpdater();
+    await window.api.updaterCheck();
+    renderPanelUpdater();
+  });
+  $('#btn-panel-download').addEventListener('click', async () => {
+    const r = await window.api.updaterDownload();
+    if (!r.ok) toast(`${t('toast_error')}: ${r.reason || ''}`, 'err');
+    renderPanelUpdater();
+  });
+  $('#btn-panel-install').addEventListener('click', () => window.api.updaterInstall());
+  $('#btn-panel-open').addEventListener('click', () => window.api.openExternal(PANEL_RELEASES_URL));
+  window.api.on('updater:event', () => {
+    renderPanelUpdater().catch(() => {});
+  });
+}
+
+async function renderUpdates() {
+  const v = await window.api.checkVersion();
+  $('#ver-local').textContent = v.local || t('updates_version_unknown');
+  $('#ver-remote').textContent = v.remote || t('updates_version_unknown');
+  // No readable local version means the zapret folder is broken or missing —
+  // offer the one-click repair instead of a dead "Update" button.
+  $('#ver-repair').classList.toggle('hidden', !!v.local);
+  const st = $('#ver-status');
+  if (!v.ok) {
+    st.textContent = t('toast_error');
+    st.className = 'ver-status err';
+  } else if (v.upToDate) {
+    st.textContent = t('updates_uptodate');
+    st.className = 'ver-status ok';
+    $('#btn-ver-install').classList.add('hidden');
+  } else {
+    st.textContent = t('updates_new');
+    st.className = 'ver-status warn';
+    $('#btn-ver-install').classList.remove('hidden');
+    $('#btn-ver-open').classList.remove('hidden');
+  }
+}
+
+function bindUpdates() {
+  $('#btn-ver-repair').addEventListener('click', async () => {
+    const btn = $('#btn-ver-repair');
+    btn.disabled = true;
+    const bar = $('#install-progress');
+    const wrap = $('#install-progress-wrap');
+    const off = window.api.on('install:progress', (frac) => {
+      wrap?.classList.remove('hidden');
+      if (bar) bar.style.width = `${Math.round((frac || 0) * 100)}%`;
+    });
+    const r = await window.api.repairZapret();
+    if (off) off();
+    wrap?.classList.add('hidden');
+    btn.disabled = false;
+    if (r.ok) {
+      cfg = await window.api.getConfig();
+      toast(`${t('ver_repair_done')} (${r.version})`, 'ok');
+      $('#ver-repair').classList.add('hidden');
+      renderUpdates();
+      showPage('strategies');
+    } else {
+      toast(`${t('toast_error')}: ${[r.reason, r.message].filter(Boolean).join(' — ')}`, 'err');
+    }
+  });
+  $('#btn-engine-refresh').addEventListener('click', () => loadEngineReleases());
+  $('#btn-engine-update').addEventListener('click', async () => {
+    const tag = $('#engine-select').value;
+    if (!tag) {
+      toast(t('engine_none'), 'err');
+      return;
+    }
+    if (!confirm(t('engine_confirm', { tag }))) return;
+    const btn = $('#btn-engine-update');
+    btn.disabled = true;
+    $('#engine-status').textContent = t('engine_working');
+    $('#engine-status').className = 'ver-status';
+    const off = window.api.on('install:progress', (frac) => {
+      $('#install-progress-wrap')?.classList.remove('hidden');
+      const bar = $('#install-progress');
+      if (bar) bar.style.width = `${Math.round((frac || 0) * 100)}%`;
+    });
+    const r = await window.api.engineUpdate(tag);
+    if (off) off();
+    $('#install-progress-wrap')?.classList.add('hidden');
+    btn.disabled = false;
+    if (r.ok) {
+      $('#engine-status').textContent = t('engine_done', { tag: r.tag, count: r.copied.length });
+      $('#engine-status').className = 'ver-status ok';
+      toast(t('engine_done_short'), 'ok');
+      await renderEngineCurrent();
+    } else {
+      $('#engine-status').textContent = t('engine_failed', { reason: r.reason });
+      $('#engine-status').className = 'ver-status err';
+      toast(`${t('toast_error')}: ${r.reason}`, 'err');
+    }
+  });
+  $('#btn-ver-check').addEventListener('click', renderUpdates);
+  $('#btn-ver-open').addEventListener('click', () => window.api.openExternal('https://github.com/Flowseal/zapret-discord-youtube/releases/latest'));
+  $('#btn-ver-install').addEventListener('click', async () => {
+    if (!confirm(t('updates_confirm_install'))) return;
+    const dir = (cfg.zapretRoot || 'C:\\zapret').trim().replace(/[\\/]+$/, '');
+    if (!/^[a-zA-Z]:\\.+/i.test(dir)) {
+      toast(t('setup_path_invalid'), 'err');
+      return;
+    }
+    const btn = $('#btn-ver-install');
+    btn.disabled = true;
+    $('#btn-ver-check').disabled = true;
+    $('#install-progress-wrap').classList.remove('hidden');
+    $('#install-progress').style.width = '0%';
+    const setStage = (s) => {
+      const el = $('#install-stage');
+      el.textContent = t(`setup_stage_${s}`) || s;
+      el.classList.remove('hidden');
+    };
+    setStage('resolve');
+    const offStage = window.api.on('install:stage', setStage);
+    const offP = window.api.on('install:progress', (frac) => {
+      $('#install-progress').style.width = `${Math.round(frac * 100)}%`;
+    });
+    try {
+      const res = await window.api.installZapret(dir);
+      if (res.ok) {
+        cfg = await window.api.setConfig({ zapretRoot: dir });
+        toast(t('setup_done'), 'ok');
+      } else if (res.reason === 'swap_failed_locked' || res.reason === 'swap_failed') {
+        toast(t('err_swap_locked'), 'err');
+      } else {
+        actionToast(res);
+      }
+    } catch {
+      toast(t('toast_error'), 'err');
+    } finally {
+      offStage?.();
+      offP?.();
+      $('#install-progress-wrap').classList.add('hidden');
+      $('#install-stage').classList.add('hidden');
+      btn.disabled = false;
+      $('#btn-ver-check').disabled = false;
+      renderUpdates();
+    }
+  });
+  $('#btn-ipset-update').addEventListener('click', async () => {
+    const r = await window.api.updateIpset();
+    toast(r.ok ? t('lists_saved') : t('toast_error'), r.ok ? 'ok' : 'err');
+  });
+  $('#btn-hosts-check').addEventListener('click', async () => {
+    const r = await window.api.updateHosts({ auto: false });
+    const st = $('#hosts-status');
+    if (r.manual) {
+      st.textContent = t('updates_hosts_need');
+      st.className = 'ver-status warn';
+      $('#btn-hosts-auto').classList.remove('hidden');
+      $('#btn-hosts-manual').classList.remove('hidden');
+      window.api.showItemInFolder(r.tempFile);
+    } else if (r.ok) {
+      st.textContent = t('updates_hosts_ok');
+      st.className = 'ver-status ok';
+    } else {
+      st.textContent = t('toast_error');
+      st.className = 'ver-status err';
+    }
+  });
+  $('#btn-hosts-auto').addEventListener('click', async () => {
+    const r = await window.api.updateHosts({ auto: true });
+    toast(r.ok ? t('lists_saved') : t('toast_error'), r.ok ? 'ok' : 'err');
+  });
+  $('#btn-hosts-manual').addEventListener('click', () => window.api.openExternal('https://raw.githubusercontent.com/Flowseal/zapret-discord-youtube/refs/heads/main/.service/hosts'));
+}
+
+// ---------- diagnostics ----------
+async function renderDiagnostics() {
+  const wrap = $('#diag-list');
+  if (!wrap.dataset.ran) {
+    wrap.innerHTML = `<p class="muted">${t('diag_run')} ↓</p>`;
+  }
+}
+
+const DIAG_NAMES = {
+  bfe: 'diag_bfe', proxy: 'diag_proxy', tcp_timestamps: 'diag_tcp_timestamps', adguard: 'diag_adguard',
+  killer: 'diag_killer', intel_connectivity: 'diag_intel_connectivity', check_point: 'diag_check_point',
+  smartbyte: 'diag_smartbyte', path: 'diag_path', windivert_sys: 'diag_windivert_sys', vpn: 'diag_vpn',
+  secure_dns: 'diag_secure_dns', hosts_youtube: 'diag_hosts_youtube', conflict_services: 'diag_conflict_services',
+};
+
+function diagDetail(item) {
+  const key = `diag_detail_${item.detail}`;
+  const dictHas = key in DICT[currentLang] || key in DICT.ru;
+  if (!dictHas) return '';
+  return t(key, { server: item.meta?.server || '', names: item.meta?.names || '', name: item.meta?.name || '' });
+}
+
+function bindDiagnostics() {
+  $('#btn-diag-run').addEventListener('click', async () => {
+    const wrap = $('#diag-list');
+    wrap.textContent = '';
+    const items = await window.api.runDiagnostics();
+    wrap.dataset.ran = '1';
+    for (const item of items) {
+      const el = document.createElement('div');
+      el.className = 'diag-item';
+      const main = document.createElement('div');
+      main.className = 'diag-main';
+      const dot = document.createElement('span');
+      dot.className = `diag-dot ${item.severity === 'ok' ? 'ok' : item.severity === 'warn' ? 'warn' : 'err'}`;
+      const text = document.createElement('div');
+      text.className = 'diag-text';
+      const name = document.createElement('div');
+      name.className = 'diag-name';
+      name.textContent = t(DIAG_NAMES[item.id] || item.id);
+      text.appendChild(name);
+      const detail = diagDetail(item);
+      if (item.severity !== 'ok' && detail) {
+        const d = document.createElement('div');
+        d.className = 'diag-detail';
+        d.textContent = detail;
+        text.appendChild(d);
+      }
+      main.append(dot, text);
+      el.appendChild(main);
+      if (item.link) {
+        const link = mkBtn(t('diag_fix'), 'btn btn-ghost btn-sm', () => window.api.openExternal(item.link));
+        el.appendChild(link);
+      }
+      wrap.appendChild(el);
+    }
+  });
+  $('#btn-discord-cache').addEventListener('click', async () => {
+    const r = await window.api.clearDiscordCache();
+    toast(r.foundAny ? t('diag_clear_done') : t('diag_no_discord'), r.foundAny ? 'ok' : 'warn');
+  });
+  $('#btn-dns-fix').addEventListener('click', async () => {
+    const r = await window.api.setDnsFix();
+    if (r.ok) toast(t('dns_fix_done'), 'ok');
+    else if (r.reason === 'admin_required') toast(t('dns_need_admin'), 'err');
+    else toast(t('toast_error'), 'err');
+  });
+  $('#btn-dns-reset').addEventListener('click', async () => {
+    const r = await window.api.resetDns();
+    if (r.ok) toast(t('dns_reset_done'), 'ok');
+    else if (r.reason === 'admin_required') toast(t('dns_need_admin'), 'err');
+    else toast(t('toast_error'), 'err');
+  });
+}
+
+// ---------- settings ----------
+async function renderSettings() {
+  $('#set-root-path').textContent = cfg.zapretRoot || '—';
+  $('#set-admin').textContent = appInfo.admin ? t('settings_admin_yes') : t('settings_admin_no');
+  $('#set-admin').className = `chip ${appInfo.admin ? 'ok' : 'err'}`;
+  $('#opt-close-tray').checked = cfg.closeToTray !== false;
+  $('#opt-autostart').checked = !!cfg.autostart;
+  $('#opt-start-hidden').checked = !!cfg.startHidden;
+  $$('.seg-btn[data-lang]').forEach((b) => b.classList.toggle('active', b.dataset.lang === currentLang));
+  $$('.seg-btn[data-theme]').forEach((b) => b.classList.toggle('active', b.dataset.theme === (cfg.theme || 'dark')));
+}
+
+function bindSettings() {
+  $$('.seg-btn[data-lang]').forEach((b) =>
+    b.addEventListener('click', async () => {
+      setLang(b.dataset.lang);
+      currentLang = b.dataset.lang;
+      cfg = await window.api.setConfig({ lang: currentLang });
+      applyI18n();
+      renderSettings();
+      toast(t('toast_saved'), 'ok');
+    })
+  );
+  $$('.seg-btn[data-theme]').forEach((b) =>
+    b.addEventListener('click', async () => {
+      applyTheme(b.dataset.theme);
+      cfg = await window.api.setConfig({ theme: b.dataset.theme });
+      renderSettings();
+    })
+  );
+  $('#opt-close-tray').addEventListener('change', async (e) => {
+    cfg = await window.api.setConfig({ closeToTray: e.target.checked });
+  });
+  $('#opt-autostart').addEventListener('change', async (e) => {
+    cfg = await window.api.setConfig({ autostart: e.target.checked });
+    // autostart via app.setLoginItemSettings is wired in main through config read
+    await window.api.setConfig({ _autostartChanged: true });
+    toast(t('toast_saved'), 'ok');
+  });
+  $('#opt-start-hidden').addEventListener('change', async (e) => {
+    cfg = await window.api.setConfig({ startHidden: e.target.checked });
+  });
+  $('#opt-vt-key').value = cfg.virustotalKey || '';
+  $('#opt-vt-key').addEventListener('change', async (e) => {
+    cfg = await window.api.setConfig({ virustotalKey: e.target.value.trim() || null });
+    toast(t('toast_saved'), 'ok');
+  });
+  $('#btn-root-change').addEventListener('click', async () => {
+    const dir = await window.api.chooseDir();
+    if (!dir) return;
+    const v = await window.api.validateRoot(dir);
+    if (v.ok) {
+      cfg = await window.api.setConfig({ zapretRoot: dir });
+      renderSettings();
+    } else {
+      toast(t('setup_not_found'), 'err');
+    }
+  });
+}
+
+// ---------- update banner (panel + zapret, visible on every page) ----------
+let availPanel = null;
+let availZapret = null;
+function refreshUpdateBanner() {
+  const el = $('#banner-update');
+  if (!el) return;
+  const key = `${availPanel || ''}|${availZapret || ''}`;
+  let dismissed = '';
+  try { dismissed = sessionStorage.getItem('ydp-update-banner') || ''; } catch {}
+  if ((!availPanel && !availZapret) || dismissed === key) {
+    el.classList.add('hidden');
+    return;
+  }
+  const parts = [];
+  if (availPanel) parts.push(t('banner_update_panel', { version: availPanel }));
+  if (availZapret) parts.push(t('banner_update_zapret', { version: availZapret }));
+  $('#banner-update-text').textContent = parts.join(' · ');
+  el.classList.remove('hidden');
+}
+
+function bindUpdateBanner() {
+  $('#banner-update-go').addEventListener('click', () => showPage('updates'));
+  $('#banner-update-hide').addEventListener('click', () => {
+    try { sessionStorage.setItem('ydp-update-banner', `${availPanel || ''}|${availZapret || ''}`); } catch {}
+    $('#banner-update').classList.add('hidden');
+  });
+  window.api.on('zapret:update', (ev) => {
+    if (ev && ev.remote) { availZapret = ev.remote; refreshUpdateBanner(); }
+  });
+  window.api.on('updater:event', (ev) => {
+    if (ev && ev.type === 'available' && ev.version) { availPanel = ev.version; refreshUpdateBanner(); }
+  });
+}
+
+// ---------- power ----------
+let autoConnecting = false;
+
+function bindAutoConnect() {
+  const btn = $('#btn-auto');
+  const note = $('#auto-note');
+  btn.addEventListener('click', async () => {
+    if (autoConnecting) return;
+    if (!appInfo.admin) {
+      await window.api.setConfig({ pendingAction: 'run-tests' });
+      window.api.restartElevated();
+      toast(t('banner_admin_fix'), 'ok');
+      return;
+    }
+    autoConnecting = true;
+    btn.disabled = true;
+    note.classList.remove('hidden');
+    note.textContent = t('autoconnect_running');
+    const off = window.api.on('tester:event', (ev) => {
+      if (ev.type === 'strategy-start') note.textContent = `${t('autoconnect_running')} ${ev.name} (${(ev.index || 0) + 1}/${ev.total || '…'})`;
+      else if (ev.type === 'winner-found') note.textContent = t('autoconnect_found', { name: ev.name });
+    });
+    const r = await window.api.autoConnect();
+    off?.();
+    autoConnecting = false;
+    btn.disabled = false;
+    note.classList.add('hidden');
+    if (r && r.ok && r.already) toast(t('autoconnect_already', { name: r.strategy }), 'ok');
+    else if (r && r.ok && r.restored) toast(t('autoconnect_restored', { name: r.strategy }), 'warn');
+    else if (r && r.ok && r.fallback) toast(t('autoconnect_keep', { name: r.strategy }), 'warn');
+    else if (r && r.ok) toast(t('autoconnect_done', { name: r.strategy }), 'ok');
+    else if (r && r.reason === 'none_works') toast(t('autoconnect_none'), 'err');
+    else if (r && r.reason === 'admin_required') toast(t('test_need_admin'), 'err');
+    else if (r && r.reason === 'no_root') toast(t('toast_need_root'), 'err');
+    else if (r) actionToast(r);
+    refreshStatus();
+  });
+}
+
+function bindPower() {
+  // One-UAC flow: save the intended action, restart elevated, auto-run it.
+  const ensureAdminThen = (pendingAction) => {
+    if (appInfo.admin) return false;
+    window.api.restartElevated(pendingAction);
+    toast(t('banner_admin_fix'), 'ok');
+    return true;
+  };
+  $('#power-switch').addEventListener('click', async () => {
+    const { status: st } = await window.api.getStatus();
+    if (st.activeMode !== 'off') {
+      if (ensureAdminThen('toggle-off')) return;
+      if (st.activeMode === 'service') await window.api.stopService();
+      await window.api.killWinws();
+    } else {
+      if (ensureAdminThen('toggle-on')) return;
+      const last = cfg.lastStrategyFile;
+      const strategies = await window.api.listStrategies();
+      const target = strategies.find((s) => s.file === last) || strategies[0];
+      if (!target) {
+        toast(t('toast_need_root'), 'err');
+        return;
+      }
+      const preferService = cfg.preferServiceMode !== false;
+      const r = preferService ? await window.api.installService(target.file) : await window.api.launchProcess(target.file);
+      actionToast(r);
+    }
+    setTimeout(refreshStatus, 1500);
+  });
+  $('#btn-restart').addEventListener('click', async () => {
+    if (ensureAdminThen('toggle-on')) return;
+    await window.api.killWinws();
+    await window.api.stopService();
+    setTimeout(async () => {
+      const target = cfg.lastStrategyFile;
+      const strategies = await window.api.listStrategies();
+      const s = strategies.find((x) => x.file === target) || strategies[0];
+      if (s) {
+        if (cfg.preferServiceMode !== false) await window.api.installService(s.file);
+        else await window.api.launchProcess(s.file);
+      }
+      setTimeout(refreshStatus, 1500);
+    }, 1200);
+  });
+  $('#banner-disable').addEventListener('click', async () => {
+    if (lastBanner.kind === 'conflict') {
+      await window.api.elevateCommands([
+        `net stop ${lastBanner.name}`,
+        `sc delete ${lastBanner.name}`,
+      ]);
+    } else {
+      if (ensureAdminThen('toggle-off')) return;
+      await window.api.stopService();
+      await window.api.killWinws();
+    }
+    sessionStorage.removeItem('bannerDismissed');
+    setTimeout(refreshStatus, 1500);
+  });
+  $('#banner-dismiss').addEventListener('click', () => {
+    sessionStorage.setItem('bannerDismissed', '1');
+    renderBanner({ active: false });
+  });
+  $('#banner-admin-fix').addEventListener('click', () => window.api.restartElevated());
+}
+
+// ---------- live logs ----------
+const logState = { lines: [], filter: '', level: '', max: 2000 };
+
+function logLineEl(e) {
+  const div = document.createElement('div');
+  div.className = `log-line ${e.level || 'info'}`;
+  const time = document.createElement('span');
+  time.className = 'log-time';
+  time.textContent = e.time || '';
+  const src = document.createElement('span');
+  src.className = 'log-src';
+  src.textContent = e.source || 'app';
+  const txt = document.createElement('span');
+  txt.className = 'log-text';
+  txt.textContent = e.text || '';
+  div.append(time, src, txt);
+  return div;
+}
+
+function logMatches(e) {
+  if (logState.level && e.level !== logState.level) return false;
+  if (logState.filter && !String(e.text || '').toLowerCase().includes(logState.filter)) return false;
+  return true;
+}
+
+function renderLogs() {
+  const view = $('#log-view');
+  if (!view) return;
+  const atBottom = view.scrollHeight - view.scrollTop - view.clientHeight < 40;
+  view.textContent = '';
+  const shown = logState.lines.filter(logMatches);
+  if (!shown.length) {
+    const empty = document.createElement('div');
+    empty.className = 'log-empty';
+    empty.textContent = t('logs_empty');
+    view.append(empty);
+  } else {
+    const frag = document.createDocumentFragment();
+    for (const e of shown) frag.append(logLineEl(e));
+    view.append(frag);
+  }
+  const total = logState.lines.length;
+  const cnt = $('#log-count');
+  if (cnt) cnt.textContent = `${shown.length} / ${total}`;
+  if (atBottom) view.scrollTop = view.scrollHeight;
+}
+
+function appendLogs(batch) {
+  const list = Array.isArray(batch) ? batch : [batch];
+  for (const e of list) {
+    if (!e || typeof e !== 'object') continue;
+    logState.lines.push(e);
+  }
+  if (logState.lines.length > logState.max) {
+    logState.lines.splice(0, logState.lines.length - logState.max);
+  }
+  if (!$('#page-logs').classList.contains('hidden')) renderLogs();
+}
+
+function bindLogs() {
+  const view = $('#log-view');
+  if (!view) return;
+  $('#log-filter').addEventListener('input', (ev) => {
+    logState.filter = ev.target.value.trim().toLowerCase();
+    renderLogs();
+  });
+  $('#log-level').addEventListener('change', (ev) => {
+    logState.level = ev.target.value;
+    renderLogs();
+  });
+  $('#btn-log-clear').addEventListener('click', async () => {
+    await window.api.clearLogs();
+    logState.lines = [];
+    renderLogs();
+    toast(t('logs_cleared'), 'ok');
+  });
+  $('#btn-log-open').addEventListener('click', () => window.api.showLogFile());
+  $('#btn-log-export').addEventListener('click', async () => {
+    const r = await window.api.exportLogs({
+      q: logState.filter,
+      level: logState.level,
+      full: !logState.filter && !logState.level,
+    });
+    if (r && r.ok) toast(`${t('logs_exported')} (${r.lines})`, 'ok');
+    else if (r && r.reason !== 'canceled') toast(`${t('toast_error')}: ${r.reason}`, 'err');
+  });
+  window.api.logBuffer().then((buf) => {
+    logState.lines = Array.isArray(buf) ? buf.slice(-logState.max) : [];
+    renderLogs();
+  });
+  window.api.on('log:lines', appendLogs);
+}
+
+// ---------- titlebar / nav ----------
+function bindChrome() {
+  $('#btn-min').addEventListener('click', () => window.api.windowAction('minimize'));
+  $('#btn-max').addEventListener('click', () => window.api.windowAction('maximize'));
+  $('#btn-close').addEventListener('click', () => window.api.windowAction('close'));
+  $$('.nav-item').forEach((b) => b.addEventListener('click', () => showPage(b.dataset.page)));
+  $('#theme-toggle').addEventListener('click', async () => {
+    const next = cfg.theme === 'light' ? 'dark' : 'light';
+    applyTheme(next);
+    cfg = await window.api.setConfig({ theme: next });
+  });
+  $('#lang-toggle').addEventListener('click', async () => {
+    const next = currentLang === 'ru' ? 'en' : 'ru';
+    setLang(next);
+    currentLang = next;
+    cfg = await window.api.setConfig({ lang: next });
+    applyI18n();
+  });
+}
+
+// ---------- boot ----------
+(async function boot() {
+  cfg = await window.api.getConfig();
+  appInfo = await window.api.appInfo();
+  currentLang = cfg.lang || detectLang(appInfo.lang);
+  setLang(currentLang);
+  applyTheme(cfg.theme || 'dark');
+  applyI18n();
+  bindChrome();
+  bindSetup();
+  bindPower();
+  bindTester();
+  bindFilters();
+  bindLists();
+  bindUpdates();
+  bindPanelUpdater();
+  bindUpdateBanner();
+  bindDiagnostics();
+  bindLogs();
+  bindOwnershipBanner();
+  // Tray "Go to" submenu drives navigation from the main process.
+  window.api.on('app:navigate', (page) => {
+    if (page && $(`#page-${page}`)) showPage(page);
+  });
+  bindSettings();
+  bindAutoConnect();
+  bindTelegram();
+  // The startup update check in main may have finished before we attached —
+  // pick up its result and light the banner if a panel update is waiting.
+  window.api.updaterState().then((st) => {
+    if (st && st.status === 'available' && st.version) {
+      availPanel = st.version;
+      refreshUpdateBanner();
+    }
+  }).catch(() => {});
+
+  if (!cfg.zapretRoot) {
+    await setupInit();
+    $('#setup-view').classList.remove('hidden');
+    $('#main-view').classList.add('hidden');
+  } else {
+    enterApp();
+  }
+
+  // After the UAC restart the renderer must finish what was started before
+  // the relaunch (e.g. strategy auto-search).
+  if (cfg.pendingAction === 'run-tests' && appInfo.admin) {
+    await window.api.setConfig({ pendingAction: null });
+    if (cfg.zapretRoot) {
+      showPage('strategies');
+      setTimeout(() => $('#btn-find-working').click(), 600);
+    }
+  }
+})();
+})();

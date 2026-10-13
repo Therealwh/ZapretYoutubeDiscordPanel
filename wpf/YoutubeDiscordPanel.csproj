@@ -1,0 +1,44 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Targets .NET Framework 4.8 on purpose:
+      - the runtime ships with every supported Windows, so the panel needs NO
+        installer for a runtime (Electron needed 113 MB and Tauri still needs
+        WebView2);
+      - the exe stays at 1-3 MB with zero dependencies;
+      - no Chromium / WebView2 process tree: one process, ~40-60 MB.
+  -->
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <LangVersion>latest</LangVersion>
+    <Nullable>disable</Nullable>
+    <AssemblyName>YoutubeDiscordPanel</AssemblyName>
+    <RootNamespace>Ydp</RootNamespace>
+    <ApplicationIcon>Resources\app.ico</ApplicationIcon>
+    <AssemblyTitle>YoutubeDiscordPanel</AssemblyTitle>
+    <Product>YoutubeDiscordPanel</Product>
+    <Version>2.0.0</Version>
+    <FileVersion>2.0.0.0</FileVersion>
+    <AssemblyVersion>2.0.0.0</AssemblyVersion>
+    <NeutralLanguage>ru</NeutralLanguage>
+    <SatelliteResourceLanguages>en;ru</SatelliteResourceLanguages>
+    <DebugType>none</DebugType>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+    <!-- Deterministic, trimmed build: no pdb, no extra docs in the output. -->
+    <SatelliteResourcePaths>en;ru</SatelliteResourcePaths>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- ServiceController for the SCM queries (no sc.exe child processes). -->
+    <Reference Include="System.ServiceProcess" />
+    <!-- Reference assemblies so net48 builds on a machine without Visual Studio. -->
+    <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+    </PackageReference>
+  </ItemGroup>
+
+</Project>

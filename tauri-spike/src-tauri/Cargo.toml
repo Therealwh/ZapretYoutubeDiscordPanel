@@ -1,0 +1,19 @@
+[package]
+name = "ydp-tauri-spike"
+version = "1.9.2"
+description = "Tauri v2 spike: real panel UI, mock backend, measured footprint"
+edition = "2021"
+rust-version = "1.77"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+
+[profile.release]
+opt-level = "s"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true
