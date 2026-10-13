@@ -176,6 +176,10 @@ private void Refresh()
 
             
             TgState.Text = TgProxy.Running ? "Включён" : "Выключен";
+            // The toggle must show what the next click will DO. A button that
+            // keeps saying "Запустить" while the proxy is running looks broken.
+            BtnTgToggle.Content = TgProxy.Running ? "Остановить" : "Запустить";
+            BtnTgToggle.Style = (Style)FindResource(TgProxy.Running ? "BtnDanger" : "BtnPrimary");
             // Only one line about the state: the hint already names the endpoint.
             TgStats.Text = TgProxy.Running
                 ? "подключений: " + TgProxy.Stats.connections + " · вверх: " + Human(TgProxy.Stats.bytesUp)

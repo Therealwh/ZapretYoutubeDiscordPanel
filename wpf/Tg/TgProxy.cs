@@ -167,9 +167,34 @@ private static volatile bool _cfEnabled = true;
                 _port = port > 0 ? port : DefaultPort;
                 _secret = _secret ?? TgCrypto.NewSecret();
 
-                _cts = new CancellationTokenSource();
-                _listener = new TcpListener(IPAddress.Parse(_host == "0.0.0.0" ? "127.0.0.1" : _host), _port);
-                _listener.Start();
+_cts = new CancellationTokenSource();
+                var listener = new TcpListener(IPAddress.Parse(_host == "0.0.0.0" ? "127.0.0.1" : _host), _port);
+                try
+                {
+                    listener.Start();
+                }
+                catch (System.Net.Sockets.SocketException ex)
+                {
+                    _cts = null;
+                    // The raw Win32 message ("address already in use") is useless
+                    // here: Telegram is configured for 127.0.0.1:1443 and keeps
+                    // reconnecting to a dead port. Say what actually happened.
+                    string reason = ex.SocketErrorCode == System.Net.Sockets.SocketError.AddressAlreadyInUse
+                        ? "port_busy"
+                        : "listen_failed";
+                    _log(reason == "port_busy"
+                        ? "Порт " + _port + " уже занят — вероятно, прокси уже запущен в другом экземпляре панели. Закройте старую панель и запустите заново."
+                        : "Не удалось занять порт " + _port + ": " + ex.Message, "error");
+                    return new ProxyStatsView
+                    {
+                        running = false,
+                        host = _host,
+                        port = _port,
+                        lastError = reason,
+                        proxyUrl = ProxyLink(),
+                    };
+                }
+                _listener = listener;
                 Stats = new ProxyStatsView
                 {
                     running = true,
@@ -548,7 +573,7 @@ private static async Task RefreshCfDomainsAsync()
 
             if (!string.IsNullOrEmpty(WorkerDomain))
             {
-                string target = DcAddressString(dc);
+                string target = WorkerTarget(dc);
                 if (target != null)
                 {
                     string path = "/apiws?dst=" + target + "&dc=" + dc;
@@ -601,6 +626,16 @@ private static async Task RefreshCfDomainsAsync()
             return results;
         }
 
+        // The worker route must use the REAL DC address from DC_DEFAULT_IPS, not the
+// dc_redirects entry: the redirect address belongs to the direct-WS pool and is
+// a different cluster. Connecting there completes TLS and the WebSocket upgrade
+// but Telegram never answers the auth, so the client sits on "Connecting" forever.
+private static string WorkerTarget(int dc)
+        {
+            if (DcDefaultIps.TryGetValue(dc, out string ip)) return ip;
+            return null;
+        }
+
         private static async Task<Transport> DialAsync(ParsedHandshake parsed, string tag, CancellationToken token)
         {
             // 0) Our own Cloudflare worker, when configured. It asks the worker to
@@ -608,7 +643,7 @@ private static async Task RefreshCfDomainsAsync()
             //    route that works when the DC address is unreachable from here.
             if (!string.IsNullOrEmpty(WorkerDomain))
             {
-                string target = DcAddressString(parsed.DcId);
+                string target = WorkerTarget(parsed.DcId);
                 if (target != null)
                 {
                     string path = "/apiws?dst=" + target + "&dc=" + parsed.DcId;

@@ -102,6 +102,13 @@
         <Setter Property="FontWeight" Value="SemiBold" />
     </Style>
 
+    <Style x:Key="BtnDanger" TargetType="Button" BasedOn="{StaticResource Btn}">
+        <Setter Property="Background" Value="#3A1F27" />
+        <Setter Property="BorderBrush" Value="{StaticResource ErrBrush}" />
+        <Setter Property="Foreground" Value="#FF9A9C" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+
     <Style TargetType="TextBlock">
         <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
         <Setter Property="FontFamily" Value="Segoe UI Variable Text, Segoe UI" />

@@ -82,6 +82,31 @@ Log("app version " + System.Reflection.Assembly.GetExecutingAssembly().GetName()
                     return;
                 }
 
+                // Start the Telegram proxy together with the panel when configured to. The
+                // user points Telegram at 127.0.0.1:<port>, so a panel that comes
+                // up without its listener leaves the client reconnecting to a dead
+                // port - which reads as "the panel is broken".
+                if (!string.Equals(Config.Get("tgProxyAuto", "true"), "false", StringComparison.OrdinalIgnoreCase))
+                {
+                    System.Threading.Tasks.Task.Run(async () =>
+                    {
+                        try
+                        {
+                            int port;
+                            if (!int.TryParse(Config.Get("tgProxyPort", "1443"), out port) || port <= 0) port = TgProxy.DefaultPort;
+                            var stats = await TgProxy.StartAsync(TgProxy.DefaultHost, port, TgProxy.Secret, true,
+                                (msg, level) => Logger.Add(level == "info" ? "info" : level, msg, "tg-proxy"));
+                            Logger.Info(stats.running
+                                ? "Прокси Telegram запущен автоматически на " + TgProxy.DefaultHost + ":" + port
+                                : "Прокси Telegram не запущен: " + (stats.lastError ?? "ошибка"), "tg-proxy");
+                        }
+                        catch (Exception ex)
+                        {
+                            Logger.Error("Автостарт прокси Telegram: " + ex.Message, "tg-proxy");
+                        }
+                    });
+                }
+
                 if (!string.IsNullOrEmpty(TgProxy.CustomCfDomain))
                 {
                     Logger.Info("Cloudflare-релей: kws1..kws6." + TgProxy.CustomCfDomain, "tg-proxy");
