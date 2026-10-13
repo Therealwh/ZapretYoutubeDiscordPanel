@@ -34,6 +34,8 @@
   <ItemGroup>
     <!-- ServiceController for the SCM queries (no sc.exe child processes). -->
     <Reference Include="System.ServiceProcess" />
+    <!-- FolderBrowserDialog: net48 has no OpenFolderDialog. -->
+    <Reference Include="System.Windows.Forms" />
     <!-- Reference assemblies so net48 builds on a machine without Visual Studio. -->
     <PackageReference Include="Microsoft.NETFramework.ReferenceAssemblies" Version="1.0.3">
       <PrivateAssets>all</PrivateAssets>

@@ -1,0 +1,63 @@
+<UserControl x:Class="Ydp.Pages.SettingsPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Loaded="Page_Loaded">
+    <StackPanel>
+        <TextBlock Text="Настройки" FontSize="20" FontWeight="Bold" Margin="0,0,0,16" />
+
+        <!-- Autostart: the feature the user asked for -->
+        <Border Style="{StaticResource Card}" Margin="0,0,0,12">
+            <StackPanel>
+                <TextBlock Text="Запуск при загрузке Windows" Style="{StaticResource H1}" />
+                <TextBlock Style="{StaticResource Dim}" Margin="0,4,0,10"
+                           Text="Панель запускается вместе с Windows и сразу применяет запомненную рабочую стратегию — заходить в программу не нужно." />
+                <CheckBox x:Name="ChkAutostart" Content="Запускать панель при входе в Windows"
+                          Foreground="{StaticResource TextBrush}" Margin="0,0,0,8"
+                          Checked="ChkAutostart_Changed" Unchecked="ChkAutostart_Changed" />
+                <CheckBox x:Name="ChkAutoApply" Content="Применять запомненную стратегию автоматически"
+                          Foreground="{StaticResource TextBrush}" IsEnabled="{Binding ElementName=ChkAutostart, Path=IsChecked}"
+                          Checked="ChkAutoApply_Changed" Unchecked="ChkAutoApply_Changed" />
+                <TextBlock x:Name="AutoNote" Style="{StaticResource Dim}" Margin="0,8,0,0" />
+            </StackPanel>
+        </Border>
+
+        <!-- Remembered strategy -->
+        <Border Style="{StaticResource Card}" Margin="0,0,0,12">
+            <StackPanel>
+                <TextBlock Text="Запомненная стратегия" Style="{StaticResource H1}" />
+                <TextBlock x:Name="Remembered" Style="{StaticResource Value}" Margin="0,6,0,4" Text="—" />
+                <TextBlock x:Name="RememberedList" Style="{StaticResource Dim}" TextWrapping="Wrap" Margin="0,0,0,8" />
+                <StackPanel Orientation="Horizontal">
+                    <Button Content="Применить сейчас" Style="{StaticResource Btn}" Margin="0,0,10,0" Click="BtnApplyRemembered_Click" />
+                    <Button Content="Забыть" Style="{StaticResource Btn}" Click="BtnForget_Click" />
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
+        <!-- Zapret folder -->
+        <Border Style="{StaticResource Card}" Margin="0,0,0,12">
+            <StackPanel>
+                <TextBlock Text="Папка zapret" Style="{StaticResource H1}" />
+                <TextBlock x:Name="RootValue" Style="{StaticResource Value}" Margin="0,6,0,4" Text="—" />
+                <TextBlock x:Name="RootIssues" Style="{StaticResource Dim}" TextWrapping="Wrap" Margin="0,0,0,8" />
+                <TextBlock Style="{StaticResource Dim}" TextWrapping="Wrap" Margin="0,0,0,8"
+                           Text="Папка может содержать пробелы — в версии 2.0 служба устанавливается через API Windows, без cmd.exe, поэтому путь с пробелами работает." />
+                <StackPanel Orientation="Horizontal">
+                    <Button Content="Выбрать папку…" Style="{StaticResource Btn}" Margin="0,0,10,0" Click="BtnChooseRoot_Click" />
+                    <Button Content="Найти автоматически" Style="{StaticResource Btn}" Click="BtnAutoRoot_Click" />
+                </StackPanel>
+            </StackPanel>
+        </Border>
+
+        <!-- Service mode -->
+        <Border Style="{StaticResource Card}">
+            <StackPanel>
+                <TextBlock Text="Режим запуска" Style="{StaticResource H1}" />
+                <CheckBox x:Name="ChkServiceMode" Content="Ставить стратегию как службу Windows (автозапуск с ОС)"
+                          Foreground="{StaticResource TextBrush}" Margin="0,8,0,4"
+                          Checked="ChkServiceMode_Changed" Unchecked="ChkServiceMode_Changed" />
+                <TextBlock x:Name="AdminNote" Style="{StaticResource Dim}" TextWrapping="Wrap" />
+            </StackPanel>
+        </Border>
+    </StackPanel>
+</UserControl>

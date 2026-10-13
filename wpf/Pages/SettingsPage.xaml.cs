@@ -1,0 +1,145 @@
+using System;
+using System.IO;
+using System.Linq;
+using System.Windows;
+using System.Windows.Controls;
+using Microsoft.Win32;
+using Ydp.Services;
+using Ydp.Zapret;
+
+namespace Ydp.Pages
+{
+    public partial class SettingsPage : UserControl
+    {
+        private bool _loading;
+
+        public SettingsPage()
+        {
+            InitializeComponent();
+        }
+
+        private void Page_Loaded(object sender, RoutedEventArgs e)
+        {
+            Load();
+        }
+
+        private void Load()
+        {
+            _loading = true;
+            try
+            {
+                ChkAutostart.IsChecked = AutoStart.IsEnabled();
+                ChkAutoApply.IsChecked = AutoStart.AutoApplyEnabled();
+                ChkServiceMode.IsChecked = !string.Equals(Config.Get(AutoConnect.KeyPreferService, "true"), "false", StringComparison.OrdinalIgnoreCase);
+
+                var known = AutoConnect.KnownWorking();
+                Remembered.Text = string.IsNullOrEmpty(AutoConnect.LastWinner()) ? "— ещё не запомнена" : Path.GetFileName(AutoConnect.LastWinner());
+                RememberedList.Text = known.Count == 0
+                    ? "История пуста — стратегия запомнится после первого успешного подключения."
+                    : "Запомнено (" + known.Count + "): " + string.Join(", ", known.Select(Path.GetFileName));
+
+                string configured = Config.Get("zapretRoot", null);
+                string root = Status.ResolveRoot(configured);
+                RootValue.Text = string.IsNullOrEmpty(root) ? "не найдена" : root;
+                var validation = Status.ValidateRoot(root ?? string.Empty);
+                RootIssues.Text = validation.ok && validation.issues.Length > 0
+                    ? "Замечания: " + string.Join(", ", validation.issues)
+                    : (validation.ok ? "Папка в порядке." : "Проблема: " + validation.reason);
+
+                AdminNote.Text = Win.IsAdmin()
+                    ? "Панель запущена с правами администратора — установка службы и запуск winws доступны."
+                    : "Панель запущена без прав администратора. Установка службы и запуск winws потребуют подтверждения в UAC.";
+            }
+            finally
+            {
+                _loading = false;
+            }
+        }
+
+        private void ChkAutostart_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_loading) return;
+            bool enabled = ChkAutostart.IsChecked == true;
+            if (AutoStart.SetEnabled(enabled, ChkAutoApply.IsChecked == true))
+            {
+                AutoNote.Text = enabled
+                    ? "Панель будет запускаться при входе в Windows."
+                    : "Автозапуск выключен.";
+            }
+            else
+            {
+                AutoNote.Text = "Не удалось изменить автозапуск.";
+            }
+        }
+
+        private void ChkAutoApply_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_loading) return;
+            AutoStart.SetEnabled(ChkAutostart.IsChecked == true, ChkAutoApply.IsChecked == true);
+            AutoNote.Text = ChkAutoApply.IsChecked == true
+                ? "Запомненная рабочая стратегия будет применяться при каждом входе в Windows."
+                : "Автоприменение выключено — обход поднимется только через службу Windows.";
+            Load();
+        }
+
+        private void ChkServiceMode_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_loading) return;
+            Config.Set(AutoConnect.KeyPreferService, ChkServiceMode.IsChecked == true ? "true" : "false");
+        }
+
+        private async void BtnApplyRemembered_Click(object sender, RoutedEventArgs e)
+        {
+            var remembered = AutoConnect.KnownWorking();
+            if (remembered.Count == 0)
+            {
+                AutoNote.Text = "Пока нечего применять — сначала подберите рабочую стратегию.";
+                return;
+            }
+            AutoNote.Text = "Применяю…";
+            string root = Status.ResolveRoot(Config.Get("zapretRoot", null));
+            if (string.IsNullOrEmpty(root)) { AutoNote.Text = "Не найдена папка zapret."; return; }
+            bool preferService = !string.Equals(Config.Get(AutoConnect.KeyPreferService, "true"), "false", StringComparison.OrdinalIgnoreCase);
+            var result = await System.Threading.Tasks.Task.Run(() =>
+                preferService
+                    ? ServiceOps.InstallStrategyAsService(root, remembered[0])
+                    : ServiceOps.LaunchStrategyProcess(root, remembered[0]));
+            AutoNote.Text = result.ok
+                ? "Подключено: " + Path.GetFileName(remembered[0]) + (preferService ? " (служба)" : " (процесс)")
+                : "Не удалось: " + (result.reason ?? "ошибка");
+        }
+
+        private void BtnForget_Click(object sender, RoutedEventArgs e)
+        {
+            Config.Set(AutoConnect.KeyKnownWorking, string.Empty);
+            Config.Set(AutoConnect.KeyLastWinner, string.Empty);
+            AutoNote.Text = "Запомненные стратегии очищены.";
+            Load();
+        }
+
+        private void BtnChooseRoot_Click(object sender, RoutedEventArgs e)
+        {
+            // net48 has no OpenFolderDialog; FolderBrowserDialog is the classic
+            // one and works from WPF as long as System.Windows.Forms is referenced.
+            using (var dialog = new System.Windows.Forms.FolderBrowserDialog())
+            {
+                dialog.Description = "Выберите папку zapret";
+                var first = Status.CandidateRoots().FirstOrDefault();
+                if (!string.IsNullOrEmpty(first) && Directory.Exists(first)) dialog.SelectedPath = first;
+                if (dialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+                {
+                    Config.Set("zapretRoot", dialog.SelectedPath);
+                }
+            }
+            Load();
+        }
+
+        private void BtnAutoRoot_Click(object sender, RoutedEventArgs e)
+        {
+            var found = Status.ResolveRoot(null);
+            if (!string.IsNullOrEmpty(found)) Config.Set("zapretRoot", found);
+            AutoNote.Text = string.IsNullOrEmpty(found) ? "Автоматически не нашёл." : "Найдено: " + found;
+            Load();
+        }
+    }
+}

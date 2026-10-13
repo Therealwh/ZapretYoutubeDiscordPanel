@@ -1,37 +1,11 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
-using Ydp.Zapret;
+using System.Text;
 
 namespace Ydp
 {
-    /// <summary>Bridges the status snapshot onto the dashboard tiles.</summary>
-    public static class StatusPresenter
-    {
-        public static void Refresh(MainWindow window)
-        {
-            string configured = Config.Get("zapretRoot", null);
-            string root = Status.ResolveRoot(configured);
-            var st = Status.GetStatus(root);
-
-            window.PowerState.Text = st.activeMode == "off" ? "Выключен" : "Включён";
-            window.StatStrategy.Text = string.IsNullOrEmpty(st.serviceStrategy) ? "—" : st.serviceStrategy;
-            window.StatMode.Text = st.activeMode == "service" ? "Служба Windows"
-                : st.activeMode == "process" ? "Процесс" : "—";
-            window.StatZapret.Text = Describe(st.service);
-            window.StatWinDivert.Text = st.winDivert == null ? "Нет службы" : Describe(st.winDivert);
-            window.StatWinws.Text = st.winwsProcess ? "Запущен" : "Не запущен";
-            window.StatWinwsPath.Text = st.winwsProcessPath ?? "";
-            window.StatRoot.Text = string.IsNullOrEmpty(root) ? "не найдена" : root;
-        }
-
-        private static string Describe(ServiceInfoView service)
-        {
-            if (service == null || !service.exists) return "Не установлена";
-            return service.running ? "Работает" : "Остановлена";
-        }
-    }
-
-    /// <summary>JSON-file config store (same file layout as the Node build).</summary>
+/// <summary>JSON-file config store (same file layout as the Node build).</summary>
     public static class Config
     {
         private static readonly object Gate = new object();

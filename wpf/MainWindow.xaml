@@ -48,106 +48,33 @@
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
                     <RowDefinition Height="*" />
+                    <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
                 <TextBlock Grid.Row="0" Text="YOUTUBEDISCORDPANEL" Margin="18,20,12,18"
                            FontWeight="Bold" FontSize="13" Foreground="{StaticResource TextBrush}" />
                 <StackPanel Grid.Row="1" VerticalAlignment="Top">
-                    <RadioButton Style="{StaticResource NavItem}" GroupName="nav" IsChecked="True" Tag="dashboard" Content="Обход" />
-                    <RadioButton Style="{StaticResource NavItem}" GroupName="nav" Tag="strategies" Content="Стратегии" />
-                    <RadioButton Style="{StaticResource NavItem}" GroupName="nav" Tag="filters" Content="Фильтры" />
-                    <RadioButton Style="{StaticResource NavItem}" GroupName="nav" Tag="lists" Content="Списки" />
-                    <RadioButton Style="{StaticResource NavItem}" GroupName="nav" Tag="updates" Content="Обновления" />
-                    <RadioButton Style="{StaticResource NavItem}" GroupName="nav" Tag="diagnostics" Content="Диагностика" />
-                    <RadioButton Style="{StaticResource NavItem}" GroupName="nav" Tag="logs" Content="Логи" />
-                    <RadioButton Style="{StaticResource NavItem}" GroupName="nav" Tag="settings" Content="Настройки" />
+                    <RadioButton x:Name="NavDashboard" Style="{StaticResource NavItem}" GroupName="nav" IsChecked="True"
+                                 Content="Обход" Tag="dashboard" Checked="Nav_Checked" />
+                    <RadioButton x:Name="NavStrategies" Style="{StaticResource NavItem}" GroupName="nav"
+                                 Content="Стратегии" Tag="strategies" Checked="Nav_Checked" />
+                    <RadioButton x:Name="NavFilters" Style="{StaticResource NavItem}" GroupName="nav"
+                                 Content="Фильтры" Tag="filters" Checked="Nav_Checked" IsEnabled="False" Opacity="0.5" />
+                    <RadioButton x:Name="NavLists" Style="{StaticResource NavItem}" GroupName="nav"
+                                 Content="Списки" Tag="lists" Checked="Nav_Checked" IsEnabled="False" Opacity="0.5" />
+                    <RadioButton x:Name="NavUpdates" Style="{StaticResource NavItem}" GroupName="nav"
+                                 Content="Обновления" Tag="updates" Checked="Nav_Checked" IsEnabled="False" Opacity="0.5" />
+                    <RadioButton x:Name="NavDiagnostics" Style="{StaticResource NavItem}" GroupName="nav"
+                                 Content="Диагностика" Tag="diagnostics" Checked="Nav_Checked" IsEnabled="False" Opacity="0.5" />
+                    <RadioButton x:Name="NavLogs" Style="{StaticResource NavItem}" GroupName="nav"
+                                 Content="Логи" Tag="logs" Checked="Nav_Checked" IsEnabled="False" Opacity="0.5" />
+                    <RadioButton x:Name="NavSettings" Style="{StaticResource NavItem}" GroupName="nav"
+                                 Content="Настройки" Tag="settings" Checked="Nav_Checked" />
                 </StackPanel>
+                <TextBlock x:Name="FooterNote" Grid.Row="2" Margin="18,10,12,16" Style="{StaticResource Dim}" TextWrapping="Wrap" />
             </Grid>
         </Border>
 
-        <!-- Content -->
-        <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto" Padding="24,20,24,24">
-            <StackPanel>
-                <!-- Power card -->
-                <Border Style="{StaticResource Card}" Margin="0,0,0,16">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                        </Grid.ColumnDefinitions>
-                        <Border Grid.Column="0" Width="56" Height="32" CornerRadius="16"
-                                Background="{StaticResource AccentBrush}" VerticalAlignment="Center" />
-                        <StackPanel Grid.Column="1" Margin="16,0,16,0" VerticalAlignment="Center">
-                            <TextBlock Text="Обход" Style="{StaticResource H1}" />
-                            <TextBlock x:Name="PowerState" Text="Выключен" Style="{StaticResource Dim}" />
-                        </StackPanel>
-                        <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
-                            <Button Content="Подключить рабочий обход" Style="{StaticResource BtnPrimary}" Margin="0,0,10,0" />
-                            <Button Content="Перезапустить" Style="{StaticResource Btn}" />
-                        </StackPanel>
-                    </Grid>
-                </Border>
-
-                <!-- Status tiles -->
-                <UniformGrid Columns="3" Margin="0,0,0,16">
-                    <Border Style="{StaticResource Card}" Margin="0,0,10,10">
-                        <StackPanel>
-                            <TextBlock Text="Стратегия" Style="{StaticResource Dim}" />
-                            <TextBlock x:Name="StatStrategy" Text="—" Style="{StaticResource Value}" />
-                        </StackPanel>
-                    </Border>
-                    <Border Style="{StaticResource Card}" Margin="0,0,10,10">
-                        <StackPanel>
-                            <TextBlock Text="Режим" Style="{StaticResource Dim}" />
-                            <TextBlock x:Name="StatMode" Text="—" Style="{StaticResource Value}" />
-                        </StackPanel>
-                    </Border>
-                    <Border Style="{StaticResource Card}" Margin="0,0,0,10">
-                        <StackPanel>
-                            <TextBlock Text="Служба zapret" Style="{StaticResource Dim}" />
-                            <TextBlock x:Name="StatZapret" Text="—" Style="{StaticResource Value}" />
-                        </StackPanel>
-                    </Border>
-                    <Border Style="{StaticResource Card}" Margin="0,0,10,10">
-                        <StackPanel>
-                            <TextBlock Text="Служба WinDivert" Style="{StaticResource Dim}" />
-                            <TextBlock x:Name="StatWinDivert" Text="—" Style="{StaticResource Value}" />
-                        </StackPanel>
-                    </Border>
-                    <Border Style="{StaticResource Card}" Margin="0,0,10,10">
-                        <StackPanel>
-                            <TextBlock Text="Процесс winws" Style="{StaticResource Dim}" />
-                            <TextBlock x:Name="StatWinws" Text="—" Style="{StaticResource Value}" />
-                            <TextBlock x:Name="StatWinwsPath" Text="" Style="{StaticResource Dim}" />
-                        </StackPanel>
-                    </Border>
-                    <Border Style="{StaticResource Card}" Margin="0,0,0,10">
-                        <StackPanel>
-                            <TextBlock Text="Папка zapret" Style="{StaticResource Dim}" />
-                            <TextBlock x:Name="StatRoot" Text="—" Style="{StaticResource Value}" />
-                        </StackPanel>
-                    </Border>
-                </UniformGrid>
-
-                <!-- Telegram proxy -->
-                <Border Style="{StaticResource Card}">
-                    <StackPanel>
-                        <TextBlock Text="Telegram (MTProto → WebSocket)" Style="{StaticResource H1}" Margin="0,0,0,4" />
-                        <TextBlock x:Name="TgHint" Text="Локальный прокси на 127.0.0.1:1443" Style="{StaticResource Dim}" Margin="0,0,0,10" />
-                        <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
-                            <TextBlock x:Name="TgState" Text="Выключен" Style="{StaticResource Dim}" VerticalAlignment="Center" Margin="0,0,12,0" />
-                            <TextBlock x:Name="TgStats" Text="" Style="{StaticResource Dim}" VerticalAlignment="Center" />
-                        </StackPanel>
-                        <StackPanel Orientation="Horizontal">
-                            <Button Content="Запустить" Style="{StaticResource BtnPrimary}" Margin="0,0,10,0" />
-                            <Button Content="Открыть в Telegram" Style="{StaticResource Btn}" Margin="0,0,10,0" />
-                            <Button Content="Копировать ссылку" Style="{StaticResource Btn}" Margin="0,0,10,0" />
-                            <Button Content="Новый секрет" Style="{StaticResource Btn}" />
-                        </StackPanel>
-                        <TextBlock x:Name="TgLink" Text="" Style="{StaticResource Dim}" Margin="0,12,0,0" />
-                    </StackPanel>
-                </Border>
-            </StackPanel>
-        </ScrollViewer>
+        <!-- Pages -->
+        <ContentControl x:Name="PageHost" Grid.Column="1" Margin="24,20,24,20" />
     </Grid>
 </Window>
