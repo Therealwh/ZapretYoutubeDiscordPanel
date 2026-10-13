@@ -137,17 +137,25 @@ namespace Ydp.Pages
             }
         }
 
-        private void Refresh()
+private void Refresh()
         {
             string configured = Config.Get("zapretRoot", null);
             string root = Status.ResolveRoot(configured);
             var st = Status.GetStatus(root);
 
             bool on = st.activeMode != "off";
-            PowerState.Text = on ? "Включён" : "Выключен";
+            PowerState.Text = on
+                ? "Включён · " + (st.serviceStrategy ?? "текущая стратегия")
+                : "Выключен — обход не активен";
             SwitchTrack.Background = on
                 ? (System.Windows.Media.Brush)FindResource("AccentBrush")
                 : (System.Windows.Media.Brush)FindResource("BorderBrush2");
+            Knob.HorizontalAlignment = on ? HorizontalAlignment.Right : HorizontalAlignment.Left;
+            Knob.Margin = on ? new Thickness(4, 0, 4, 0) : new Thickness(4, 0, 0, 0);
+            Knob.Fill = on
+                ? (System.Windows.Media.Brush)FindResource("TextBrush")
+                : (System.Windows.Media.Brush)FindResource("TextDimBrush");
+
             StatStrategy.Text = string.IsNullOrEmpty(st.serviceStrategy) ? "—" : st.serviceStrategy;
             StatMode.Text = st.activeMode == "service" ? "Служба Windows"
                 : st.activeMode == "process" ? "Процесс" : "—";
@@ -156,11 +164,24 @@ namespace Ydp.Pages
             StatWinws.Text = st.winwsProcess ? "Запущен" : "Не запущен";
             StatWinwsPath.Text = st.winwsProcessPath ?? "";
             StatRoot.Text = string.IsNullOrEmpty(root) ? "не найдена" : root;
-            TgState.Text = TgProxy.Stats.running ? "Включён" : "Выключен";
-            TgStats.Text = TgProxy.Stats.running
-                ? $"подключений: {TgProxy.Stats.connections} · вверх: {Human(TgProxy.Stats.bytesUp)} · вниз: {Human(TgProxy.Stats.bytesDown)}"
-                : "";
-            TgLink.Text = string.IsNullOrEmpty(TgProxy.Stats.proxyUrl) ? "" : TgProxy.Stats.proxyUrl;
+
+            var remembered = AutoConnect.KnownWorking();
+            StatRemembered.Text = remembered.Count == 0
+                ? "не запомнено"
+                : System.IO.Path.GetFileName(remembered[0]);
+
+            StatAutostart.Text = AutoStart.IsEnabled()
+                ? (AutoStart.AutoApplyEnabled() ? "включён" : "только панель")
+                : "выключен";
+
+            
+            TgState.Text = TgProxy.Running ? "Включён" : "Выключен";
+            // Only one line about the state: the hint already names the endpoint.
+            TgStats.Text = TgProxy.Running
+                ? "подключений: " + TgProxy.Stats.connections + " · вверх: " + Human(TgProxy.Stats.bytesUp)
+                  + " · вниз: " + Human(TgProxy.Stats.bytesDown)
+                : string.Empty;
+            TgLink.Text = TgProxy.ProxyLink();
         }
 
         private static string Describe(ServiceInfoView service)
@@ -216,7 +237,7 @@ namespace Ydp.Pages
             return "Не удалось подключить: " + (r.reason ?? "ошибка");
         }
 
-        private async void BtnRestart_Click(object sender, RoutedEventArgs e)
+private async void BtnRestart_Click(object sender, RoutedEventArgs e)
         {
             if (_busy) return;
             string root = Status.ResolveRoot(Config.Get("zapretRoot", null));
@@ -236,6 +257,77 @@ namespace Ydp.Pages
                 _busy = false;
                 Refresh();
             }
+        }
+
+        private async void BtnStop_Click(object sender, RoutedEventArgs e)
+        {
+            if (_busy) return;
+            _busy = true;
+            try
+            {
+                await System.Threading.Tasks.Task.Run(() =>
+                {
+                    Services.ServiceOps.KillWinws();
+                    Services.ServiceOps.StopService();
+                });
+            }
+            finally
+            {
+                _busy = false;
+                Refresh();
+            }
+        }
+
+        /// <summary>Jump to a section from the quick-actions card.</summary>
+        private void Nav_Click(object sender, RoutedEventArgs e)
+        {
+            var button = sender as System.Windows.Controls.Button;
+            var target = button?.Tag as string;
+            if (string.IsNullOrEmpty(target)) return;
+            if (Window.GetWindow(this) is MainWindow main) main.ShowSection(target);
+        }
+
+        private async void BtnFindWorking_Click(object sender, RoutedEventArgs e)
+        {
+            if (_busy) return;
+            _busy = true;
+            QuickNote.Text = "Подбираю рабочую стратегию…";
+            string root = Status.ResolveRoot(Config.Get("zapretRoot", null));
+            try
+            {
+                if (string.IsNullOrEmpty(root))
+                {
+                    QuickNote.Text = "Не найдена папка zapret.";
+                    return;
+                }
+                var result = await System.Threading.Tasks.Task.Run(() => AutoConnect.Connect(root,
+                    msg => Dispatcher.Invoke(() => QuickNote.Text = msg), null));
+                QuickNote.Text = DescribeResult(result);
+            }
+            catch (Exception ex)
+            {
+                QuickNote.Text = "Ошибка: " + ex.Message;
+            }
+            finally
+            {
+                _busy = false;
+                Refresh();
+            }
+        }
+
+        private async void BtnVerify_Click(object sender, RoutedEventArgs e)
+        {
+            QuickNote.Text = "Проверяю текущий обход…";
+            string root = Status.ResolveRoot(Config.Get("zapretRoot", null));
+            if (string.IsNullOrEmpty(root))
+            {
+                QuickNote.Text = "Не найдена папка zapret.";
+                return;
+            }
+            var verify = await System.Threading.Tasks.Task.Run(() => Tester.VerifyStrategy(root, attempts: 1));
+            QuickNote.Text = verify.ok
+                ? "Обход работает: Discord и YouTube отвечают."
+                : "Обход не отвечает (проверена одна попытка).";
         }
     }
 }

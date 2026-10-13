@@ -4,86 +4,137 @@
              Loaded="Page_Loaded">
     <StackPanel>
 
-        <!-- Power card -->
-        <Border Style="{StaticResource Card}" Margin="0,0,0,16">
+        <!-- Status strip: one line that answers "what is going on right now" -->
+        <Border Style="{StaticResource Card}" Margin="0,0,0,14" Padding="18,16">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="*" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
-                <Border x:Name="SwitchTrack" Grid.Column="0" Width="56" Height="32" CornerRadius="16"
-                        Background="{StaticResource BorderBrush2}" VerticalAlignment="Center" />
+
+                <Border x:Name="SwitchTrack" Grid.Column="0" Width="58" Height="34" CornerRadius="17"
+                        Background="{StaticResource BorderBrush2}" VerticalAlignment="Center">
+                    <Ellipse x:Name="Knob" Width="26" Height="26" Fill="{StaticResource TextDimBrush}"
+                             HorizontalAlignment="Left" Margin="4,0,0,0" VerticalAlignment="Center" />
+                </Border>
+
                 <StackPanel Grid.Column="1" Margin="16,0,16,0" VerticalAlignment="Center">
-                    <TextBlock Text="Обход" Style="{StaticResource H1}" />
-                    <TextBlock x:Name="PowerState" Text="Выключен" Style="{StaticResource Dim}" />
+                    <TextBlock Text="Обход" Style="{StaticResource CardTitle}" />
+                    <TextBlock x:Name="PowerState" Text="Выключен" Style="{StaticResource Hint}" />
                 </StackPanel>
+
                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
                     <Button x:Name="BtnAuto" Content="Подключить рабочий обход" Style="{StaticResource BtnPrimary}"
                             Margin="0,0,10,0" Click="BtnAuto_Click" />
-                    <Button x:Name="BtnRestart" Content="Перезапустить" Style="{StaticResource Btn}" Click="BtnRestart_Click" />
+                    <Button x:Name="BtnRestart" Content="Перезапустить" Style="{StaticResource Btn}"
+                            Margin="0,0,10,0" Click="BtnRestart_Click" />
+                    <Button Content="Остановить" Style="{StaticResource Btn}" Click="BtnStop_Click" />
                 </StackPanel>
             </Grid>
         </Border>
 
         <!-- Status tiles -->
-        <UniformGrid Columns="3" Margin="0,0,0,16">
-            <Border Style="{StaticResource Card}" Margin="0,0,10,10">
+        <UniformGrid Columns="4" Margin="0,0,0,14">
+            <Border Style="{StaticResource Card}" Margin="0,0,8,8" Padding="14,12">
                 <StackPanel>
-                    <TextBlock Text="Стратегия" Style="{StaticResource Dim}" />
-                    <TextBlock x:Name="StatStrategy" Text="—" Style="{StaticResource Value}" />
+                    <TextBlock Text="СТРАТЕГИЯ" Style="{StaticResource TileLabel}" />
+                    <TextBlock x:Name="StatStrategy" Text="—" Style="{StaticResource TileValue}" ToolTip="" />
                 </StackPanel>
             </Border>
-            <Border Style="{StaticResource Card}" Margin="0,0,10,10">
+            <Border Style="{StaticResource Card}" Margin="0,0,8,8" Padding="14,12">
                 <StackPanel>
-                    <TextBlock Text="Режим" Style="{StaticResource Dim}" />
-                    <TextBlock x:Name="StatMode" Text="—" Style="{StaticResource Value}" />
+                    <TextBlock Text="РЕЖИМ" Style="{StaticResource TileLabel}" />
+                    <TextBlock x:Name="StatMode" Text="—" Style="{StaticResource TileValue}" />
                 </StackPanel>
             </Border>
-            <Border Style="{StaticResource Card}" Margin="0,0,0,10">
+            <Border Style="{StaticResource Card}" Margin="0,0,8,8" Padding="14,12">
                 <StackPanel>
-                    <TextBlock Text="Служба zapret" Style="{StaticResource Dim}" />
-                    <TextBlock x:Name="StatZapret" Text="—" Style="{StaticResource Value}" />
+                    <TextBlock Text="СЛУЖБА ZAPRET" Style="{StaticResource TileLabel}" />
+                    <TextBlock x:Name="StatZapret" Text="—" Style="{StaticResource TileValue}" />
                 </StackPanel>
             </Border>
-            <Border Style="{StaticResource Card}" Margin="0,0,10,10">
+            <Border Style="{StaticResource Card}" Margin="0,0,0,8" Padding="14,12">
                 <StackPanel>
-                    <TextBlock Text="Служба WinDivert" Style="{StaticResource Dim}" />
-                    <TextBlock x:Name="StatWinDivert" Text="—" Style="{StaticResource Value}" />
+                    <TextBlock Text="WINDIVERT" Style="{StaticResource TileLabel}" />
+                    <TextBlock x:Name="StatWinDivert" Text="—" Style="{StaticResource TileValue}" />
                 </StackPanel>
             </Border>
-            <Border Style="{StaticResource Card}" Margin="0,0,10,10">
+            <Border Style="{StaticResource Card}" Margin="0,0,8,0" Padding="14,12">
                 <StackPanel>
-                    <TextBlock Text="Процесс winws" Style="{StaticResource Dim}" />
-                    <TextBlock x:Name="StatWinws" Text="—" Style="{StaticResource Value}" />
-                    <TextBlock x:Name="StatWinwsPath" Text="" Style="{StaticResource Dim}" />
+                    <TextBlock Text="ПРОЦЕСС WINWS" Style="{StaticResource TileLabel}" />
+                    <TextBlock x:Name="StatWinws" Text="—" Style="{StaticResource TileValue}" />
+                    <TextBlock x:Name="StatWinwsPath" Text="" Style="{StaticResource Hint}" TextTrimming="CharacterEllipsis" />
                 </StackPanel>
             </Border>
-            <Border Style="{StaticResource Card}" Margin="0,0,0,10">
+            <Border Style="{StaticResource Card}" Margin="0,0,8,0" Padding="14,12">
                 <StackPanel>
-                    <TextBlock Text="Папка zapret" Style="{StaticResource Dim}" />
-                    <TextBlock x:Name="StatRoot" Text="—" Style="{StaticResource Value}" />
+                    <TextBlock Text="ПАПКА ZAPRET" Style="{StaticResource TileLabel}" />
+                    <TextBlock x:Name="StatRoot" Text="—" Style="{StaticResource TileValue}" />
+                </StackPanel>
+            </Border>
+            <Border Style="{StaticResource Card}" Margin="0,0,8,0" Padding="14,12">
+                <StackPanel>
+                    <TextBlock Text="ЗАПОМНЕНО" Style="{StaticResource TileLabel}" />
+                    <TextBlock x:Name="StatRemembered" Text="—" Style="{StaticResource TileValue}" />
+                </StackPanel>
+            </Border>
+            <Border Style="{StaticResource Card}" Margin="0,0,0,0" Padding="14,12">
+                <StackPanel>
+                    <TextBlock Text="АВТОЗАПУСК" Style="{StaticResource TileLabel}" />
+                    <TextBlock x:Name="StatAutostart" Text="—" Style="{StaticResource TileValue}" />
                 </StackPanel>
             </Border>
         </UniformGrid>
 
-        <!-- Telegram proxy -->
-        <Border Style="{StaticResource Card}">
-            <StackPanel>
-                <TextBlock Text="Telegram (MTProto → WebSocket)" Style="{StaticResource H1}" Margin="0,0,0,4" />
-                <TextBlock x:Name="TgHint" Text="Локальный прокси на 127.0.0.1:1443" Style="{StaticResource Dim}" Margin="0,0,0,10" />
-                <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
-                    <TextBlock x:Name="TgState" Text="Выключен" Style="{StaticResource Dim}" VerticalAlignment="Center" Margin="0,0,12,0" />
-                    <TextBlock x:Name="TgStats" Text="" Style="{StaticResource Dim}" VerticalAlignment="Center" />
+        <!-- Telegram proxy + quick actions -->
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="2*" />
+                <ColumnDefinition Width="12" />
+                <ColumnDefinition Width="1*" />
+            </Grid.ColumnDefinitions>
+
+            <Border Grid.Column="0" Style="{StaticResource Card}">
+                <StackPanel>
+                    <Grid Margin="0,0,0,10">
+                        <TextBlock Text="Telegram · MTProto → WebSocket" Style="{StaticResource CardTitle}" />
+                        <TextBlock x:Name="TgState" Text="Выключен" Style="{StaticResource Hint}"
+                                   HorizontalAlignment="Right" />
+                    </Grid>
+                    <TextBlock x:Name="TgHint" Text="Локальный прокси на 127.0.0.1:1443" Style="{StaticResource Hint}"
+                               Margin="0,0,0,8" />
+                    <TextBlock x:Name="TgStats" Text="" Style="{StaticResource Hint}" Margin="0,0,0,10" />
+                    <StackPanel Orientation="Horizontal">
+                        <Button x:Name="BtnTgToggle" Content="Запустить" Style="{StaticResource BtnPrimary}"
+                                Margin="0,0,8,0" Click="BtnTgToggle_Click" />
+                        <Button Content="Открыть в Telegram" Style="{StaticResource Btn}" Margin="0,0,8,0" Click="BtnTgOpen_Click" />
+                        <Button Content="Копировать ссылку" Style="{StaticResource Btn}" Margin="0,0,8,0" Click="BtnTgCopy_Click" />
+                        <Button Content="Новый секрет" Style="{StaticResource Btn}" Click="BtnTgRegen_Click" />
+                    </StackPanel>
+                    <TextBlock x:Name="TgLink" Text="" Style="{StaticResource Hint}" Margin="0,10,0,0"
+                               TextTrimming="CharacterEllipsis" />
                 </StackPanel>
-                <StackPanel Orientation="Horizontal">
-                    <Button x:Name="BtnTgToggle" Content="Запустить" Style="{StaticResource BtnPrimary}" Margin="0,0,10,0" Click="BtnTgToggle_Click" />
-                    <Button x:Name="BtnTgOpen" Content="Открыть в Telegram" Style="{StaticResource Btn}" Margin="0,0,10,0" Click="BtnTgOpen_Click" />
-                    <Button x:Name="BtnTgCopy" Content="Копировать ссылку" Style="{StaticResource Btn}" Margin="0,0,10,0" Click="BtnTgCopy_Click" />
-                    <Button x:Name="BtnTgRegen" Content="Новый секрет" Style="{StaticResource Btn}" Click="BtnTgRegen_Click" />
+            </Border>
+
+            <Border Grid.Column="2" Style="{StaticResource Card}">
+                <StackPanel>
+                    <TextBlock Text="Быстрые действия" Style="{StaticResource CardTitle}" Margin="0,0,0,10" />
+                    <Button Content="Стратегии" Style="{StaticResource Btn}" HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Left" Margin="0,0,0,8" Tag="strategies" Click="Nav_Click" />
+                    <Button Content="Подбор и тест стратегий" Style="{StaticResource Btn}" HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Left" Margin="0,0,0,8" Click="BtnFindWorking_Click" />
+                    <Button Content="Проверить обход" Style="{StaticResource Btn}" HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Left" Margin="0,0,0,8" Click="BtnVerify_Click" />
+                    <Button Content="Диагностика" Style="{StaticResource Btn}" HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Left" Margin="0,0,0,8" Tag="diagnostics" Click="Nav_Click" />
+                    <Button Content="Обновить zapret" Style="{StaticResource Btn}" HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Left" Margin="0,0,0,8" Tag="updates" Click="Nav_Click" />
+                    <Button Content="Логи" Style="{StaticResource Btn}" HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Left" Tag="logs" Click="Nav_Click" />
+                    <TextBlock x:Name="QuickNote" Style="{StaticResource Hint}" Margin="0,10,0,0" />
                 </StackPanel>
-                <TextBlock x:Name="TgLink" Text="" Style="{StaticResource Dim}" Margin="0,12,0,0" />
-            </StackPanel>
-        </Border>
+            </Border>
+        </Grid>
     </StackPanel>
 </UserControl>

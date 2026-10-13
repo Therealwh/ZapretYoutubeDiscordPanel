@@ -1,0 +1,11 @@
+{
+  "version": 2,
+  "dgSpecHash": "+aUK99OOcmQ=",
+  "success": true,
+  "projectFilePath": "C:\\Zapret_panel\\YoutubeDiscordPanel\\wpf\\setup\\Setup.csproj",
+  "expectedPackageFiles": [
+    "C:\\Users\\LZT\\.nuget\\packages\\microsoft.netframework.referenceassemblies\\1.0.3\\microsoft.netframework.referenceassemblies.1.0.3.nupkg.sha512",
+    "C:\\Users\\LZT\\.nuget\\packages\\microsoft.netframework.referenceassemblies.net48\\1.0.3\\microsoft.netframework.referenceassemblies.net48.1.0.3.nupkg.sha512"
+  ],
+  "logs": []
+}

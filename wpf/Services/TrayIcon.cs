@@ -93,6 +93,15 @@ namespace Ydp.Services
             Show();
         }
 
+        /// <summary>Lets the window really close instead of hiding to the tray.</summary>
+        public Action AllowClose { get; set; }
+
+        private void Exit()
+        {
+            AllowClose?.Invoke();
+            Environment.Exit(0);
+        }
+
         public void Notify(string title, string message)
         {
             try

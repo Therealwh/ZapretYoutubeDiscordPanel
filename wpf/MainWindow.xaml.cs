@@ -80,6 +80,24 @@ namespace Ydp
             }
         }
 
+        /// <summary>Open a section from anywhere (quick actions, tray, deep links).</summary>
+        public void ShowSection(string tag)
+        {
+            switch (tag)
+            {
+                case "strategies": NavStrategies.IsChecked = true; break;
+                case "settings": NavSettings.IsChecked = true; break;
+                case "filters": NavFilters.IsChecked = true; break;
+                case "lists": NavLists.IsChecked = true; break;
+                case "updates": NavUpdates.IsChecked = true; break;
+                case "diagnostics": NavDiagnostics.IsChecked = true; break;
+                case "logs": NavLogs.IsChecked = true; break;
+                default: NavDashboard.IsChecked = true; break;
+            }
+            Show();
+            Activate();
+        }
+
         private void UpdateFooter()
         {
             string root = Status.ResolveRoot(Config.Get("zapretRoot", null));

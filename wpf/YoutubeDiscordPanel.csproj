@@ -32,6 +32,15 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <!-- The installer is a separate project; its sources (and its generated
+         AssemblyInfo) must not be globbed into the panel. -->
+    <Compile Remove="setup\**" />
+    <None Remove="setup\**" />
+    <Page Remove="setup\**" />
+    <EmbeddedResource Remove="setup\**" />
+  </ItemGroup>
+
+  <ItemGroup>
     <!-- ServiceController for the SCM queries (no sc.exe child processes). -->
     <Reference Include="System.ServiceProcess" />
     <!-- FolderBrowserDialog: net48 has no OpenFolderDialog. -->

@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Installer for the panel.
+
+    Deliberately a second tiny net48 exe instead of Inno/NSIS: the panel itself
+    needs no runtime, so neither should its installer. This one is ~50 KB and
+    copies the files, makes the shortcuts, registers the uninstall entry and the
+    login item - no bundler, no payload compression, no 5 MB runtime.
+  -->
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net48</TargetFramework>
+    <UseWPF>false</UseWPF>
+    <LangVersion>latest</LangVersion>
+    <AssemblyName>YoutubeDiscordPanel-Setup</AssemblyName>
+    <RootNamespace>Ydp.Setup</RootNamespace>
+    <ApplicationIcon>..\Resources\app.ico</ApplicationIcon>
+    <Product>YoutubeDiscordPanel</Product>
+    <Version>2.0.0</Version>
+    <FileVersion>2.0.0.0</FileVersion>
+    <DebugType>none</DebugType>
+    <!-- We define Main ourselves; the SDK also generates one for WinExe. -->
+    <StartupObject>Ydp.Setup.Program</StartupObject>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- WScript.Shell via late binding needs Microsoft.CSharp. -->
+    <Reference Include="Microsoft.CSharp" />
+    <Reference Include="System.Windows.Forms" />
+    <Reference Include="System.IO.Compression" />
+    <Reference Include="System.IO.Compression.FileSystem" />
+  </ItemGroup>
+
+</Project>

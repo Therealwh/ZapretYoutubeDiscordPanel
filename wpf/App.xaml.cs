@@ -74,14 +74,26 @@ namespace Ydp
                 Tray = new TrayIcon(window);
                 window.Closed += (s, args) => Tray.Dispose();
                 // Closing the window hides to the tray instead of killing the
-                // bypass, which is how the panel is meant to live after setup.
+                // bypass. The first close explains this, so the window does not
+                // look like it simply refused to close.
+                int closeCount = 0;
                 window.Closing += (s, args) =>
                 {
-                    if (!window.IsLoaded) return;
-                    var closing = args.Cancel;
-                    args.Cancel = true;
-                    window.Hide();
+                    var e = args as System.ComponentModel.CancelEventArgs;
+                    if (e == null || !_allowClose)
+                    {
+                        if (e != null) e.Cancel = true;
+                        window.Hide();
+                        closeCount++;
+                        if (closeCount == 1)
+                        {
+                            Tray.Notify("Панель свёрнута в трей",
+                                "Обход продолжает работать. Откройте панель двойным щелчком по значку, "
+                                + "выход — через «Выход» в меню значка.");
+                        }
+                    }
                 };
+                Tray.AllowClose = () => _allowClose = true;
 
                 window.Show();
                 Log("window shown");
@@ -112,5 +124,6 @@ namespace Ydp
         }
 
         private static TrayIcon Tray;
+        private static bool _allowClose;
     }
 }
