@@ -1,7 +1,7 @@
 'use strict';
 const { test } = require('node:test');
 const assert = require('node:assert');
-const { groupStats } = require('../src/main/zapret/tester');
+const { groupStats, isWorking, orderTargets, DECISIVE_TARGETS } = require('../src/main/zapret/tester');
 
 const urlTarget = (name, results) => ({ kind: 'url', name, results });
 const ok3 = { HTTP: 'OK', 'TLS1.2': 'OK', 'TLS1.3': 'UNSUP' };
@@ -50,4 +50,37 @@ test('groupStats: unrelated targets go to other group', () => {
   assert.strictEqual(g.other.total, 2);
   assert.strictEqual(g.discord.total, 0);
   assert.strictEqual(g.youtube.total, 0);
+});
+
+test('isWorking matches the stopOnFirst verdict and tolerates junk', () => {
+  assert.strictEqual(isWorking(groupStats([urlTarget('DiscordMain', ok3), urlTarget('YouTubeWeb', ok3)])), true);
+  assert.strictEqual(isWorking(groupStats([urlTarget('DiscordMain', err3), urlTarget('YouTubeWeb', ok3)])), false);
+  assert.strictEqual(isWorking(null), false);
+  assert.strictEqual(isWorking(undefined), false);
+  assert.strictEqual(isWorking({}), false);
+});
+
+test('orderTargets puts one Discord + one YouTube target first', () => {
+  const list = orderTargets([
+    ['DiscordGateway', 'https://gateway.discord.gg'],
+    ['YouTubeImage', 'https://i.ytimg.com'],
+    ['CloudflareWeb', 'https://www.cloudflare.com'],
+    ['DiscordMain', 'https://discord.com'],
+    ['YouTubeWeb', 'https://www.youtube.com'],
+    ['CloudflareDNS1111', 'PING:1.1.1.1'],
+  ]);
+  assert.deepStrictEqual(list.slice(0, 2).map(([n]) => n), DECISIVE_TARGETS);
+  // Nothing is lost or duplicated by the reordering.
+  assert.strictEqual(list.length, 6);
+  assert.strictEqual(new Set(list.map(([n]) => n)).size, 6);
+});
+
+test('orderTargets keeps working when targets.txt has no decisive entry', () => {
+  const list = orderTargets([['YouTubeWeb', 'u'], ['DiscordMain', 'u'], ['GoogleMain', 'u']]);
+  assert.strictEqual(list.length, 3);
+  assert.ok(list.map(([n]) => n).includes('GoogleMain'));
+});
+
+test('orderTargets leaves an empty target list alone', () => {
+  assert.deepStrictEqual(orderTargets([]), []);
 });

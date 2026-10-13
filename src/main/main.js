@@ -615,35 +615,57 @@ ipcMain.handle('zapret:repair', async (_e, targetDir) => {
       .catch((e) => ({ ok: false, reason: e.code || 'error', message: e.message }));
   });
 
-  // One-click "connect working bypass": if the current bypass already works —
-  // keep it. Otherwise test strategies in order and connect the first one
-  // where Discord AND YouTube are reachable; if none is perfect, connect the
-  // best available so the user is never left without bypass.
+  // Strategies that passed at least once on this machine, newest first. The
+  // search starts here so a working bypass is found in one launch instead of
+  // after a full sweep of every general*.bat.
+  const knownWorking = () => {
+    const list = config.get('knownWorkingFiles', []);
+    if (!Array.isArray(list)) return [];
+    const root = rootDir();
+    return root ? list.filter((f) => f && fs.existsSync(f)) : [];
+  };
+  const rememberWorking = (file) => {
+    if (!file) return;
+    const list = knownWorking();
+    config.set('knownWorkingFiles', [file, ...list.filter((f) => f !== file)].slice(0, 5));
+  };
+
+  // One-click "connect working bypass": if the current bypass still works —
+  // keep it (verified twice, a single flaky probe must not kill it). Otherwise
+  // test the strategies that worked before, then the rest, and connect the
+  // first one where Discord AND YouTube are reachable. If nothing is perfect,
+  // connect the best available — or restore the previous winner — so the user
+  // is never left without a bypass.
   ipcMain.handle('autoconnect:run', async () => {
     const root = rootDir();
     if (!root) return { ok: false, reason: 'no_root' };
     if (!isAdminSync()) return { ok: false, reason: 'admin_required' };
+    const preferService = config.get('preferServiceMode', true);
+    const onEvent = (ev) => emitToWindow('tester:event', ev);
+    const known = knownWorking();
     try {
-      // 1. Already running? Verify it without touching anything.
+      // 1. Already running? Verify it twice without touching anything.
       const st = await status.getStatus(root);
       if (st.activeMode !== 'off') {
-        const check = await tester.checkReachability(root, (ev) => emitToWindow('tester:event', ev));
         const currentName = config.get('processStrategyName', null) || st.serviceStrategy || 'текущая';
-        if (check.groups.discord.works && check.groups.youtube.state === 'ok') {
+        const v = await tester.verifyStrategy(root, onEvent, { attempts: 2 });
+        if (v.ok) {
+          if (config.get('lastStrategyFile')) rememberWorking(config.get('lastStrategyFile'));
           return { ok: true, already: true, strategy: currentName };
         }
-        // Not working — stop it and search for a better one.
+        logger.warn(`Current strategy "${currentName}" did not verify in ${v.attempts} attempts; searching`);
+        // Not working — only now stop it and look for a better one.
         await service.killWinws();
         await service.stopService();
       }
 
-      // 2. Search: connect the first fully working strategy.
-      const r = await tester.runStrategyTests(root, (ev) => emitToWindow('tester:event', ev), { stopOnFirst: true });
-      const preferService = config.get('preferServiceMode', true);
+      // 2. Search: connect the first fully working strategy, known ones first.
+      const r = await tester.runStrategyTests(root, onEvent, { stopOnFirst: true, firstFiles: known });
 
       if (r.winnerFile) {
         config.set('lastStrategyFile', r.winnerFile);
         config.set('processStrategyName', r.winner);
+        rememberWorking(r.winnerFile);
         // stopOnFirst leaves the winning winws RUNNING in process mode.
         const winwsUp = await status.processRunning('winws.exe');
         if (preferService) {
@@ -666,9 +688,25 @@ ipcMain.handle('zapret:repair', async (_e, targetDir) => {
       // 3. Nothing perfect: connect the BEST available strategy so the user
       // is not left without bypass.
       const winner = r.results.filter((x) => !x.failed).sort((a, b) => b.score.ok - a.score.ok)[0];
-      if (!winner) return { ok: false, reason: 'none_works' };
+      if (!winner) {
+        // Every candidate failed outright. Restoring the previous winner is
+        // still better than leaving the user with no bypass at all.
+        const previous = config.get('lastStrategyFile', null);
+        if (previous && fs.existsSync(previous) && !r.aborted) {
+          logger.warn('No strategy passed; restoring the previous winner');
+          const restored = preferService
+            ? await service.installStrategyAsService(root, previous)
+            : await service.launchStrategyProcess(root, previous);
+          if (restored.ok) {
+            config.set('processStrategyName', require('node:path').basename(previous));
+            return { ok: true, restored: true, strategy: require('node:path').basename(previous) };
+          }
+        }
+        return { ok: false, reason: 'none_works' };
+      }
       config.set('lastStrategyFile', winner.file);
       config.set('processStrategyName', winner.name);
+      rememberWorking(winner.file);
       let res;
       if (preferService) res = await service.installStrategyAsService(root, winner.file);
       else res = await service.launchStrategyProcess(root, winner.file);

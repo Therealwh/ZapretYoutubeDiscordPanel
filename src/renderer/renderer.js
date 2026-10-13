@@ -1450,6 +1450,7 @@ function bindAutoConnect() {
     btn.disabled = false;
     note.classList.add('hidden');
     if (r && r.ok && r.already) toast(t('autoconnect_already', { name: r.strategy }), 'ok');
+    else if (r && r.ok && r.restored) toast(t('autoconnect_restored', { name: r.strategy }), 'warn');
     else if (r && r.ok && r.fallback) toast(t('autoconnect_keep', { name: r.strategy }), 'warn');
     else if (r && r.ok) toast(t('autoconnect_done', { name: r.strategy }), 'ok');
     else if (r && r.reason === 'none_works') toast(t('autoconnect_none'), 'err');

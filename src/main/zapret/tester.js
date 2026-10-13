@@ -43,6 +43,25 @@ function loadTargets(rootDir) {
   return DEFAULT_TARGETS;
 }
 
+// One Discord + one YouTube target decide whether a strategy is "working".
+// Probing them FIRST means the search usually settles after a single batch
+// instead of walking all 11 targets (13 curl/ping processes) every time.
+const DECISIVE_TARGETS = ['DiscordMain', 'YouTubeWeb'];
+
+function orderTargets(targetList) {
+  const decisive = [];
+  const rest = [];
+  for (const entry of targetList) {
+    if (DECISIVE_TARGETS.includes(entry[0])) decisive.push(entry);
+    else rest.push(entry);
+  }
+  return decisive.concat(rest);
+}
+
+function isWorking(groups) {
+  return !!(groups && groups.discord && groups.discord.works && groups.youtube && groups.youtube.state === 'ok');
+}
+
 // One curl probe: HEAD request with specific TLS/http options; returns status word
 function curlProbe(url, extraArgs, timeoutSec) {
   const args = [
@@ -216,15 +235,24 @@ function saveResults(rootDir, results, winner) {
   } catch { /* persisting results must never break the run */ }
 }
 
-async function runStrategyTests(rootDir, onEvent, { timeoutSec = 4, stopOnFirst = false } = {}) {
+async function runStrategyTests(rootDir, onEvent, { timeoutSec = 6, stopOnFirst = false, firstFiles = [] } = {}) {
   if (!isAdminSync()) {
     const err = new Error('admin_required');
     err.code = 'admin_required';
     throw err;
   }
-  const strategies = listStrategies(rootDir);
+  let strategies = listStrategies(rootDir);
+  // Strategies that worked before are tried FIRST: on a network where the
+  // bypass already worked this turns a multi-minute sweep into one launch.
+  if (Array.isArray(firstFiles) && firstFiles.length) {
+    const wanted = new Set(firstFiles);
+    strategies = [
+      ...strategies.filter((s) => wanted.has(s.file)),
+      ...strategies.filter((s) => !wanted.has(s.file)),
+    ];
+  }
   const targets = loadTargets(rootDir);
-  const targetList = Object.entries(targets);
+  const targetList = orderTargets(Object.entries(targets));
   const results = [];
   let winnerFile = null;
   abort.flagged = false;
@@ -262,6 +290,9 @@ async function runStrategyTests(rootDir, onEvent, { timeoutSec = 4, stopOnFirst 
         targetResults.push(tr);
         onEvent?.({ type: 'target', strategy: strat.name, target: tr.name, result: tr.kind === 'ping' ? tr.result : tr.results });
       }
+      // stopOnFirst: both groups already reachable — the remaining targets
+      // cannot change the verdict, so stop probing and keep this strategy.
+      if (stopOnFirst && isWorking(groupStats(targetResults))) break;
     }
 
     const score = scoreResults(targetResults);
@@ -271,7 +302,7 @@ async function runStrategyTests(rootDir, onEvent, { timeoutSec = 4, stopOnFirst 
 
     // stopOnFirst: found a strategy where Discord AND YouTube are reachable —
     // keep it as the winner, LEAVE IT RUNNING and stop searching immediately.
-    if (stopOnFirst && groups.discord.works && groups.youtube.state === 'ok') {
+    if (stopOnFirst && isWorking(groups)) {
       winnerFile = strat.file;
       onEvent?.({ type: 'winner-found', name: strat.name, file: strat.file });
       break;
@@ -303,19 +334,41 @@ async function runStrategyTests(rootDir, onEvent, { timeoutSec = 4, stopOnFirst 
   return { results, winner: winner ? winner.name : null, winnerFile: winner ? winner.file : null, aborted: abort.flagged };
 }
 
+// A strategy counts as working when both service groups are reachable.
+// One verdict helper shared by the search and the "is it still working?" check
+// so the two can never drift apart.
+function isWorkingCheck(check) {
+  return isWorking(check && check.groups);
+}
+
+// Verify the bypass that is ALREADY running, without touching it. One flaky
+// curl probe must not throw away a working setup, so a failed verdict is
+// retried before the caller decides to search for another strategy.
+async function verifyStrategy(rootDir, onEvent, { attempts = 2, timeoutSec = 6 } = {}) {
+  let check = null;
+  for (let i = 1; i <= attempts; i += 1) {
+    check = await checkReachability(rootDir, onEvent, { timeoutSec });
+    if (isWorkingCheck(check)) return { ok: true, check, attempts: i };
+    if (i < attempts) await new Promise((r) => setTimeout(r, 800));
+  }
+  return { ok: false, check, attempts };
+}
+
 // Probe reachability WITHOUT touching the running bypass (used to verify the
-// currently connected strategy before restarting anything).
-async function checkReachability(rootDir, onEvent) {
+// currently connected strategy before restarting anything). Stops as soon as
+// both service groups answer — the remaining targets cannot change the verdict.
+async function checkReachability(rootDir, onEvent, { timeoutSec = 6 } = {}) {
   const targets = loadTargets(rootDir);
-  const targetList = Object.entries(targets);
+  const targetList = orderTargets(Object.entries(targets));
   const targetResults = [];
   for (let j = 0; j < targetList.length; j += 4) {
     const batch = targetList.slice(j, j + 4);
-    const batchResults = await Promise.all(batch.map(([name, value]) => probeTarget(name, value, 4)));
+    const batchResults = await Promise.all(batch.map(([name, value]) => probeTarget(name, value, timeoutSec)));
     for (const tr of batchResults) {
       targetResults.push(tr);
       onEvent?.({ type: 'target', target: tr.name, result: tr.kind === 'ping' ? tr.result : tr.results });
     }
+    if (isWorking(groupStats(targetResults))) break;
   }
   return { groups: groupStats(targetResults), targets: targetResults };
 }
@@ -338,4 +391,8 @@ function loadLastResults(rootDir) {
   }
 }
 
-module.exports = { runStrategyTests, checkReachability, loadTargets, scoreResults, groupStats, DEFAULT_TARGETS, abort, loadLastResults, saveResults };
+module.exports = {
+  runStrategyTests, checkReachability, verifyStrategy, loadTargets, scoreResults, groupStats,
+  isWorking, orderTargets, DECISIVE_TARGETS,
+  DEFAULT_TARGETS, abort, loadLastResults, saveResults,
+};
