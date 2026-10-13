@@ -75,6 +75,7 @@ namespace Ydp.Tg
         private static readonly object Gate = new object();
         private static Action<string, string> _log = (m, l) => { };
         private static List<string> _cfDomains = new List<string>(SeedCfDomains);
+        private static string _cachePath;
 private static volatile bool _cfEnabled = true;
         private static volatile bool _tryFrontingFirst;
 
@@ -92,6 +93,7 @@ private static volatile bool _cfEnabled = true;
         }
 
         private static string _workerDomain = string.Empty;
+        private static volatile bool _cfUsable = true;
 
         private static int DcAddress(int dc)
         {
@@ -177,8 +179,14 @@ private static volatile bool _cfEnabled = true;
                     proxyUrl = ProxyLink(),
                 };
                 _log($"Telegram proxy listening on {_host}:{_port}", "info");
-                var token = _cts.Token;
+var token = _cts.Token;
                 Task.Run(() => AcceptLoopAsync(token));
+                // Load the last validated pool first so a new connection does not
+                // wait for the network check, then refresh and re-validate in the
+                // background.
+                LoadCfCache(Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
+                    "YoutubeDiscordPanel", "cf-domains.txt"));
                 Task.Run(() => RefreshCfDomainsAsync());
             }
             return Stats;
@@ -208,7 +216,7 @@ private static volatile bool _cfEnabled = true;
             }
         }
 
-        private static async Task RefreshCfDomainsAsync()
+private static async Task RefreshCfDomainsAsync()
         {
             try
             {
@@ -219,24 +227,107 @@ private static volatile bool _cfEnabled = true;
                     var list = raw.Split(new[] { '\n', '\r' }, StringSplitOptions.RemoveEmptyEntries)
                         .Select(d => d.Trim().ToLowerInvariant())
                         .Where(d => d.Length > 0
-                            && d != CfDomainsUrl
                             && d.Contains(".")
                             && !d.StartsWith("#")
                             && !d.StartsWith("http"))
                         .Distinct(StringComparer.OrdinalIgnoreCase)
                         .ToList();
-                    if (list.Count > 0)
+                    if (list.Count == 0)
                     {
-                        _cfDomains = list;
-                        _log($"Cloudflare relay pool: {list.Count} доменов", "info");
+                        _log("Список Cloudflare-релеев пуст, остаюсь на кэше", "warn");
+                        return;
                     }
+
+                    _log($"Загружено доменов из списка автора: {list.Count}. Проверяю, какие живые…", "info");
+                    var live = await ValidateDomainsAsync(list);
+                    if (live.Count > 0)
+                    {
+                        _cfDomains = live;
+                        SaveCfCache(live);
+                        _log($"Живых Cloudflare-релеев: {live.Count} из {list.Count}", "info");
+                    }
+                    else
+                    {
+                        // Every entry was dead. Remember that, so a new connection
+                        // does not spend 40 s proving it again — a single DNS pass
+                        // already answered the question.
+                        _cfUsable = false;
+                        _log("Ни один домен из списка не отвечает — нужен свой Cloudflare worker", "warn");
+                    }
+                    if (live.Count > 0) _cfUsable = true;
                 }
             }
             catch (Exception ex)
             {
-                _log("Не удалось обновить список CF-доменов (" + ex.Message + "), используется встроенный", "warn");
+                _log("Не удалось обновить список CF-доменов (" + ex.Message + ")", "warn");
             }
         }
+
+        /// <summary>
+        /// Resolve kws2.&lt;domain&gt; for every entry and keep the ones that answer.
+        ///
+        /// The author's list is a set of throwaway domains ("сделано, чтобы их не
+        /// забанили"), so entries die much faster than the list is refreshed. A
+        /// blind loop over it burns 8 s per dead domain on every new connection;
+        /// one parallel DNS pass costs a second and keeps only what works.
+        /// </summary>
+        private static async Task<List<string>> ValidateDomainsAsync(List<string> domains)
+        {
+            var candidates = domains.Take(12).ToList();
+            var checks = candidates.Select(async domain =>
+            {
+                try
+                {
+                    var task = System.Net.Dns.GetHostAddressesAsync("kws2." + domain);
+                    var done = await Task.WhenAny(task, Task.Delay(5000));
+                    if (done != task) return null;
+                    var addresses = await task;
+                    return addresses != null && addresses.Length > 0 ? domain : null;
+                }
+                catch
+                {
+                    return null;
+                }
+            }).ToList();
+
+            var resolved = await Task.WhenAll(checks);
+            return resolved.Where(d => d != null).ToList();
+        }
+
+        private static void SaveCfCache(List<string> domains)
+        {
+            try
+            {
+                string dir = _cachePath == null
+                    ? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "YoutubeDiscordPanel")
+                    : Path.GetDirectoryName(_cachePath);
+                Directory.CreateDirectory(dir);
+                _cachePath = Path.Combine(dir, "cf-domains.txt");
+                File.WriteAllLines(_cachePath, domains);
+            }
+            catch { /* cache is optional */ }
+        }
+
+        /// <summary>Load previously validated domains so the first connection is fast.</summary>
+        public static void LoadCfCache(string path)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(path) || !File.Exists(path)) return;
+                var list = File.ReadAllLines(path)
+                    .Select(l => l.Trim().ToLowerInvariant())
+                    .Where(l => l.Length > 0 && l.Contains("."))
+                    .ToList();
+                if (list.Count > 0)
+                {
+                    _cfDomains = list;
+                    _log($"Загружены проверенные CF-релеи из кэша: {list.Count}", "info");
+                }
+            }
+            catch { /* ignore */ }
+        }
+
+        public static int CfDomainCount => _cfDomains.Count;
 
         private static IEnumerable<string> WsDomains(int dc, bool isMedia)
         {
@@ -511,9 +602,9 @@ private static async Task<Transport> DialAsync(ParsedHandshake parsed, string ta
             }
 
             // 2) Cloudflare-proxied relays: a WebSocket to kws<dc>.<domain>.
-            if (_cfEnabled)
+            if (_cfEnabled && _cfUsable && _cfDomains.Count > 0)
             {
-                foreach (var baseDomain in _cfDomains.Take(6))
+                foreach (var baseDomain in _cfDomains.Take(5))
                 {
                     string host = $"kws{parsed.DcId}.{baseDomain}";
                     try
