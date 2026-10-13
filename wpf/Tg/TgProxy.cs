@@ -75,8 +75,46 @@ namespace Ydp.Tg
         private static readonly object Gate = new object();
         private static Action<string, string> _log = (m, l) => { };
         private static List<string> _cfDomains = new List<string>(SeedCfDomains);
-        private static volatile bool _cfEnabled = true;
+private static volatile bool _cfEnabled = true;
         private static volatile bool _tryFrontingFirst;
+
+        /// <summary>
+        /// Own Cloudflare worker domain (e.g. from the reference project's
+        /// CfWorker guide). This is the route that survives a network where the
+        /// DC addresses are unreachable AND the shared relay list is dead: the
+        /// worker dials Telegram from Cloudflare's edge, while the client only
+        /// talks to an ordinary Cloudflare domain.
+        /// </summary>
+        public static string WorkerDomain
+        {
+            get => _workerDomain;
+            set => _workerDomain = (value ?? string.Empty).Trim().ToLowerInvariant();
+        }
+
+        private static string _workerDomain = string.Empty;
+
+        private static int DcAddress(int dc)
+        {
+            if (DcRedirects.TryGetValue(dc, out string redirect)) return ParseIp(redirect);
+            if (DcDefaultIps.TryGetValue(dc, out string ip)) return ParseIp(ip);
+            return 0;
+        }
+
+        private static int ParseIp(string address)
+        {
+            if (string.IsNullOrEmpty(address)) return 0;
+            System.Net.IPAddress parsed;
+            return System.Net.IPAddress.TryParse(address, out parsed)
+                ? BitConverter.ToInt32(parsed.GetAddressBytes(), 0)
+                : 0;
+        }
+
+        private static string DcAddressString(int dc)
+        {
+            if (DcRedirects.TryGetValue(dc, out string redirect)) return redirect;
+            if (DcDefaultIps.TryGetValue(dc, out string ip)) return ip;
+            return null;
+        }
 
         public static ProxyStatsView Stats { get; private set; } = new ProxyStatsView { host = DefaultHost, port = DefaultPort };
 
@@ -311,8 +349,136 @@ namespace Ydp.Tg
             public override void Close() { try { _stream.Close(); } catch { /* ignore */ } }
         }
 
-        private static async Task<Transport> DialAsync(ParsedHandshake parsed, string tag, CancellationToken token)
+        /// <summary>
+        /// Actively probe every transport the bridge can use, so support (and
+        /// the --proxy-test mode) can say WHICH route this network allows instead
+        /// of "no upstream available". Opens the WebSocket / TCP connection the
+        /// same way a real client would.
+        /// </summary>
+        public static async Task<List<string>> ProbeRoutesAsync(int dc, Action<string, string> log)
         {
+            log = log ?? ((m, l) => { });
+            var results = new List<string>();
+            var hostHeader = WsDomains(dc, false).First();
+            string targetIp = DcRedirects.TryGetValue(dc, out string redirect)
+                ? redirect
+                : (DcDefaultIps.TryGetValue(dc, out string ip) ? ip : null);
+
+            if (targetIp == null)
+            {
+                results.Add("direct: нет известного IP для DC" + dc);
+            }
+            else
+            {
+                try
+                {
+                    var ws = await RawWebSocket.ConnectAsync(targetIp, hostHeader, hostHeader, WsPath, true, 8000, log);
+                    results.Add("direct ws (SNI=" + hostHeader + "): OK");
+                    ws.Dispose();
+                }
+                catch (Exception ex)
+                {
+                    results.Add("direct ws (SNI=" + hostHeader + "): ошибка — " + ex.Message);
+                }
+
+                try
+                {
+                    var ws = await RawWebSocket.ConnectAsync(targetIp, FrontingSni, hostHeader, WsPath, false, 8000, log);
+                    results.Add("fronted ws (SNI=" + FrontingSni + "): OK");
+                    ws.Dispose();
+                }
+                catch (Exception ex)
+                {
+                    results.Add("fronted ws (SNI=" + FrontingSni + "): ошибка — " + ex.Message);
+                }
+
+                try
+                {
+                    var tcp = new TcpClient();
+                    var connect = tcp.ConnectAsync(targetIp, 443);
+                    if (await Task.WhenAny(connect, Task.Delay(8000)) == connect)
+                    {
+                        results.Add("tcp " + targetIp + ":443: OK");
+                    }
+                    else
+                    {
+                        results.Add("tcp " + targetIp + ":443: таймаут");
+                    }
+                    tcp.Close();
+                }
+                catch (Exception ex)
+                {
+                    results.Add("tcp " + targetIp + ":443: ошибка — " + ex.Message);
+                }
+            }
+
+            if (_cfDomains.Count > 0)
+            {
+                // Try a few entries: the shared list is a rotating set of
+                // throwaway domains and some of them are already dead.
+                foreach (var baseDomain in _cfDomains.Take(5))
+                {
+                    string host = $"kws{dc}.{baseDomain}";
+                    try
+                    {
+                        var ws = await RawWebSocket.ConnectAsync(host, host, host, WsPath, true, 8000, log);
+                        results.Add("cloudflare ws " + host + ": OK");
+                        ws.Dispose();
+                        break;
+                    }
+                    catch (Exception ex)
+                    {
+                        results.Add("cloudflare ws " + host + ": ошибка — " + ex.Message);
+                    }
+                }
+            }
+
+            if (!string.IsNullOrEmpty(WorkerDomain))
+            {
+                string target = DcAddressString(dc);
+                if (target != null)
+                {
+                    string path = "/apiws?dst=" + target + "&dc=" + dc;
+                    try
+                    {
+                        var ws = await RawWebSocket.ConnectAsync(WorkerDomain, WorkerDomain, WorkerDomain, path, true, 8000, log);
+                        results.Add("cloudflare worker " + WorkerDomain + " -> " + target + ": OK");
+                        ws.Dispose();
+                    }
+                    catch (Exception ex)
+                    {
+                        results.Add("cloudflare worker " + WorkerDomain + " -> " + target + ": ошибка — " + ex.Message);
+                    }
+                }
+            }
+            return results;
+        }
+
+private static async Task<Transport> DialAsync(ParsedHandshake parsed, string tag, CancellationToken token)
+        {
+            // 0) Our own Cloudflare worker, when configured. It asks the worker to
+            //    open the DC connection from Cloudflare's edge, which is the only
+            //    route that works when the DC address is unreachable from here.
+            if (!string.IsNullOrEmpty(WorkerDomain))
+            {
+                string target = DcAddressString(parsed.DcId);
+                if (target != null)
+                {
+                    string path = "/apiws?dst=" + target + "&dc=" + parsed.DcId;
+                    try
+                    {
+                        var ws = await RawWebSocket.ConnectAsync(
+                            WorkerDomain, WorkerDomain, WorkerDomain, path, true, 8000, _log);
+                        _log(tag + $": using Cloudflare worker {WorkerDomain} -> {target}", "info");
+                        return new WsTransport(ws);
+                    }
+                    catch (Exception ex)
+                    {
+                        _log(tag + $": Cloudflare worker {WorkerDomain} failed ({ex.Message})", "warn");
+                    }
+                }
+            }
+
             // 1) Telegram's MTWS relays. Connect to the DC ADDRESS so the DPI sees
             //    an IP dial; the SNI/Host carry the relay name. The fronted variant
             //    swaps the SNI for a neutral domain - that is what gets past

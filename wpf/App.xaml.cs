@@ -3,6 +3,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Threading;
 using Ydp.Services;
+using Ydp.Tg;
 using Ydp.Zapret;
 
 namespace Ydp
@@ -62,6 +63,16 @@ namespace Ydp
                     if (!string.Equals(arg, "--selftest", StringComparison.OrdinalIgnoreCase)) continue;
                     Environment.ExitCode = Ydp.Tests.SelfTest.Run();
                     Shutdown();
+                    return;
+                }
+
+                foreach (var arg in e.Args)
+                {
+                    if (!string.Equals(arg, "--proxy-test", StringComparison.OrdinalIgnoreCase)) continue;
+                    // Headless route probe: start the proxy, wait, and let the
+                    // per-route log lines tell us which transports this network
+                    // actually allows. Used for support and before releasing.
+                    RunProxyTest();
                     return;
                 }
 
@@ -125,5 +136,65 @@ namespace Ydp
 
         private static TrayIcon Tray;
         private static bool _allowClose;
+
+        /// <summary>
+        /// Headless proxy route probe (--proxy-test). Writes the result next to
+        /// the exe as proxytest.txt and logs every line, so a user who cannot
+        /// get Telegram working can hand over one file.
+        /// </summary>
+        private static void RunProxyTest()
+        {
+            var report = new System.Text.StringBuilder();
+            Action<string, string> log = (message, level) =>
+            {
+                report.AppendLine("[" + DateTime.Now.ToString("HH:mm:ss") + "] " + message);
+                Log("proxy-test: " + message);
+            };
+            try
+            {
+                log("start", "info");
+                var task = TgProxy.StartAsync(TgProxy.DefaultHost, TgProxy.DefaultPort, null, true, log);
+                if (!task.Wait(10000)) log("listener did not come up in 10s", "warn");
+                log("listening on " + TgProxy.DefaultHost + ":" + TgProxy.DefaultPort, "info");
+
+                // A local client is not needed: probe every route directly so the report says
+                // which transport this network actually allows.
+                // The probe MUST leave the WPF dispatcher: an async chain started
+                // on the UI thread captures its SynchronizationContext, so
+                // GetAwaiter().GetResult() here would deadlock against itself.
+                System.Threading.Thread.Sleep(3000);
+                var routes = System.Threading.Tasks.Task
+                    .Run(() => TgProxy.ProbeRoutesAsync(2, log))
+                    .GetAwaiter().GetResult();
+                foreach (var route in routes)
+                {
+                    report.AppendLine("  route: " + route);
+                    log("route: " + route, route.Contains("OK") ? "info" : "warn");
+                }
+
+                report.AppendLine();
+                report.AppendLine("PROXYTEST listener=" + (TgProxy.Running ? "up" : "down")
+                    + " url=" + TgProxy.ProxyLink());
+                Log("PROXYTEST listener=" + (TgProxy.Running ? "up" : "down"));
+                TgProxy.Stop();
+            }
+            catch (Exception ex)
+            {
+                report.AppendLine("FAILED: " + ex);
+                Log("proxy-test FAILED: " + ex.Message);
+            }
+            finally
+            {
+                // Always leave the report behind, success or not: it is the file
+                // a user is asked to send when Telegram refuses to work.
+                try
+                {
+                    string outPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "proxytest.txt");
+                    System.IO.File.WriteAllText(outPath, report.ToString());
+                }
+                catch { /* nothing else we can do */ }
+                Environment.Exit(0);
+            }
+        }
     }
 }

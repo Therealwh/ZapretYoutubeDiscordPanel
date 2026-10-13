@@ -31,6 +31,8 @@ namespace Ydp.Pages
                 ChkAutostart.IsChecked = AutoStart.IsEnabled();
                 ChkAutoApply.IsChecked = AutoStart.AutoApplyEnabled();
                 ChkServiceMode.IsChecked = !string.Equals(Config.Get(AutoConnect.KeyPreferService, "true"), "false", StringComparison.OrdinalIgnoreCase);
+                WorkerBox.Text = Config.Get("tgWorkerDomain", string.Empty);
+                Tg.TgProxy.WorkerDomain = WorkerBox.Text;
 
                 var known = AutoConnect.KnownWorking();
                 Remembered.Text = string.IsNullOrEmpty(AutoConnect.LastWinner()) ? "— ещё не запомнена" : Path.GetFileName(AutoConnect.LastWinner());
@@ -140,6 +142,48 @@ namespace Ydp.Pages
             if (!string.IsNullOrEmpty(found)) Config.Set("zapretRoot", found);
             AutoNote.Text = string.IsNullOrEmpty(found) ? "Автоматически не нашёл." : "Найдено: " + found;
             Load();
+        }
+
+        private void BtnSaveWorker_Click(object sender, RoutedEventArgs e)
+        {
+            string domain = (WorkerBox.Text ?? string.Empty).Trim().ToLowerInvariant();
+            // Accept a bare domain or a full URL; strip scheme and path.
+            if (domain.StartsWith("https://", StringComparison.OrdinalIgnoreCase)) domain = domain.Substring(8);
+            if (domain.StartsWith("http://", StringComparison.OrdinalIgnoreCase)) domain = domain.Substring(7);
+            int slash = domain.IndexOf('/');
+            if (slash > 0) domain = domain.Substring(0, slash);
+            if (domain.Length > 0 && !domain.Contains("."))
+            {
+                WorkerNote.Text = "Это не похоже на домен.";
+                return;
+            }
+            WorkerBox.Text = domain;
+            Config.Set("tgWorkerDomain", domain);
+            Tg.TgProxy.WorkerDomain = domain;
+            WorkerNote.Text = domain.Length == 0
+                ? "Домен очищен — прокси будет использовать прямые маршруты и общий список."
+                : "Сохранено: " + domain;
+        }
+
+        private async void BtnProbeRoutes_Click(object sender, RoutedEventArgs e)
+        {
+            WorkerNote.Text = "Проверяю маршруты…";
+            BtnProbe.IsEnabled = false;
+            try
+            {
+                Tg.TgProxy.WorkerDomain = (WorkerBox.Text ?? string.Empty).Trim();
+                var routes = await System.Threading.Tasks.Task.Run(() => Tg.TgProxy.ProbeRoutesAsync(2,
+                    (msg, level) => Logger.Add(level == "info" ? "info" : level, msg, "tg-proxy")));
+                WorkerNote.Text = string.Join(Environment.NewLine, routes);
+            }
+            catch (Exception ex)
+            {
+                WorkerNote.Text = "Ошибка проверки: " + ex.Message;
+            }
+            finally
+            {
+                BtnProbe.IsEnabled = true;
+            }
         }
     }
 }
