@@ -58,15 +58,15 @@
                     <RadioButton x:Name="NavStrategies" Style="{StaticResource NavItem}" GroupName="nav"
                                  Content="Стратегии" Tag="strategies" Checked="Nav_Checked" />
                     <RadioButton x:Name="NavFilters" Style="{StaticResource NavItem}" GroupName="nav"
-                                 Content="Фильтры" Tag="filters" Checked="Nav_Checked" IsEnabled="False" Opacity="0.5" />
+                                 Content="Фильтры" Tag="filters" Checked="Nav_Checked" />
                     <RadioButton x:Name="NavLists" Style="{StaticResource NavItem}" GroupName="nav"
-                                 Content="Списки" Tag="lists" Checked="Nav_Checked" IsEnabled="False" Opacity="0.5" />
+                                 Content="Списки" Tag="lists" Checked="Nav_Checked" />
                     <RadioButton x:Name="NavUpdates" Style="{StaticResource NavItem}" GroupName="nav"
-                                 Content="Обновления" Tag="updates" Checked="Nav_Checked" IsEnabled="False" Opacity="0.5" />
+                                 Content="Обновления" Tag="updates" Checked="Nav_Checked" />
                     <RadioButton x:Name="NavDiagnostics" Style="{StaticResource NavItem}" GroupName="nav"
-                                 Content="Диагностика" Tag="diagnostics" Checked="Nav_Checked" IsEnabled="False" Opacity="0.5" />
+                                 Content="Диагностика" Tag="diagnostics" Checked="Nav_Checked" />
                     <RadioButton x:Name="NavLogs" Style="{StaticResource NavItem}" GroupName="nav"
-                                 Content="Логи" Tag="logs" Checked="Nav_Checked" IsEnabled="False" Opacity="0.5" />
+                                 Content="Логи" Tag="logs" Checked="Nav_Checked" />
                     <RadioButton x:Name="NavSettings" Style="{StaticResource NavItem}" GroupName="nav"
                                  Content="Настройки" Tag="settings" Checked="Nav_Checked" />
                 </StackPanel>

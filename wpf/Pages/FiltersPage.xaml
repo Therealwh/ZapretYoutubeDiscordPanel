@@ -1,0 +1,49 @@
+<UserControl x:Class="Ydp.Pages.FiltersPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Loaded="Page_Loaded">
+    <StackPanel>
+        <TextBlock Text="Фильтры" FontSize="20" FontWeight="Bold" Margin="0,0,0,16" />
+
+        <Border Style="{StaticResource Card}" Margin="0,0,0,12">
+            <StackPanel>
+                <TextBlock Text="Игровой трафик (Game Filter)" Style="{StaticResource H1}" />
+                <TextBlock Style="{StaticResource Dim}" Margin="0,4,0,10" TextWrapping="Wrap"
+                           Text="Пропускает игровой трафик мимо обхода: Discord voice и STUN работают стабильнее, а нагрузка на процессоры падает." />
+                <StackPanel Orientation="Horizontal">
+                    <Button Content="Выключить" Style="{StaticResource Btn}" Margin="0,0,10,0" Click="GameOff_Click" />
+                    <Button Content="Только TCP" Style="{StaticResource Btn}" Margin="0,0,10,0" Click="GameTcp_Click" />
+                    <Button Content="Только UDP" Style="{StaticResource Btn}" Margin="0,0,10,0" Click="GameUdp_Click" />
+                    <Button Content="Весь трафик" Style="{StaticResource Btn}" Click="GameAll_Click" />
+                </StackPanel>
+                <TextBlock x:Name="GameNote" Style="{StaticResource Dim}" Margin="0,8,0,0" />
+            </StackPanel>
+        </Border>
+
+        <Border Style="{StaticResource Card}" Margin="0,0,0,12">
+            <StackPanel>
+                <TextBlock Text="IPSet-режим" Style="{StaticResource H1}" />
+                <TextBlock Style="{StaticResource Dim}" Margin="0,4,0,10" TextWrapping="Wrap"
+                           Text="Определяет список IP-адресов через локальную базу ipset-all.txt вместо доменных списков." />
+                <StackPanel Orientation="Horizontal">
+                    <Button Content="Выключить" Style="{StaticResource Btn}" Margin="0,0,10,0" Click="IpOff_Click" />
+                    <Button Content="Включить" Style="{StaticResource Btn}" Click="IpOn_Click" />
+                    <Button Content="Обновить ipset-all.txt" Style="{StaticResource Btn}" Margin="10,0,0,0" Click="IpRefresh_Click" />
+                </StackPanel>
+                <TextBlock x:Name="IpNote" Style="{StaticResource Dim}" Margin="0,8,0,0" />
+            </StackPanel>
+        </Border>
+
+        <Border Style="{StaticResource Card}">
+            <StackPanel>
+                <TextBlock Text="Сеть" Style="{StaticResource H1}" />
+                <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                    <Button Content="Включить TCP timestamps" Style="{StaticResource Btn}" Margin="0,0,10,0" Click="TcpStamps_Click" />
+                    <Button Content="Сбросить DNS-кэш" Style="{StaticResource Btn}" Margin="0,0,10,0" Click="DnsFlush_Click" />
+                    <Button Content="Проверить" Style="{StaticResource Btn}" Click="BtnCheck_Click" />
+                </StackPanel>
+                <TextBlock x:Name="NetNote" Style="{StaticResource Dim}" Margin="0,10,0,0" TextWrapping="Wrap" />
+            </StackPanel>
+        </Border>
+    </StackPanel>
+</UserControl>

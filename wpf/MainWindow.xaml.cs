@@ -12,6 +12,11 @@ namespace Ydp
         // front slowed startup and made a crash in any one of them fatal.
         private DashboardPage _dashboard;
         private StrategiesPage _strategies;
+        private FiltersPage _filters;
+        private ListsPage _lists;
+        private UpdatesPage _updates;
+        private DiagnosticsPage _diagnostics;
+        private LogsPage _logs;
         private SettingsPage _settings;
 
         public MainWindow()
@@ -37,6 +42,26 @@ namespace Ydp
                     case "strategies":
                         if (_strategies == null) _strategies = new StrategiesPage();
                         PageHost.Content = _strategies;
+                        break;
+                    case "filters":
+                        if (_filters == null) _filters = new FiltersPage();
+                        PageHost.Content = _filters;
+                        break;
+                    case "lists":
+                        if (_lists == null) _lists = new ListsPage();
+                        PageHost.Content = _lists;
+                        break;
+                    case "updates":
+                        if (_updates == null) _updates = new UpdatesPage();
+                        PageHost.Content = _updates;
+                        break;
+                    case "diagnostics":
+                        if (_diagnostics == null) _diagnostics = new DiagnosticsPage();
+                        PageHost.Content = _diagnostics;
+                        break;
+                    case "logs":
+                        if (_logs == null) _logs = new LogsPage();
+                        PageHost.Content = _logs;
                         break;
                     case "settings":
                         if (_settings == null) _settings = new SettingsPage();

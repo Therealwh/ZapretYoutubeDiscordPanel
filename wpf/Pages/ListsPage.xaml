@@ -1,0 +1,37 @@
+<UserControl x:Class="Ydp.Pages.ListsPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Loaded="Page_Loaded">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+
+        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,10">
+            <RadioButton x:Name="TabGeneral" GroupName="lists" Content="Основной список" IsChecked="True"
+                         Foreground="{StaticResource TextBrush}" Margin="0,0,16,0" Checked="Tab_Changed" />
+            <RadioButton x:Name="TabExclude" GroupName="lists" Content="Исключения"
+                         Foreground="{StaticResource TextBrush}" Margin="0,0,16,0" Checked="Tab_Changed" />
+            <RadioButton x:Name="TabIpset" GroupName="lists" Content="IPSet-исключения"
+                         Foreground="{StaticResource TextBrush}" Checked="Tab_Changed" />
+        </StackPanel>
+
+        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,10">
+            <Button Content="Сохранить" Style="{StaticResource BtnPrimary}" Margin="0,0,10,0" Click="BtnSave_Click" />
+            <Button Content="Убрать дубликаты" Style="{StaticResource Btn}" Margin="0,0,10,0" Click="BtnDedupe_Click" />
+            <Button Content="Отсортировать" Style="{StaticResource Btn}" Margin="0,0,10,0" Click="BtnSort_Click" />
+            <Button Content="Очистить комментарии и пустые" Style="{StaticResource Btn}" Margin="0,0,10,0" Click="BtnCleanup_Click" />
+            <TextBlock x:Name="Stats" Style="{StaticResource Dim}" VerticalAlignment="Center" />
+        </StackPanel>
+
+        <Border Grid.Row="2" Style="{StaticResource Card}" Padding="0">
+            <TextBox x:Name="Editor" Background="Transparent" Foreground="{StaticResource TextBrush}"
+                     BorderThickness="0" AcceptsReturn="True" AcceptsTab="True"
+                     FontFamily="Consolas, Cascadia Mono" FontSize="13"
+                     VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
+                     Padding="14" />
+        </Border>
+    </Grid>
+</UserControl>
