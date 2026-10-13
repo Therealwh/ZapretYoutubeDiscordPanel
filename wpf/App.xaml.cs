@@ -54,6 +54,17 @@ namespace Ydp
             try
             {
                 Log("app version " + System.Reflection.Assembly.GetExecutingAssembly().GetName().Version);
+
+                // `--selftest` runs the ported-logic tests and exits, so CI and
+                // a quick manual check can verify the build without a UI.
+                foreach (var arg in e.Args)
+                {
+                    if (!string.Equals(arg, "--selftest", StringComparison.OrdinalIgnoreCase)) continue;
+                    Environment.ExitCode = Ydp.Tests.SelfTest.Run();
+                    Shutdown();
+                    return;
+                }
+
                 Logger.Info("Панель запущена (админ=" + Win.IsAdmin() + ")", "panel");
 
                 var window = new MainWindow();

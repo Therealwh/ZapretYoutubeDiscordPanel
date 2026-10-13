@@ -77,10 +77,10 @@
                     <TextBlock x:Name="TgStats" Text="" Style="{StaticResource Dim}" VerticalAlignment="Center" />
                 </StackPanel>
                 <StackPanel Orientation="Horizontal">
-                    <Button Content="Запустить" Style="{StaticResource BtnPrimary}" Margin="0,0,10,0" />
-                    <Button Content="Открыть в Telegram" Style="{StaticResource Btn}" Margin="0,0,10,0" />
-                    <Button Content="Копировать ссылку" Style="{StaticResource Btn}" Margin="0,0,10,0" />
-                    <Button Content="Новый секрет" Style="{StaticResource Btn}" />
+                    <Button x:Name="BtnTgToggle" Content="Запустить" Style="{StaticResource BtnPrimary}" Margin="0,0,10,0" Click="BtnTgToggle_Click" />
+                    <Button x:Name="BtnTgOpen" Content="Открыть в Telegram" Style="{StaticResource Btn}" Margin="0,0,10,0" Click="BtnTgOpen_Click" />
+                    <Button x:Name="BtnTgCopy" Content="Копировать ссылку" Style="{StaticResource Btn}" Margin="0,0,10,0" Click="BtnTgCopy_Click" />
+                    <Button x:Name="BtnTgRegen" Content="Новый секрет" Style="{StaticResource Btn}" Click="BtnTgRegen_Click" />
                 </StackPanel>
                 <TextBlock x:Name="TgLink" Text="" Style="{StaticResource Dim}" Margin="0,12,0,0" />
             </StackPanel>

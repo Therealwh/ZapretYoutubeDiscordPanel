@@ -2,6 +2,8 @@ using System;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Threading;
+using Ydp.Services;
+using Ydp.Tg;
 using Ydp.Zapret;
 
 namespace Ydp.Pages
@@ -24,6 +26,115 @@ namespace Ydp.Pages
         {
             _timer.Start();
             Refresh();
+            TgProxyState();
+        }
+
+        // ---- Telegram proxy -------------------------------------------------
+
+        private static int TgPort()
+        {
+            int.TryParse(Config.Get("tgProxyPort", "1443"), out int port);
+            return port > 0 ? port : TgProxy.DefaultPort;
+        }
+
+        private static byte[] TgSecret()
+        {
+            string hex = Config.Get("tgProxySecret", null);
+            if (!string.IsNullOrWhiteSpace(hex) && hex.Length == 32)
+            {
+                try
+                {
+                    var bytes = new byte[16];
+                    for (int i = 0; i < 16; i++) bytes[i] = Convert.ToByte(hex.Substring(i * 2, 2), 16);
+                    return bytes;
+                }
+                catch
+                {
+                    // Fall through and generate a new secret.
+                }
+            }
+            var fresh = TgCrypto.NewSecret();
+            Config.Set("tgProxySecret", BitConverter.ToString(fresh).Replace("-", string.Empty).ToLowerInvariant());
+            return fresh;
+        }
+
+        private void TgProxyState()
+        {
+            TgProxy.LoadSecret(TgSecret());
+            TgProxy.RefreshStats();
+            
+            TgProxy.Stats.port = TgPort();
+            
+        }
+
+        private async void BtnTgToggle_Click(object sender, RoutedEventArgs e)
+        {
+            BtnTgToggle.IsEnabled = false;
+            try
+            {
+                if (TgProxy.Running)
+                {
+                    TgProxy.Stop();
+                }
+                else
+                {
+                    await TgProxy.StartAsync(TgProxy.DefaultHost, TgPort(), TgSecret(), true,
+                        (msg, level) => Logger.Add(level == "info" ? "info" : level, msg, "tg-proxy"));
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Error("Прокси Telegram: " + ex.Message, "tg-proxy");
+            }
+            finally
+            {
+                BtnTgToggle.IsEnabled = true;
+                TgProxyState();
+                Refresh();
+            }
+        }
+
+        private void BtnTgRegen_Click(object sender, RoutedEventArgs e)
+        {
+            var secret = TgProxy.RegenerateSecret();
+            Config.Set("tgProxySecret", BitConverter.ToString(secret).Replace("-", string.Empty).ToLowerInvariant());
+            if (TgProxy.Running)
+            {
+                TgProxy.Stop();
+                var port = TgPort();
+                System.Threading.Tasks.Task.Run(() => TgProxy.StartAsync(TgProxy.DefaultHost, port, secret, true,
+                    (msg, level) => Logger.Add(level == "info" ? "info" : level, msg, "tg-proxy")));
+            }
+            TgProxyState();
+            Refresh();
+        }
+
+        private void BtnTgCopy_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                Clipboard.SetText(TgProxy.ProxyLink());
+                TgLink.Text = TgProxy.ProxyLink();
+            }
+            catch (Exception ex)
+            {
+                TgHint.Text = "Не удалось скопировать: " + ex.Message;
+            }
+        }
+
+        private void BtnTgOpen_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(TgProxy.ProxyLink())
+                {
+                    UseShellExecute = true,
+                });
+            }
+            catch (Exception ex)
+            {
+                TgHint.Text = "Не удалось открыть Telegram: " + ex.Message;
+            }
         }
 
         private void Refresh()
@@ -45,11 +156,11 @@ namespace Ydp.Pages
             StatWinws.Text = st.winwsProcess ? "Запущен" : "Не запущен";
             StatWinwsPath.Text = st.winwsProcessPath ?? "";
             StatRoot.Text = string.IsNullOrEmpty(root) ? "не найдена" : root;
-            TgState.Text = Tg.Stats.Running ? "Включён" : "Выключен";
-            TgStats.Text = Tg.Stats.Running
-                ? $"подключений: {Tg.Stats.Connections} · вверх: {Human(Tg.Stats.BytesUp)} · вниз: {Human(Tg.Stats.BytesDown)}"
+            TgState.Text = TgProxy.Stats.running ? "Включён" : "Выключен";
+            TgStats.Text = TgProxy.Stats.running
+                ? $"подключений: {TgProxy.Stats.connections} · вверх: {Human(TgProxy.Stats.bytesUp)} · вниз: {Human(TgProxy.Stats.bytesDown)}"
                 : "";
-            TgLink.Text = string.IsNullOrEmpty(Tg.Stats.Link) ? "" : Tg.Stats.Link;
+            TgLink.Text = string.IsNullOrEmpty(TgProxy.Stats.proxyUrl) ? "" : TgProxy.Stats.proxyUrl;
         }
 
         private static string Describe(ServiceInfoView service)

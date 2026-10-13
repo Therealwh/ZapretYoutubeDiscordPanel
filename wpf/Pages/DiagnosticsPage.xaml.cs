@@ -8,6 +8,7 @@ using System.Net.NetworkInformation;
 using System.Windows;
 using System.Windows.Controls;
 using Ydp.Services;
+using Ydp.Tg;
 using Ydp.Zapret;
 
 namespace Ydp.Pages
@@ -140,8 +141,8 @@ namespace Ydp.Pages
         private void CmdNet_Click(object sender, RoutedEventArgs e) => Console.Text = RunCapture("ipconfig.exe", "/all");
         private void CmdProxy_Click(object sender, RoutedEventArgs e)
         {
-            Console.Text = "Прокси Telegram: " + (Tg.Stats.Running
-                ? "работает, подключений " + Tg.Stats.Connections
+            Console.Text = "Прокси Telegram: " + (TgProxy.Stats.running
+                ? "работает, подключений " + TgProxy.Stats.connections
                 : "не запущен");
         }
     }
