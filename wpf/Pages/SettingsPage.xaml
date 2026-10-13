@@ -58,9 +58,25 @@
                 <TextBox x:Name="WorkerBox" Padding="10,8" Margin="0,0,0,10" />
                 <StackPanel Orientation="Horizontal">
                     <Button Content="Сохранить" Style="{StaticResource BtnPrimary}" Margin="0,0,10,0" Click="BtnSaveWorker_Click" />
-                    <Button x:Name="BtnProbe" Content="Проверить маршруты" Style="{StaticResource Btn}" Click="BtnProbeRoutes_Click" />
+                    <Button x:Name="BtnProbeWorker" Content="Проверить маршруты" Style="{StaticResource Btn}" Click="BtnProbeRoutes_Click" />
                 </StackPanel>
                 <TextBlock x:Name="WorkerNote" Style="{StaticResource Hint}" Margin="0,8,0,0" />
+            </StackPanel>
+        </Border>
+
+        <!-- Zapret folder -->
+        <Border Style="{StaticResource Card}" Margin="0,0,0,12">
+            <StackPanel>
+                <TextBlock Text="Свой Cloudflare-релей для Telegram" Style="{StaticResource CardTitle}" />
+                <TextBlock Style="{StaticResource Hint}" Margin="0,4,0,8" TextWrapping="Wrap"
+                           Text="Если в Cloudflare сделаны записи kws1..kws6.&lt;ваш домен&gt; на IP Telegram, укажите домен здесь — прокси пойдёт через них, а Cloudflare обратится к Telegram вместо вас. Домены должны быть прописаны и в списках zapret (вкладка «Списки»), иначе обход их не пропустит." />
+                <TextBox x:Name="CfProxyBox" Padding="10,8" Margin="0,0,0,10" />
+                <StackPanel Orientation="Horizontal">
+                    <Button Content="Сохранить" Style="{StaticResource BtnPrimary}" Margin="0,0,10,0" Click="BtnSaveCfProxy_Click" />
+                    <Button x:Name="BtnProbe" Content="Проверить маршруты" Style="{StaticResource Btn}" Click="BtnProbeRoutes_Click" />
+                    <Button Content="Добавить домен в списки zapret" Style="{StaticResource Btn}" Margin="10,0,0,0" Click="BtnAddToLists_Click" />
+                </StackPanel>
+                <TextBlock x:Name="CfProxyNote" Style="{StaticResource Hint}" Margin="0,8,0,0" />
             </StackPanel>
         </Border>
 

@@ -54,7 +54,13 @@ namespace Ydp
             base.OnStartup(e);
             try
             {
-                Log("app version " + System.Reflection.Assembly.GetExecutingAssembly().GetName().Version);
+Log("app version " + System.Reflection.Assembly.GetExecutingAssembly().GetName().Version);
+
+                // Telegram proxy reads its settings from the config directly: the proxy must
+                // know its routes even when the settings page was never opened
+                // (after a login autostart, or in --proxy-test).
+                TgProxy.CustomCfDomain = Config.Get("tgCfProxyDomain", string.Empty);
+                TgProxy.WorkerDomain = Config.Get("tgWorkerDomain", string.Empty);
 
                 // `--selftest` runs the ported-logic tests and exits, so CI and
                 // a quick manual check can verify the build without a UI.
@@ -74,6 +80,11 @@ namespace Ydp
                     // actually allows. Used for support and before releasing.
                     RunProxyTest();
                     return;
+                }
+
+                if (!string.IsNullOrEmpty(TgProxy.CustomCfDomain))
+                {
+                    Logger.Info("Cloudflare-релей: kws1..kws6." + TgProxy.CustomCfDomain, "tg-proxy");
                 }
 
                 Logger.Info("Панель запущена (админ=" + Win.IsAdmin() + ")", "panel");
@@ -170,6 +181,16 @@ namespace Ydp
                 {
                     report.AppendLine("  route: " + route);
                     log("route: " + route, route.Contains("OK") ? "info" : "warn");
+                }
+
+                // Every DC has its own relay record; check them all so a dead kws3
+                // does not only show up when Telegram happens to pick DC3.
+                var dcChecks = System.Threading.Tasks.Task
+                    .Run(() => TgProxy.ProbeCfRelaysAsync(new[] { 1, 2, 3, 4, 5, 203 }, log))
+                    .GetAwaiter().GetResult();
+                foreach (var check in dcChecks)
+                {
+                    report.AppendLine("  dc: " + check);
                 }
 
                 report.AppendLine();

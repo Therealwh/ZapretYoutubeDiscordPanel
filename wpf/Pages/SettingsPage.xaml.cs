@@ -1,4 +1,6 @@
 using System;
+using System.Collections.Generic;
+using System.Linq;
 using System.IO;
 using System.Linq;
 using System.Windows;
@@ -33,6 +35,8 @@ namespace Ydp.Pages
                 ChkServiceMode.IsChecked = !string.Equals(Config.Get(AutoConnect.KeyPreferService, "true"), "false", StringComparison.OrdinalIgnoreCase);
                 WorkerBox.Text = Config.Get("tgWorkerDomain", string.Empty);
                 Tg.TgProxy.WorkerDomain = WorkerBox.Text;
+                CfProxyBox.Text = Config.Get("tgCfProxyDomain", string.Empty);
+                Tg.TgProxy.CustomCfDomain = CfProxyBox.Text;
 
                 var known = AutoConnect.KnownWorking();
                 Remembered.Text = string.IsNullOrEmpty(AutoConnect.LastWinner()) ? "— ещё не запомнена" : Path.GetFileName(AutoConnect.LastWinner());
@@ -88,6 +92,72 @@ namespace Ydp.Pages
         {
             if (_loading) return;
             Config.Set(AutoConnect.KeyPreferService, ChkServiceMode.IsChecked == true ? "true" : "false");
+        }
+
+        /// <summary>Strip scheme/path and validate a bare domain.</summary>
+        private static string NormalizeDomain(string raw)
+        {
+            string domain = (raw ?? string.Empty).Trim().ToLowerInvariant();
+            if (domain.StartsWith("https://", StringComparison.OrdinalIgnoreCase)) domain = domain.Substring(8);
+            if (domain.StartsWith("http://", StringComparison.OrdinalIgnoreCase)) domain = domain.Substring(7);
+            int slash = domain.IndexOf('/');
+            if (slash > 0) domain = domain.Substring(0, slash);
+            return domain;
+        }
+
+        private void BtnSaveCfProxy_Click(object sender, RoutedEventArgs e)
+        {
+            string domain = NormalizeDomain(CfProxyBox.Text);
+            if (domain.Length > 0 && !domain.Contains("."))
+            {
+                CfProxyNote.Text = "Это не похоже на домен.";
+                return;
+            }
+            CfProxyBox.Text = domain;
+            Config.Set("tgCfProxyDomain", domain);
+            Tg.TgProxy.CustomCfDomain = domain;
+            CfProxyNote.Text = domain.Length == 0
+                ? "Домен очищен."
+                : "Сохранено. Маршруты: kws1..kws6." + domain + ". Домены должны резолвиться и быть прописаны в списках zapret.";
+        }
+
+        /// <summary>Write kws1..kws6.&lt;domain&gt; into the zapret user hostlist.</summary>
+        private void BtnAddToLists_Click(object sender, RoutedEventArgs e)
+        {
+            string domain = NormalizeDomain(CfProxyBox.Text);
+            if (domain.Length == 0)
+            {
+                CfProxyNote.Text = "Сначала укажите домен.";
+                return;
+            }
+            string root = Status.ResolveRoot(Config.Get("zapretRoot", null));
+            if (string.IsNullOrEmpty(root))
+            {
+                CfProxyNote.Text = "Не найдена папка zapret.";
+                return;
+            }
+            string path = System.IO.Path.Combine(root, "lists", "list-general-user.txt");
+            try
+            {
+                var domains = new List<string>();
+                for (int dc = 1; dc <= 6; dc++) domains.Add("kws" + dc + "." + domain);
+                var existing = System.IO.File.Exists(path) ? System.IO.File.ReadAllLines(path) : new string[0];
+                var merged = new List<string>(existing);
+                foreach (var entry in domains)
+                {
+                    if (!merged.Any(l => string.Equals(l.Trim(), entry, StringComparison.OrdinalIgnoreCase)))
+                    {
+                        merged.Add(entry);
+                    }
+                }
+                System.IO.File.WriteAllLines(path, merged);
+                CfProxyNote.Text = "Добавлено в " + path + ". Перезапустите обход, чтобы список применился.";
+                Logger.Info("Домены " + domain + " добавлены в список zapret", "lists");
+            }
+            catch (Exception ex)
+            {
+                CfProxyNote.Text = "Не удалось записать список: " + ex.Message;
+            }
         }
 
         private async void BtnApplyRemembered_Click(object sender, RoutedEventArgs e)

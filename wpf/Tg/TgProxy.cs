@@ -329,6 +329,27 @@ private static async Task RefreshCfDomainsAsync()
 
         public static int CfDomainCount => _cfDomains.Count;
 
+        /// <summary>
+        /// The user's own Cloudflare-proxied relay domain (the scheme from the
+        /// reference's CfProxy guide: DNS records kws1..kws6.&lt;domain&gt; pointing
+        /// at the DC addresses, orange-clouded through Cloudflare). It is tried
+        /// FIRST, before the author's shared list, because it is the only variant
+        /// that does not die every few weeks.
+        /// </summary>
+        public static string CustomCfDomain
+        {
+            get => _customCfDomain;
+            set => _customCfDomain = (value ?? string.Empty).Trim().ToLowerInvariant();
+        }
+
+        private static string _customCfDomain = string.Empty;
+
+        private static IEnumerable<string> CfPool()
+        {
+            if (!string.IsNullOrEmpty(_customCfDomain)) yield return _customCfDomain;
+            foreach (var domain in _cfDomains) yield return domain;
+        }
+
         private static IEnumerable<string> WsDomains(int dc, bool isMedia)
         {
             int target = dc == 203 ? 2 : dc;
@@ -503,11 +524,12 @@ private static async Task RefreshCfDomainsAsync()
                 }
             }
 
-            if (_cfDomains.Count > 0)
+            var pool = CfPool().ToList();
+            if (pool.Count > 0)
             {
                 // Try a few entries: the shared list is a rotating set of
                 // throwaway domains and some of them are already dead.
-                foreach (var baseDomain in _cfDomains.Take(5))
+                foreach (var baseDomain in CfPool().Take(5))
                 {
                     string host = $"kws{dc}.{baseDomain}";
                     try
@@ -545,7 +567,41 @@ private static async Task RefreshCfDomainsAsync()
             return results;
         }
 
-private static async Task<Transport> DialAsync(ParsedHandshake parsed, string tag, CancellationToken token)
+/// <summary>
+        /// Check every relay record of the custom domain. We probe kws1..kws6 as
+        /// they are actually named in DNS (the user created those records), not
+        /// by DC number — the reference maps DC 203 onto kws2, so probing by DC
+        /// would ask for a host that does not exist.
+        /// </summary>
+        public static async Task<List<string>> ProbeCfRelaysAsync(IEnumerable<int> dcs, Action<string, string> log)
+        {
+            var results = new List<string>();
+            var hosts = new List<string>();
+            if (!string.IsNullOrEmpty(CustomCfDomain))
+            {
+                for (int i = 1; i <= 6; i++) hosts.Add("kws" + i + "." + CustomCfDomain);
+            }
+            else
+            {
+                foreach (var dc in dcs) hosts.Add("kws" + dc + "." + _cfDomains.FirstOrDefault());
+            }
+            foreach (var host in hosts)
+            {
+                try
+                {
+                    var ws = await RawWebSocket.ConnectAsync(host, host, host, WsPath, true, 8000, log);
+                    results.Add(host + ": OK");
+                    ws.Dispose();
+                }
+                catch (Exception ex)
+                {
+                    results.Add(host + ": ошибка — " + ex.Message);
+                }
+            }
+            return results;
+        }
+
+        private static async Task<Transport> DialAsync(ParsedHandshake parsed, string tag, CancellationToken token)
         {
             // 0) Our own Cloudflare worker, when configured. It asks the worker to
             //    open the DC connection from Cloudflare's edge, which is the only
@@ -602,9 +658,9 @@ private static async Task<Transport> DialAsync(ParsedHandshake parsed, string ta
             }
 
             // 2) Cloudflare-proxied relays: a WebSocket to kws<dc>.<domain>.
-            if (_cfEnabled && _cfUsable && _cfDomains.Count > 0)
+            if (_cfEnabled && (_cfUsable || !string.IsNullOrEmpty(_customCfDomain)))
             {
-                foreach (var baseDomain in _cfDomains.Take(5))
+                foreach (var baseDomain in CfPool().Take(5))
                 {
                     string host = $"kws{parsed.DcId}.{baseDomain}";
                     try
