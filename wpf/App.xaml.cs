@@ -1,5 +1,6 @@
 using System;
 using System.IO;
+using System.Threading;
 using System.Windows;
 using System.Windows.Threading;
 using Ydp.Services;
@@ -38,9 +39,21 @@ namespace Ydp
             }
         }
 
-        protected override void OnStartup(StartupEventArgs e)
+protected override void OnStartup(StartupEventArgs e)
         {
-            Log("startup, args=" + string.Join(" ", e.Args));
+            // One panel at a time. Two instances fight over the Telegram port, and
+            // the loser shows "proxy off" while the winner works - which reads as
+            // a broken panel. The second instance says so and exits.
+            bool firstInstance;
+            _singleInstance = new Mutex(true, @"Local\YoutubeDiscordPanelSingleton", out firstInstance);
+            if (!firstInstance)
+            {
+                MessageBox.Show("Панель уже запущена — проверьте значок в трее.",
+                    "YoutubeDiscordPanel", MessageBoxButton.OK, MessageBoxImage.Information);
+                Shutdown();
+                return;
+            }
+
             AppDomain.CurrentDomain.UnhandledException += (s, args) =>
             {
                 Log("UNHANDLED: " + args.ExceptionObject);
@@ -51,10 +64,10 @@ namespace Ydp
                 args.Handled = true;
             };
 
-            base.OnStartup(e);
+base.OnStartup(e);
             try
             {
-Log("app version " + System.Reflection.Assembly.GetExecutingAssembly().GetName().Version);
+                Log("app version " + System.Reflection.Assembly.GetExecutingAssembly().GetName().Version);
 
                 // Telegram proxy reads its settings from the config directly: the proxy must
                 // know its routes even when the settings page was never opened
@@ -172,6 +185,8 @@ Log("app version " + System.Reflection.Assembly.GetExecutingAssembly().GetName()
 
         private static TrayIcon Tray;
         private static bool _allowClose;
+
+        private static Mutex _singleInstance;
 
         /// <summary>
         /// Headless proxy route probe (--proxy-test). Writes the result next to

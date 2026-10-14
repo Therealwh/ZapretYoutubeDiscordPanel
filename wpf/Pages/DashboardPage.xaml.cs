@@ -24,9 +24,10 @@ namespace Ydp.Pages
 
         private void Page_Loaded(object sender, RoutedEventArgs e)
         {
-            _timer.Start();
+_timer.Start();
             Refresh();
             TgProxyState();
+            LoadWebProxy();
         }
 
         // ---- Telegram proxy -------------------------------------------------
@@ -122,7 +123,7 @@ namespace Ydp.Pages
             }
         }
 
-        private void BtnTgOpen_Click(object sender, RoutedEventArgs e)
+private void BtnTgOpen_Click(object sender, RoutedEventArgs e)
         {
             try
             {
@@ -134,6 +135,95 @@ namespace Ydp.Pages
             catch (Exception ex)
             {
                 TgHint.Text = "Не удалось открыть Telegram: " + ex.Message;
+            }
+        }
+
+        // ---- веб-прокси ----------------------------------------------------
+
+        private void LoadWebProxy()
+        {
+            if (WebServerBox != null && !WebServerBox.IsLoaded) return;
+            WebServerBox.Text = Config.Get("tgWebServer", "tgchat.run");
+            WebSecretBox.Text = Config.Get("tgWebSecret", "dd5add7f440f0c60fc46e8b5e8ac69b737");
+        }
+
+        private string WebServer => NormalizeWebServer(WebServerBox.Text);
+
+        private string WebSecret => (WebSecretBox.Text ?? string.Empty).Trim().ToLowerInvariant();
+
+        /// <summary>Accept a bare host or a full tg://webproxy link and keep only the host.</summary>
+        private static string NormalizeWebServer(string raw)
+        {
+            string value = (raw ?? string.Empty).Trim();
+            if (value.Length == 0) return string.Empty;
+            if (value.StartsWith("tg://", StringComparison.OrdinalIgnoreCase))
+            {
+                var match = System.Text.RegularExpressions.Regex.Match(value, @"server=([^&\s]+)", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+                if (match.Success) return match.Groups[1].Value.Trim().ToLowerInvariant();
+                return string.Empty;
+            }
+            if (value.StartsWith("https://", StringComparison.OrdinalIgnoreCase)) value = value.Substring(8);
+            if (value.StartsWith("http://", StringComparison.OrdinalIgnoreCase)) value = value.Substring(7);
+            int slash = value.IndexOf('/');
+            if (slash > 0) value = value.Substring(0, slash);
+            return value.Trim().ToLowerInvariant();
+        }
+
+        private string WebLink()
+        {
+            string server = WebServer;
+            string secret = WebSecret;
+            if (server.Length == 0) return string.Empty;
+            return "tg://webproxy?server=" + server + "&secret=" + secret;
+        }
+
+        private void SaveWebProxy()
+        {
+            Config.Set("tgWebServer", WebServer);
+            Config.Set("tgWebSecret", WebSecret);
+        }
+
+        private void BtnWebConnect_Click(object sender, RoutedEventArgs e)
+        {
+            string server = WebServer;
+            if (server.Length == 0)
+            {
+                WebNote.Text = "Укажите адрес прокси.";
+                return;
+            }
+            SaveWebProxy();
+            string link = WebLink();
+            try
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(link) { UseShellExecute = true });
+                WebNote.Text = "Открываю Telegram с веб-прокси " + server + "…";
+            }
+            catch (Exception ex)
+            {
+                WebNote.Text = "Не удалось открыть: " + ex.Message + " · ссылка: " + link;
+            }
+        }
+
+        private void BtnCopyServer_Click(object sender, RoutedEventArgs e)
+        {
+            CopyText(WebServer, "Адрес скопирован");
+        }
+
+        private void BtnCopySecret_Click(object sender, RoutedEventArgs e)
+        {
+            CopyText(WebSecret, "Секрет скопирован");
+        }
+
+        private void CopyText(string value, string message)
+        {
+            try
+            {
+                Clipboard.SetText(value ?? string.Empty);
+                WebNote.Text = message + ": " + value;
+            }
+            catch (Exception ex)
+            {
+                WebNote.Text = "Не удалось скопировать: " + ex.Message;
             }
         }
 

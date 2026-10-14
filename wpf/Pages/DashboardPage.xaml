@@ -114,6 +114,36 @@
                     </StackPanel>
                     <TextBlock x:Name="TgLink" Text="" Style="{StaticResource Hint}" Margin="0,10,0,0"
                                TextTrimming="CharacterEllipsis" />
+
+                    <!-- Веб-прокси: отдельный способ зайти в Telegram, когда локальный прокси не нужен -->
+                    <Border Height="1" Background="{StaticResource BorderBrush2}" Margin="0,14,0,12" />
+                    <TextBlock Text="Веб-прокси (Telegram Web)" Style="{StaticResource CardTitle}" />
+                    <TextBlock Style="{StaticResource Hint}" Margin="0,4,0,10"
+                               Text="Отдельный прокси, который работает через браузер. Нужен, если локальный MTProto-прокси недоступен." />
+
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="10" />
+                            <ColumnDefinition Width="2*" />
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Text="АДРЕС" Style="{StaticResource TileLabel}" />
+                            <TextBox x:Name="WebServerBox" Padding="9,7" FontSize="12.5" />
+                        </StackPanel>
+                        <StackPanel Grid.Column="2">
+                            <TextBlock Text="СЕКРЕТ" Style="{StaticResource TileLabel}" />
+                            <TextBox x:Name="WebSecretBox" Padding="9,7" FontSize="12.5" />
+                        </StackPanel>
+                    </Grid>
+
+                    <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                        <Button x:Name="BtnWebConnect" Content="Подключить" Style="{StaticResource BtnPrimary}"
+                                Margin="0,0,8,0" Click="BtnWebConnect_Click" />
+                        <Button Content="Копировать адрес" Style="{StaticResource Btn}" Margin="0,0,8,0" Click="BtnCopyServer_Click" />
+                        <Button Content="Копировать секрет" Style="{StaticResource Btn}" Click="BtnCopySecret_Click" />
+                    </StackPanel>
+                    <TextBlock x:Name="WebNote" Style="{StaticResource Hint}" Margin="0,8,0,0" />
                 </StackPanel>
             </Border>
 
