@@ -16,6 +16,34 @@ namespace Ydp.Zapret
         public string url { get; set; }
         public Dictionary<string, string> results { get; set; } = new Dictionary<string, string>();
         public string result { get; set; }
+
+        /// <summary>
+        /// The address the connection actually reached, as reported by curl's
+        /// remote_ip. Users want to know WHERE the attempt landed, and a DNS
+        /// lookup would be a guess rather than the truth.
+        /// </summary>
+        public string ip { get; set; }
+
+        /// <summary>True when at least one probe variant answered.</summary>
+        public bool ok
+        {
+            get
+            {
+                if (kind == "ping") return result != "Timeout" && result != null;
+                return results != null && results.Values.Any(v => v == "OK");
+            }
+        }
+
+        /// <summary>Compact per-variant summary for the UI, e.g. "HTTP ok · TLS1.2 ERR".</summary>
+        public string probes
+        {
+            get
+            {
+                if (kind == "ping") return result ?? "";
+                if (results == null) return "";
+                return string.Join(" · ", results.Select(p => p.Key + " " + p.Value));
+            }
+        }
     }
 
     public sealed class GroupStat
@@ -192,27 +220,51 @@ namespace Ydp.Zapret
             }
         }
 
-        /// <summary>One curl probe: HEAD with specific TLS/http options.</summary>
-        private static string CurlProbe(string url, string extraArgs, int timeoutSec)
+        /// <summary>
+        /// One curl probe: HEAD with specific TLS/http options.
+        /// remote_ip is captured too, so the UI can show which address was
+        /// actually reached instead of only "it worked".
+        /// </summary>
+        private static string CurlProbe(string url, string extraArgs, int timeoutSec, out string remoteIp)
         {
+            remoteIp = null;
             string args = string.Format(
-                "-I -s -m {0} --connect-timeout {1} -o NUL -w \"%{{http_code}}\" --show-error {2} \"{3}\"",
+                "-I -s -m {0} --connect-timeout {1} -o NUL -w \"%{{http_code}} %{{remote_ip}}\" --show-error {2} \"{3}\"",
                 timeoutSec, Math.Min(3, timeoutSec), extraArgs, url);
             string output = RunProcess("curl.exe", args, (timeoutSec + 2) * 1000);
-            if (output.Length >= 3 && output.Substring(0, 3).All(char.IsDigit)) return "OK";
+            if (string.IsNullOrEmpty(output)) return "ERR";
+
+            // curl writes the -w line first; --show-error appends any message.
+            var firstLine = output.Split('\n')[0].Trim();
+            var parts = firstLine.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+            string code = parts.Length > 0 ? parts[0] : "";
+            if (parts.Length > 1 && parts[1] != "0.0.0.0") remoteIp = parts[1];
+
+            if (code.Length >= 3 && code.Substring(0, 3).All(char.IsDigit)) return "OK";
             string lower = output.ToLowerInvariant();
-            if (lower.Contains("could not resolve host") || lower.Contains("certificate") || lower.Contains("ssl")) return "SSL";
+            if (lower.Contains("could not resolve host")) return "DNS";
+            if (lower.Contains("certificate") || lower.Contains("ssl")) return "SSL";
             if (lower.Contains("unsupported") || lower.Contains("not supported") || lower.Contains("unrecognized") || lower.Contains("schannel")) return "UNSUP";
+            if (lower.Contains("timed out") || lower.Contains("timeout")) return "TIMEOUT";
+            if (lower.Contains("refused") || lower.Contains("failed to connect")) return "REFUSED";
             return "ERR";
         }
 
-        private static string PingHost(string host)
+        private static string PingHost(string host, out string resolvedIp)
         {
+            resolvedIp = null;
+            try
+            {
+                var addresses = System.Net.Dns.GetHostAddresses(host);
+                var first = addresses.FirstOrDefault(a => a.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork);
+                if (first != null) resolvedIp = first.ToString();
+            }
+            catch { /* ping may still work without a resolved address */ }
+
             string output = RunProcess("ping.exe", "-n 1 -w 1000 " + host, 4000);
-            if (output.Contains("TTL=") || output.Contains("TTL=")) return "OK";
-            if (output.Contains("TTL=")) return "OK";
             var m = System.Text.RegularExpressions.Regex.Match(output, @"time[<=](\d+)ms", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
             if (m.Success) return m.Groups[1].Value + " ms";
+            if (output.Contains("TTL=")) return "OK";
             return "Timeout";
         }
 
@@ -220,7 +272,9 @@ namespace Ydp.Zapret
         {
             if (value != null && value.StartsWith("PING:", StringComparison.OrdinalIgnoreCase))
             {
-                return new TargetResult { name = name, kind = "ping", result = PingHost(value.Substring(5).Trim()) };
+                string ip;
+                string pingResult = PingHost(value.Substring(5).Trim(), out ip);
+                return new TargetResult { name = name, kind = "ping", result = pingResult, ip = ip, url = value.Substring(5).Trim() };
             }
             var target = new TargetResult { name = name, kind = "url", url = value };
             var variants = new[]
@@ -231,7 +285,9 @@ namespace Ydp.Zapret
             };
             foreach (var variant in variants)
             {
-                target.results[variant.Label] = CurlProbe(value, variant.Args, timeoutSec);
+                string ip;
+                target.results[variant.Label] = CurlProbe(value, variant.Args, timeoutSec, out ip);
+                if (ip != null) target.ip = ip;
             }
             return target;
         }
@@ -293,6 +349,12 @@ namespace Ydp.Zapret
             public string failReason { get; set; }
             public Score score { get; set; }
             public Groups groups { get; set; }
+
+            /// <summary>
+            /// Per-target detail of this run, so the UI can show which address
+            /// answered and which did not instead of only a score.
+            /// </summary>
+            public List<TargetResult> targets { get; set; } = new List<TargetResult>();
         }
 
         public sealed class SweepResult
@@ -363,7 +425,14 @@ namespace Ydp.Zapret
 
                 var score = ScoreResults(collected);
                 var groups = GroupStats(collected);
-                var runResult = new StrategyRunResult { name = strat.name, file = strat.file, score = score, groups = groups };
+                var runResult = new StrategyRunResult
+                {
+                    name = strat.name,
+                    file = strat.file,
+                    score = score,
+                    groups = groups,
+                    targets = new List<TargetResult>(collected),
+                };
                 result.results.Add(runResult);
                 onProgress?.Invoke(runResult, i, strategies.Count);
 

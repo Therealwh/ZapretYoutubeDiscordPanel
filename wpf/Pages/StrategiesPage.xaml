@@ -15,13 +15,56 @@
                     Margin="0,0,10,0" Click="BtnApply_Click" />
             <Button x:Name="BtnStop" Content="Остановить обход" Style="{StaticResource Btn}"
                     Margin="0,0,10,0" Click="BtnStop_Click" />
-            <Button x:Name="BtnTest" Content="Полный тест всех стратегий" Style="{StaticResource Btn}" Click="BtnTest_Click" />
+            <Button x:Name="BtnTest" Content="Полный тест всех стратегий" Style="{StaticResource Btn}" Margin="0,0,10,0" Click="BtnTest_Click" />
+            <Button x:Name="BtnAbort" Content="Остановить проверку" Style="{StaticResource Btn}" Margin="0,0,10,0"
+                    Visibility="Collapsed" Click="BtnAbort_Click" />
             <ProgressBar x:Name="Progress" Width="120" Height="4" Margin="14,0,0,0"
                          VerticalAlignment="Center" Visibility="Collapsed" IsIndeterminate="True"
                          Foreground="{StaticResource AccentBrush}" Background="{StaticResource BgHoverBrush}" />
         </StackPanel>
 
         <TextBlock x:Name="StatusNote" Style="{StaticResource Dim}" Margin="0,0,0,10" Text="" />
+
+        <!-- Live per-target verdicts during the full sweep: green/red dot, the
+             address that answered, and which protocols got through. -->
+        <Border x:Name="ProbePanel" Style="{StaticResource Card}" Padding="14,12" Margin="0,0,0,12"
+                Visibility="Collapsed">
+            <StackPanel>
+                <TextBlock x:Name="ProbeTitle" Foreground="{StaticResource TextBrush}" FontWeight="SemiBold" />
+                <ItemsControl x:Name="ProbeList" Margin="0,8,0,0">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Margin="0,3">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="150" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <Ellipse Grid.Column="0" Width="9" Height="9" VerticalAlignment="Center" Margin="0,0,9,0">
+                                    <Ellipse.Style>
+                                        <Style TargetType="Ellipse">
+                                            <Setter Property="Fill" Value="{StaticResource ErrBrush}" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding ok}" Value="True">
+                                                    <Setter Property="Fill" Value="{StaticResource OkBrush}" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Ellipse.Style>
+                                </Ellipse>
+                                <TextBlock Grid.Column="1" Text="{Binding name}" Foreground="{StaticResource TextBrush}"
+                                           VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                <TextBlock Grid.Column="2" Text="{Binding address}" Style="{StaticResource Dim}"
+                                           VerticalAlignment="Center" Margin="8,0,8,0" TextTrimming="CharacterEllipsis" />
+                                <TextBlock Grid.Column="3" Text="{Binding probes}" Style="{StaticResource Dim}"
+                                           VerticalAlignment="Center" />
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </Border>
 
         <Border Style="{StaticResource Card}" Padding="0">
             <DataGrid x:Name="StrategyList" ItemsSource="{Binding Rows}" AutoGenerateColumns="False"

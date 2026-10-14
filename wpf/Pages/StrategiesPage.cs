@@ -13,6 +13,15 @@ using Ydp.Zapret;
 
 namespace Ydp.Pages
 {
+    /// <summary>One target line in the live verdict list: dot, name, address, probes.</summary>
+    public sealed class ProbeRow
+    {
+        public string name { get; set; }
+        public string address { get; set; }
+        public string probes { get; set; }
+        public bool ok { get; set; }
+    }
+
     public sealed class StrategyRow : INotifyPropertyChanged
     {
         public string Name { get; set; }
@@ -76,16 +85,31 @@ namespace Ydp.Pages
             await System.Threading.Tasks.Task.Yield();
         }
 
-        private void SetBusy(bool busy, string note = null)
+private void SetBusy(bool busy, string note = null)
         {
             _busy = busy;
             BtnAuto.IsEnabled = !busy;
             BtnApply.IsEnabled = !busy;
             BtnStop.IsEnabled = !busy;
             BtnTest.IsEnabled = !busy;
+            // Stop only makes sense while a sweep is running.
+            BtnAbort.Visibility = busy ? Visibility.Visible : Visibility.Collapsed;
+            BtnAbort.IsEnabled = busy;
             Progress.IsIndeterminate = busy;
             Progress.Visibility = busy ? Visibility.Visible : Visibility.Collapsed;
             if (note != null) StatusNote.Text = note;
+        }
+
+        /// <summary>
+        /// Stop the sweep at the next strategy boundary. Tester.Abort is safe to
+        /// call from any thread; the loop checks the flag between strategies and
+        /// between probe batches.
+        /// </summary>
+        private void BtnAbort_Click(object sender, RoutedEventArgs e)
+        {
+            Tester.Abort();
+            BtnAbort.IsEnabled = false;
+            StatusNote.Text = "Останавливаю проверку…";
         }
 
         private bool RequireRoot()
@@ -166,21 +190,79 @@ namespace Ydp.Pages
             Reload();
         }
 
-        private async void BtnTest_Click(object sender, RoutedEventArgs e)
+private async void BtnTest_Click(object sender, RoutedEventArgs e)
         {
             if (!RequireRoot()) return;
             SetBusy(true, "Полный тест стратегий…");
             var known = AutoConnect.KnownWorking();
             var sweep = await System.Threading.Tasks.Task.Run(() => Tester.RunStrategyTests(_root, known, stopOnFirst: false,
-                onProgress: (run, i, total) => Dispatcher.Invoke(() =>
-                    StatusNote.Text = run == null ? $"Запускаю {i + 1}/{total}…" : $"{run.name}: ok={run.score.ok}")));
+                onProgress: (run, i, total) => Dispatcher.Invoke(() => ShowRun(run, i, total))));
 
             var ok = sweep.results.Count(r => !r.failed);
-            SetBusy(false, ok > 0
-                ? $"Проверено стратегий: {sweep.results.Count}, запустилось: {ok}. Лучшая: {sweep.winner ?? "—"}"
-                : "Ни одна стратегия не запустилась");
+            if (sweep.aborted)
+            {
+                // The loop exits with the last tested strategy still running.
+                // Leaving that half-verified bypass in place would be worse than
+                // stopping it, so we stop it and say so plainly.
+                await System.Threading.Tasks.Task.Run(() => ServiceOps.StopServiceAndWinws());
+                SetBusy(false, "Проверка остановлена. Обход выключен — нажмите «Подключить рабочий обход», когда будете готовы.");
+            }
+            else
+            {
+                SetBusy(false, ok > 0
+                    ? $"Проверено стратегий: {sweep.results.Count}, запустилось: {ok}. Лучшая: {sweep.winner ?? "—"}"
+                    : "Ни одна стратегия не запустилась");
+            }
+
+            // Keep the detail of the best strategy on screen so the user can see
+            // WHICH address answered, not just which strategy won.
+            var best = sweep.results.Where(r => !r.failed && r.targets != null && r.targets.Count > 0)
+                .OrderByDescending(r => r.score.ok).FirstOrDefault();
+            if (best != null)
+            {
+                Dispatcher.Invoke(() => ShowDetail(best));
+            }
             await System.Threading.Tasks.Task.Yield();
             Reload();
+        }
+
+        /// <summary>Show the live verdicts of the strategy being tested.</summary>
+        private void ShowRun(Tester.StrategyRunResult run, int index, int total)
+        {
+            if (run == null)
+            {
+                StatusNote.Text = $"Запускаю {index + 1}/{total}…";
+                return;
+            }
+            StatusNote.Text = $"{run.name} ({(index + 1)}/{total}): Discord ok={run.groups.discord.okTargets}, "
+                + $"YouTube={run.groups.youtube.state}, проб ok={run.score.ok}";
+            if (run.targets != null && run.targets.Count > 0) ShowDetail(run);
+        }
+
+        private void ShowDetail(Tester.StrategyRunResult run)
+        {
+            ProbePanel.Visibility = Visibility.Visible;
+            ProbeTitle.Text = "Куда стучимся: " + run.name;
+            ProbeList.ItemsSource = run.targets.Select(TargetRow).ToList();
+        }
+
+        /// <summary>Flatten a target for the binding: host, address reached, probes.</summary>
+        private static ProbeRow TargetRow(TargetResult target)
+        {
+            string host = target.url ?? "";
+            if (target.kind == "ping") host = "ping " + host;
+            string address = string.IsNullOrEmpty(target.ip)
+                ? host
+                : host + "  →  " + target.ip;
+            if (target.kind == "ping" && !string.IsNullOrEmpty(target.result) && target.result != "OK")
+                address += "  (" + target.result + ")";
+            return new ProbeRow
+            {
+                name = target.name,
+                address = address,
+                probes = target.probes,
+                ok = target.ok,
+            };
         }
 
         private StrategyRow SelectedRow()
