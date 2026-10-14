@@ -74,12 +74,37 @@ jobs:
           New-Item -ItemType Directory -Force -Path dist | Out-Null
           Copy-Item 'wpf/bin/Release/net48/YoutubeDiscordPanel.exe' "dist/YoutubeDiscordPanel-$v.exe"
           Copy-Item 'wpf/setup/bin/Release/net48/YoutubeDiscordPanel-Setup.exe' "dist/YoutubeDiscordPanel-Setup-$v.exe"
+          # Stable download URLs for the website: a link that never has to be
+          # edited when the version changes.
+          Copy-Item "dist/YoutubeDiscordPanel-$v.exe"      'dist/YoutubeDiscordPanel-latest.exe'
+          Copy-Item "dist/YoutubeDiscordPanel-Setup-$v.exe" 'dist/YoutubeDiscordPanel-Setup-latest.exe'
           Copy-Item 'zapret-bundled.zip' 'dist/zapret-bundled.zip'
           Get-ChildItem dist | Format-Table Name, Length
 
+      - name: Pick release notes
+        if: steps.ver.outputs.skip != 'true'
+        id: notes
+        shell: bash
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          file=".github/release-notes/${tag}.md"
+          if [ -f "$file" ]; then
+            echo "path=$file" >> "$GITHUB_OUTPUT"
+          else
+            echo "path=" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Create draft release
         if: steps.ver.outputs.skip != 'true'
-        run: gh release create "${{ steps.ver.outputs.tag }}" --draft --title "${{ steps.ver.outputs.tag }}" --generate-notes --repo ${{ github.repository }}
+        shell: bash
+        run: |
+          tag="${{ steps.ver.outputs.tag }}"
+          notes="${{ steps.notes.outputs.path }}"
+          if [ -n "$notes" ]; then
+            gh release create "$tag" --draft --title "$tag" --notes-file "$notes" --repo ${{ github.repository }}
+          else
+            gh release create "$tag" --draft --title "$tag" --generate-notes --repo ${{ github.repository }}
+          fi
         env:
           GH_TOKEN: ${{ github.token }}
 
