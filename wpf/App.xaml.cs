@@ -133,6 +133,15 @@ base.OnStartup(e);
                     });
                 }
 
+                foreach (var arg in e.Args)
+                {
+                    if (!string.Equals(arg, "--autoconnect", StringComparison.OrdinalIgnoreCase)) continue;
+                    // Headless "connect working bypass" - the same code path the
+                    // dashboard button uses, useful for autostart and for support.
+                    RunAutoConnect();
+                    return;
+                }
+
                 if (!string.IsNullOrEmpty(TgProxy.CustomCfDomain))
                 {
                     Logger.Info("Cloudflare-релей: kws1..kws6." + TgProxy.CustomCfDomain, "tg-proxy");
@@ -203,6 +212,63 @@ base.OnStartup(e);
         private static Mutex _singleInstance;
         private const string ShowEventName = @"Local\YoutubeDiscordPanelShow";
         private static EventWaitHandle _showEvent;
+
+        /// <summary>
+        /// Headless "подключить рабочий обход" (--autoconnect): verify what runs
+        /// now, search the known-good strategies first, install/launch the first
+        /// working one and remember it. Same code path as the dashboard button.
+        /// </summary>
+        private static void RunAutoConnect()
+        {
+            var report = new System.Text.StringBuilder();
+            try
+            {
+                string root = Status.ResolveRoot(Config.Get("zapretRoot", null));
+                if (string.IsNullOrEmpty(root))
+                {
+                    report.AppendLine("FAILED: не найдена папка zapret");
+                    Logger.Error("Автоподбор: не найдена папка zapret", "autoconnect");
+                }
+                else
+                {
+                    report.AppendLine("root: " + root);
+                    var result = System.Threading.Tasks.Task.Run(() => AutoConnect.Connect(root,
+                        msg => Logger.Info(msg, "autoconnect"),
+                        (run, i, total) => Logger.Info(
+                            "пробую " + (i + 1) + "/" + total + ": "
+                            + (run == null ? "..." : run.name
+                               + " Discord=" + (run.groups.discord.works ? "ok" : "нет")
+                               + ", YouTube=" + run.groups.youtube.state),
+                            "autoconnect"))).GetAwaiter().GetResult();
+
+                    report.AppendLine("ok=" + result.ok
+                        + " already=" + result.already
+                        + " restored=" + result.restored
+                        + " fallback=" + result.fallback
+                        + " mode=" + result.mode
+                        + " strategy=" + result.strategy
+                        + " tried=" + result.candidatesTried
+                        + (string.IsNullOrEmpty(result.reason) ? "" : " reason=" + result.reason));
+                    Logger.Info("Автоподбор: " + report.ToString().Trim(), "autoconnect");
+                }
+            }
+            catch (Exception ex)
+            {
+                report.AppendLine("FAILED: " + ex.Message);
+                Logger.Error("Автоподбор упал: " + ex.Message, "autoconnect");
+            }
+            finally
+            {
+                try
+                {
+                    System.IO.File.WriteAllText(
+                        System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "autoconnect.txt"),
+                        report.ToString());
+                }
+                catch { /* report is optional */ }
+                Environment.Exit(0);
+            }
+        }
 
         /// <summary>Ask an already-running panel to come to the foreground.</summary>
         private static void SignalRunningInstance()

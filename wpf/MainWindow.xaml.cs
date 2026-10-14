@@ -104,6 +104,28 @@ namespace Ydp
             FooterNote.Text = string.IsNullOrEmpty(root) ? "Папка zapret не найдена" : root;
         }
 
+        // ---- custom title bar ------------------------------------------------
+        // We draw the caption ourselves, so these three replace the system ones.
+        // Close() goes through the normal Closing handler, which hides to the
+        // tray instead of killing the panel.
+
+        private void Minimize_Click(object sender, RoutedEventArgs e)
+        {
+            WindowState = WindowState.Minimized;
+        }
+
+        private void Maximize_Click(object sender, RoutedEventArgs e)
+        {
+            WindowState = WindowState == WindowState.Maximized
+                ? WindowState.Normal
+                : WindowState.Maximized;
+        }
+
+        private void Close_Click(object sender, RoutedEventArgs e)
+        {
+            Close();
+        }
+
         private void Nav_Checked(object sender, RoutedEventArgs e)
         {
             // The first radio button is already IsChecked in XAML, so this fires
