@@ -176,10 +176,39 @@ namespace Ydp.Pages
             }
         }
 
-        private void BtnPanelCheck_Click(object sender, RoutedEventArgs e)
+        private async void BtnPanelCheck_Click(object sender, RoutedEventArgs e)
         {
-            PanelNote.Text = "Проверка обновлений панели будет доступна, когда сборка опубликована в GitHub Releases. "
-                + "Установленная версия: " + Assembly.GetExecutingAssembly().GetName().Version;
+            PanelNote.Text = "Проверяю GitHub…";
+            BtnPanelCheck.IsEnabled = false;
+            try
+            {
+                var state = await Task.Run(() => PanelUpdater.Check());
+                if (state == null || string.IsNullOrEmpty(state.latest))
+                {
+                    PanelNote.Text = "Не удалось получить информацию о релизах. Проверьте интернет.";
+                    return;
+                }
+                PanelNote.Text = state.available
+                    ? "Доступна версия " + state.latest + " (у вас " + state.current + ")"
+                    : "У вас последняя версия: " + state.current;
+                BtnPanelInstall.IsEnabled = state.available;
+            }
+            finally
+            {
+                BtnPanelCheck.IsEnabled = true;
+            }
+        }
+
+        private async void BtnPanelInstall_Click(object sender, RoutedEventArgs e)
+        {
+            if (!Confirm("Скачать и установить новую версию панели?\r\n\r\n"
+                + "Панель перезапустится после установки.")) return;
+            PanelNote.Text = "Скачиваю обновление…";
+            BtnPanelInstall.IsEnabled = false;
+            var result = await Task.Run(() => PanelUpdater.Install());
+            PanelNote.Text = result.ok
+                ? "Обновление установится сразу после закрытия панели."
+                : "Ошибка обновления: " + (result.reason ?? "ошибка") + " " + result.message;
         }
 
         private void BtnOpenReleases_Click(object sender, RoutedEventArgs e)
