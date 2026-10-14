@@ -441,22 +441,78 @@ namespace Ydp.Services
                       : new OperationResult { ok = false, reason = "process_start_failed" };
         }
 
-        /// <summary>Stop the WinDivert driver services so the folder can be replaced.</summary>
-        public static void StopDrivers()
+        /// <summary>
+        /// Stop the WinDivert driver services so the folder can be replaced.
+        ///
+        /// Best effort by design: a driver we cannot open or stop must never abort
+        /// an engine install. The previous version bailed out of the whole loop on
+        /// a null SCM handle and skipped the wait whenever the driver was absent,
+        /// which is why an update could die with "cannot open service WinDivert"
+        /// and leave the bypass down.
+        ///
+        /// Returns true when at least one driver is actually running afterwards,
+        /// so callers can warn that a reboot may be needed for the new files.
+        /// </summary>
+        public static bool StopDrivers()
         {
             foreach (var name in new[] { "WinDivert", "WinDivert14", "WinDivert64" })
             {
-                using (var manager = OpenManager())
+                try
                 {
-                    if (manager == null) return;
-                    using (var service = new ScHandle(OpenServiceW(manager.Handle, name, SERVICE_STOP | SERVICE_QUERY_STATUS)))
+                    using (var manager = OpenManager())
                     {
-                        if (service.Handle == IntPtr.Zero) continue;
-                        StopServiceRaw(service.Handle);
+                        if (manager == null) continue;
+                        using (var service = new ScHandle(OpenServiceW(manager.Handle, name, SERVICE_STOP | SERVICE_QUERY_STATUS)))
+                        {
+                            if (service.Handle != IntPtr.Zero) StopServiceRaw(service.Handle);
+                        }
+                    }
+                    // Wait whether or not the driver existed: we still want to
+                    // give a running one time to actually unload.
+                    WaitServiceState(name, "STOPPED", 8000);
+                }
+                catch (Exception ex)
+                {
+                    Logger.Warn("Не удалось остановить драйвер " + name + ": " + ex.Message, "service");
+                }
+            }
+            return IsDriverRunning();
+        }
+
+        /// <summary>True when any WinDivert driver is still loaded.</summary>
+        public static bool IsDriverRunning()
+        {
+            foreach (var name in new[] { "WinDivert", "WinDivert14", "WinDivert64" })
+            {
+                try
+                {
+                    using (var manager = OpenManager())
+                    {
+                        if (manager == null) continue;
+                        using (var service = new ScHandle(OpenServiceW(manager.Handle, name, SERVICE_QUERY_STATUS)))
+                        {
+                            if (service.Handle != IntPtr.Zero) return true;
+                        }
                     }
                 }
-                WaitServiceState(name, "STOPPED", 8000);
+                catch { /* a driver we cannot query simply does not count */ }
             }
+            return false;
+        }
+
+        /// <summary>
+        /// Stop the service and make sure no winws survives it.
+        ///
+        /// Order matters: stopping the service first can leave winws running as an
+        /// orphan, and that orphan keeps holding the WinDivert filter, so the next
+        /// start of the service fails with exit code 1 and the user loses the
+        /// bypass with no obvious cause.
+        /// </summary>
+        public static void StopServiceAndWinws()
+        {
+            StopService();
+            KillWinws();
+            WaitWinws(true, 8000);
         }
 
         /// <summary>Enable TCP timestamps (netsh), best effort.</summary>

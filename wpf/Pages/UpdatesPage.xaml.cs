@@ -160,7 +160,8 @@ namespace Ydp.Pages
                 Releases.Text = "Готово: zapret обновлён до " + _pendingRelease.tag
                     + ", файлов — " + result.copied.Length + "."
                     + Environment.NewLine
-                    + "Подключите рабочий обход заново, чтобы применить новый движок.";
+                    + "Подключите рабочий обход заново, чтобы применить новый движок."
+                    + (string.IsNullOrEmpty(result.message) ? "" : Environment.NewLine + result.message);
                 _pendingRelease = null;
             }
             catch (Exception ex)

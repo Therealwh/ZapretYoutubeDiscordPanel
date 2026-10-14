@@ -257,9 +257,12 @@ public sealed class EngineRelease
             // Clear the old marker first: if the install dies halfway we must not
             // keep claiming the previous version is fully installed.
             WriteInstalledVersion(rootDir, null);
-            ServiceOps.KillWinws();
-            ServiceOps.StopService();
-            ServiceOps.StopDrivers();
+            // Service first, then any winws it may have left behind: an orphan holds
+            // the WinDivert filter and makes the next service start fail with
+            // exit code 1. Drivers go last, and only as preparation for
+            // overwriting the .sys files.
+            ServiceOps.StopServiceAndWinws();
+            bool driversStopped = ServiceOps.StopDrivers();
 
             try
             {
@@ -292,7 +295,11 @@ public sealed class EngineRelease
                 // Record which release produced this install, unless the caller
                 // already knows (the "update" button passes its version).
                 if (!string.IsNullOrEmpty(pendingVersion)) WriteInstalledVersion(rootDir, pendingVersion);
-                return new EngineResult { ok = true, copied = copied.ToArray() };
+                // A driver still loaded means the new .sys may only take effect
+                // after a reboot - say so instead of leaving a silent surprise.
+                var result = new EngineResult { ok = true, copied = copied.ToArray() };
+                if (!driversStopped) result.message = "Драйвер WinDivert остался загружен: перезагрузите компьютер, чтобы применился новый движок.";
+                return result;
             }
             catch (Exception ex)
             {
