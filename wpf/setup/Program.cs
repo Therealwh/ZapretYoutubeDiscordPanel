@@ -154,7 +154,7 @@ try
 private static int Install(bool silent)
         {
             Log("Install: старт, silent=" + silent);
-            bool createShortcuts = true, createDesktopShortcut = true, addAutoStart = true;
+            bool createShortcuts = true, createDesktopShortcut = true, addAutoStart = true, installEngine = true;
             string sourceDir = Path.GetDirectoryName(new Uri(Assembly.GetExecutingAssembly().CodeBase).LocalPath);
             string sourceExe = FindPanelExe(sourceDir);
             Log("Install: панель = " + (sourceExe ?? "НЕ НАЙДЕНА"));
@@ -183,6 +183,7 @@ if (!silent)
                     createShortcuts = form.CreateShortcuts;
                     createDesktopShortcut = form.CreateDesktopShortcut;
                     addAutoStart = form.AddAutoStart;
+                    installEngine = form.InstallEngine;
                 }
             }
             WriteSetting("InstallDir", InstallDir);
@@ -211,6 +212,16 @@ string bigZip = Path.Combine(sourceDir, "zapret-discord-youtube.zip");
                 File.Copy(bigZip, Path.Combine(InstallDir, "zapret-discord-youtube.zip"), true);
             }
             Log("Install: движок = " + (bundled == null ? "нет" : bundled));
+
+            if (installEngine && bundled != null && File.Exists(bundled))
+            {
+                string engineDir = Path.Combine(InstallDir, "Zapret");
+                Log("Install: распаковываю zapret в " + engineDir);
+                if (ExtractEngine(bundled, engineDir))
+                {
+                    Log("Install: движок zapret распакован");
+                }
+            }
 
             if (createShortcuts || createDesktopShortcut) CreateShortcuts(createDesktopShortcut);
             Log("Install: ярлыки обработаны");
@@ -318,6 +329,79 @@ private static void CreateShortcuts(bool desktop)
                 // appeared and nobody could tell why. Log it instead.
                 Log("Не удалось создать ярлыки: " + ex);
             }
+        }
+
+        /// <summary>
+        /// Unpack the bundled zapret archive into <paramref name="target"/>.
+        ///
+        /// The release zip has a version folder on top ("zapret-...-1.10.3/"),
+        /// so that prefix is stripped: the panel expects bin\winws.exe and lists\
+        /// directly under the folder it is given.
+        /// </summary>
+        private static bool ExtractEngine(string zipPath, string target)
+        {
+            try
+            {
+                Directory.CreateDirectory(target);
+                string root = Path.GetFullPath(target);
+                if (!root.EndsWith(Path.DirectorySeparatorChar.ToString(), StringComparison.Ordinal))
+                {
+                    root += Path.DirectorySeparatorChar;
+                }
+
+                using (var archive = ZipFile.OpenRead(zipPath))
+                {
+                    // The common prefix of the entries, if the first segment is
+                    // the same folder for all of them.
+                    string prefix = DetectPrefix(archive);
+
+                    foreach (var entry in archive.Entries)
+                    {
+                        if (entry.FullName.EndsWith("/", StringComparison.Ordinal)) continue;
+                        string relative = prefix.Length > 0
+                            ? entry.FullName.Substring(prefix.Length)
+                            : entry.FullName;
+                        relative = relative.Replace('/', Path.DirectorySeparatorChar)
+                            .TrimStart(Path.DirectorySeparatorChar);
+                        if (relative.Length == 0) continue;
+
+                        string destination = Path.GetFullPath(Path.Combine(root, relative));
+                        if (!destination.StartsWith(root, StringComparison.OrdinalIgnoreCase))
+                        {
+                            throw new IOException("запись выходит за пределы папки: " + entry.FullName);
+                        }
+                        string dir = Path.GetDirectoryName(destination);
+                        if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);
+                        entry.ExtractToFile(destination, true);
+                    }
+                }
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Log("Не удалось распаковать движок zapret: " + ex.Message);
+                return false;
+            }
+        }
+
+        private static string DetectPrefix(ZipArchive archive)
+        {
+            foreach (var entry in archive.Entries)
+            {
+                if (entry.FullName.EndsWith("/", StringComparison.Ordinal)) continue;
+                int slash = entry.FullName.IndexOf('/');
+                if (slash <= 0) return string.Empty;
+                string candidate = entry.FullName.Substring(0, slash + 1);
+                // Only a real folder, not a file that happens to contain a slash.
+                string asPath = candidate.TrimEnd('/');
+                bool isFolder = false;
+                foreach (var other in archive.Entries)
+                {
+                    if (other.FullName.TrimEnd('/') == asPath) { isFolder = true; break; }
+                }
+                return isFolder ? candidate : string.Empty;
+            }
+            return string.Empty;
         }
 
         /// <summary>Append to a small log next to the installer, for support.</summary>

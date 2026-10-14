@@ -18,11 +18,13 @@ namespace Ydp.Setup
         private readonly CheckBox _desktop = new CheckBox();
         private readonly CheckBox _autoStart = new CheckBox();
         private readonly CheckBox _shortcuts = new CheckBox();
+        private readonly CheckBox _engine = new CheckBox();
 
         public string SelectedDirectory { get { return _path.Text.Trim(); } }
         public bool CreateDesktopShortcut { get { return _desktop.Checked; } }
         public bool AddAutoStart { get { return _autoStart.Checked; } }
         public bool CreateShortcuts { get { return _shortcuts.Checked; } }
+        public bool InstallEngine { get { return _engine.Checked; } }
 
         public InstallForm(string suggestedDir)
         {
@@ -31,7 +33,7 @@ namespace Ydp.Setup
             StartPosition = FormStartPosition.CenterScreen;
             MaximizeBox = false;
             MinimizeBox = false;
-            ClientSize = new Size(520, 268);
+            ClientSize = new Size(540, 300);
             Font = new Font("Segoe UI", 9F);
             BackColor = Color.FromArgb(32, 32, 32);
             ForeColor = Color.White;
@@ -96,10 +98,21 @@ namespace Ydp.Setup
             _autoStart.Location = new Point(20, 186);
             Controls.Add(_autoStart);
 
+            // The zapret archive ships inside the installer, so a first run needs
+            // no network and no question afterwards. Unpacked into a "Zapret"
+            // folder next to the panel, which is exactly where the panel looks
+            // for it.
+            _engine.Text = "Установить движок zapret (папкой Zapret рядом с программой)";
+            _engine.Checked = true;
+            _engine.ForeColor = Color.White;
+            _engine.AutoSize = true;
+            _engine.Location = new Point(20, 210);
+            Controls.Add(_engine);
+
             var install = new Button
             {
                 Text = "Установить",
-                Location = new Point(348, 220),
+                Location = new Point(368, 252),
                 Size = new Size(154, 34),
                 FlatStyle = FlatStyle.Flat,
                 BackColor = Color.FromArgb(70, 90, 190),
@@ -112,7 +125,7 @@ namespace Ydp.Setup
             var cancel = new Button
             {
                 Text = "Отмена",
-                Location = new Point(282, 220),
+                Location = new Point(302, 252),
                 Size = new Size(60, 34),
                 FlatStyle = FlatStyle.Flat,
                 BackColor = Color.FromArgb(56, 56, 56),

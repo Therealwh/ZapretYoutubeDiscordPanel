@@ -47,7 +47,14 @@ Navigate(start ?? "dashboard");
                 App.Tray.Notify("YoutubeDiscordPanel", "Панель свёрнута в трей — значок рядом с часами.");
             };
 
-            Loaded += (s, e) => UpdateFooter();
+            Loaded += (s, e) =>
+        {
+            // The installer puts zapret next to the panel, so the folder is
+            // found rather than configured: persist it and add the Telegram
+            // domains before anything else reads the settings.
+            Zapret.FirstRun.RememberResolvedRoot();
+            UpdateFooter();
+        };
         }
 
         /// <summary>Open a section by its tag. Also used by the --page= switch.</summary>

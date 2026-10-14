@@ -25,6 +25,40 @@ namespace Ydp.Zapret
     /// </summary>
     public static class FirstRun
     {
+        /// <summary>
+        /// Called on every start: make sure the settings point at the folder we
+        /// actually use, and that the Telegram domains are in the hostlist.
+        ///
+        /// The installer unpacks zapret next to the panel, so the folder is
+        /// discovered rather than configured. Without persisting it, the
+        /// settings kept showing an empty or stale path, and the user had no way
+        /// to see which folder the bypass was taken from.
+        /// </summary>
+        public static void RememberResolvedRoot()
+        {
+            string configured = Config.Get("zapretRoot", null);
+            string resolved = Status.ResolveRoot(configured);
+            if (string.IsNullOrEmpty(resolved)) return;
+
+            if (!string.Equals(resolved, configured, StringComparison.OrdinalIgnoreCase))
+            {
+                Config.Set("zapretRoot", resolved);
+                Logger.Info("Рабочая папка zapret: " + resolved, "engine");
+            }
+
+            // The Telegram domains are added once, after the first successful
+            // install; reinstalling the engine keeps the user's own list file.
+            if (!string.Equals(Config.Get("tgDomainsAdded", null), "true", StringComparison.OrdinalIgnoreCase))
+            {
+                int added = EnsureTelegramDomains(resolved);
+                if (added > 0)
+                {
+                    Config.Set("tgDomainsAdded", "true");
+                    Logger.Info("Домены Telegram добавлены в список zapret: " + added, "lists");
+                }
+            }
+        }
+
         /// <summary>True when zapret is missing and the user has not declined.</summary>
         public static bool NeedsInstall()
         {
