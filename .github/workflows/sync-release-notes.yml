@@ -1,0 +1,46 @@
+name: Sync release notes
+
+# Release bodies are taken from .github/release-notes/<tag>.md when the tag is
+# published. Releases published before those files existed ended up with an
+# auto-generated commit list, which says nothing to someone who just wants to
+# know what changed. This job walks the existing releases and puts the written
+# notes in place, so the fix does not depend on anybody editing old releases by
+# hand.
+on:
+  push:
+    paths:
+      - '.github/release-notes/**'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Update release bodies from the notes files
+        shell: bash
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          for file in .github/release-notes/*.md; do
+            tag=$(basename "$file" .md)
+            if ! gh release view "$tag" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+              echo "skip $tag: no such release"
+              continue
+            fi
+            current=$(gh release view "$tag" --repo "${{ github.repository }}" --json body -q .body)
+            wanted=$(cat "$file")
+            if [ "$current" = "$wanted" ]; then
+              echo "skip $tag: body already up to date"
+              continue
+            fi
+            gh release edit "$tag" --notes-file "$file" --repo "${{ github.repository }}"
+            echo "updated $tag"
+          done
+        env:
+          GH_TOKEN: ${{ github.token }}
