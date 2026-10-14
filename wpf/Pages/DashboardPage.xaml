@@ -26,6 +26,14 @@
                 <StackPanel Grid.Column="1" Margin="16,0,16,0" VerticalAlignment="Center">
                     <TextBlock Text="Обход" Style="{StaticResource CardTitle}" />
                     <TextBlock x:Name="PowerState" Text="Выключен" Style="{StaticResource Hint}" />
+                    <!-- Connecting takes tens of seconds (service swap + probes),
+                         so the wait has to be visible or it reads as a freeze. -->
+                    <StackPanel x:Name="BusyPanel" Orientation="Horizontal" Margin="0,4,0,0" Visibility="Collapsed">
+                        <ProgressBar x:Name="BusyBar" Width="90" Height="4" VerticalAlignment="Center"
+                                     IsIndeterminate="True" Foreground="{StaticResource AccentBrush}"
+                                     Background="{StaticResource BgHoverBrush}" />
+                        <TextBlock x:Name="BusyText" Text="Подключаю…" Margin="8,0,0,0" Style="{StaticResource Hint}" />
+                    </StackPanel>
                 </StackPanel>
 
                 <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
@@ -33,7 +41,7 @@
                             Margin="0,0,10,0" Click="BtnAuto_Click" />
                     <Button x:Name="BtnRestart" Content="Перезапустить" Style="{StaticResource Btn}"
                             Margin="0,0,10,0" Click="BtnRestart_Click" />
-                    <Button Content="Остановить" Style="{StaticResource Btn}" Click="BtnStop_Click" />
+                    <Button x:Name="BtnStop" Content="Остановить" Style="{StaticResource Btn}" Click="BtnStop_Click" />
                 </StackPanel>
             </Grid>
         </Border>

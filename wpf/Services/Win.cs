@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Runtime.InteropServices;
@@ -115,6 +116,148 @@ namespace Ydp.Services
             }
             finally { foreach (var p in procs) p.Dispose(); }
             return null;
+        }
+
+        /// <summary>Adapters that can actually carry DNS settings.</summary>
+        public sealed class DnsAdapter
+        {
+            public string Name { get; set; }
+            public string Title { get; set; }
+            public string CurrentDns { get; set; }
+            public bool Dhcp { get; set; }
+            public override string ToString() { return Title; }
+        }
+
+        /// <summary>
+        /// List adapters worth changing.
+        ///
+        /// Loopback, tunnels and virtual adapters are skipped: setting DNS on
+        /// those either does nothing or breaks unrelated software, and a user
+        /// picking "VPN" from a list should not have the panel silently retarget
+        /// its DNS.
+        /// </summary>
+        public static List<DnsAdapter> ListDnsAdapters()
+        {
+            var result = new List<DnsAdapter>();
+            try
+            {
+                foreach (var nic in System.Net.NetworkInformation.NetworkInterface.GetAllNetworkInterfaces())
+                {
+                    if (nic.NetworkInterfaceType == System.Net.NetworkInformation.NetworkInterfaceType.Loopback) continue;
+                    if (nic.NetworkInterfaceType == System.Net.NetworkInformation.NetworkInterfaceType.Tunnel) continue;
+                    if (nic.OperationalStatus != System.Net.NetworkInformation.OperationalStatus.Up) continue;
+
+                    string title = nic.Name;
+                    string description = null;
+                    try { description = nic.Description; } catch { }
+                    if (!string.IsNullOrEmpty(description) && description.IndexOf("Tunnel", StringComparison.OrdinalIgnoreCase) >= 0) continue;
+                    if (!string.IsNullOrEmpty(description) && description.IndexOf("Virtual", StringComparison.OrdinalIgnoreCase) >= 0) continue;
+
+                    var addresses = new List<string>();
+                    bool dhcp = true;
+                    try
+                    {
+                        foreach (var ip in nic.GetIPProperties().UnicastAddresses)
+                        {
+                            if (ip.Address.AddressFamily != System.Net.Sockets.AddressFamily.InterNetwork) continue;
+                            addresses.Add(ip.Address.ToString());
+                            // DnsAddresses live on the adapter, not on the unicast address.
+                            if (nic.GetIPProperties().DnsAddresses.Any(d => d.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork))
+                            {
+                                dhcp = false;
+                            }
+                        }
+                    }
+                    catch { /* adapter without an address set */ }
+
+                    result.Add(new DnsAdapter
+                    {
+                        Name = nic.Name,
+                        Title = string.IsNullOrEmpty(description) ? nic.Name : nic.Name + " (" + description + ")",
+                        CurrentDns = addresses.Count > 0 ? string.Join(", ", addresses) : "DHCP",
+                        Dhcp = dhcp,
+                    });
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn("Не удалось получить список сетевых адаптеров: " + ex.Message, "net");
+            }
+            return result;
+        }
+
+        /// <summary>
+        /// Point an adapter at fixed DNS servers.
+        ///
+        /// Some DPI setups break the system resolver while the rest of the
+        /// traffic passes, which is why YouTube can report "no internet" on a
+        /// connection that plainly has one. Switching the resolver to public
+        /// resolvers is the standard first thing to try, and it is a setting the
+        /// user can always put back.
+        /// </summary>
+        public static ServiceOps.OperationResult SetDns(string adapter, string primary, string secondary)
+        {
+            if (string.IsNullOrWhiteSpace(adapter)) return new ServiceOps.OperationResult { ok = false, reason = "no_adapter" };
+            if (!IsValidDns(primary)) return new ServiceOps.OperationResult { ok = false, reason = "bad_dns" };
+            if (!string.IsNullOrWhiteSpace(secondary) && !IsValidDns(secondary)) return new ServiceOps.OperationResult { ok = false, reason = "bad_dns" };
+
+            var first = RunNetsh("interface ip set dns name=\"" + adapter + "\" static " + primary + " primary");
+            if (!first.ok) return first;
+            if (!string.IsNullOrWhiteSpace(secondary))
+            {
+                var second = RunNetsh("interface ip set dns name=\"" + adapter + "\" static " + secondary + " index=2");
+                if (!second.ok) return second;
+            }
+            // Old cached entries keep the broken resolver alive.
+            RunNetsh("interface ip flushdns");
+            Logger.Info("DNS: " + adapter + " → " + primary
+                + (string.IsNullOrWhiteSpace(secondary) ? "" : ", " + secondary), "net");
+            return new ServiceOps.OperationResult { ok = true };
+        }
+
+        /// <summary>Hand the resolver back to the provider (DHCP).</summary>
+        public static ServiceOps.OperationResult ResetDns(string adapter)
+        {
+            if (string.IsNullOrWhiteSpace(adapter)) return new ServiceOps.OperationResult { ok = false, reason = "no_adapter" };
+            var result = RunNetsh("interface ip set dns name=\"" + adapter + "\" dhcp");
+            if (!result.ok) return result;
+            RunNetsh("interface ip flushdns");
+            Logger.Info("DNS: " + adapter + " → DHCP (от провайдера)", "net");
+            return new ServiceOps.OperationResult { ok = true };
+        }
+
+        private static bool IsValidDns(string value)
+        {
+            System.Net.IPAddress parsed;
+            return System.Net.IPAddress.TryParse((value ?? "").Trim(), out parsed)
+                && parsed.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork;
+        }
+
+        private static ServiceOps.OperationResult RunNetsh(string arguments)
+        {
+            try
+            {
+                var startInfo = new ProcessStartInfo("netsh.exe", arguments)
+                {
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                };
+                using (var p = Process.Start(startInfo))
+                {
+                    if (p == null) return new ServiceOps.OperationResult { ok = false, reason = "netsh_failed" };
+                    string output = p.StandardOutput.ReadToEnd() + p.StandardError.ReadToEnd();
+                    p.WaitForExit(15000);
+return p.ExitCode == 0
+                        ? new ServiceOps.OperationResult { ok = true }
+                        : new ServiceOps.OperationResult { ok = false, reason = "netsh_exit_" + p.ExitCode, message = output.Trim() };
+                }
+            }
+            catch (Exception ex)
+            {
+                return new ServiceOps.OperationResult { ok = false, reason = "netsh_failed", message = ex.Message };
+            }
         }
 
         /// <summary>Service state via ServiceController (was sc.exe + text parsing).</summary>

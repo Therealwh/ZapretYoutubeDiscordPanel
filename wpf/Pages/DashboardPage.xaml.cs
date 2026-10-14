@@ -316,9 +316,8 @@ private void Refresh()
         private async void BtnAuto_Click(object sender, RoutedEventArgs e)
         {
             if (_busy) return;
-            _busy = true;
-            BtnAuto.IsEnabled = false;
-            BtnRestart.IsEnabled = false;
+            SetBusy(true, "Подбираю рабочую стратегию…");
+            BtnStop.IsEnabled = false;
             PowerState.Text = "Подбираю рабочую стратегию…";
             string root = Status.ResolveRoot(Config.Get("zapretRoot", null));
             try
@@ -340,14 +339,17 @@ if (string.IsNullOrEmpty(root))
         PowerState.Text = "zapret установлен, подключаю обход…";
     }
                 var result = await System.Threading.Tasks.Task.Run(() => AutoConnect.Connect(root,
-                    msg => Dispatcher.Invoke(() => PowerState.Text = msg), null));
+                    msg => Dispatcher.Invoke(() =>
+                    {
+                        PowerState.Text = msg;
+                        BusyText.Text = msg;
+                    }), null));
                 PowerState.Text = DescribeResult(result);
             }
             finally
             {
-                _busy = false;
-                BtnAuto.IsEnabled = true;
-                BtnRestart.IsEnabled = true;
+                SetBusy(false);
+                BtnStop.IsEnabled = true;
                 Refresh();
             }
         }
@@ -362,24 +364,39 @@ if (string.IsNullOrEmpty(root))
             return "Не удалось подключить: " + (r.reason ?? "ошибка");
         }
 
-private async void BtnRestart_Click(object sender, RoutedEventArgs e)
+        /// <summary>
+        /// The visible "not frozen" signal: connecting legitimately takes tens of
+        /// seconds (service swap, waiting winws out, probe retries), and a
+        /// silently disabled button reads as a hang.
+        /// </summary>
+        private void SetBusy(bool busy, string step = null)
+        {
+            _busy = busy;
+            BusyPanel.Visibility = busy ? Visibility.Visible : Visibility.Collapsed;
+            if (step != null) BusyText.Text = step;
+            BtnAuto.IsEnabled = !busy;
+            BtnRestart.IsEnabled = !busy;
+        }
+
+        private async void BtnRestart_Click(object sender, RoutedEventArgs e)
         {
             if (_busy) return;
             string root = Status.ResolveRoot(Config.Get("zapretRoot", null));
             if (string.IsNullOrEmpty(root)) return;
-            _busy = true;
+            SetBusy(true, "Перезапускаю обход: останавливаю прежний…");
             try
             {
                 await System.Threading.Tasks.Task.Run(() =>
                 {
                     Services.ServiceOps.KillWinws();
+                    SetBusyText("Перезапуск: ставлю службу и жду запуска winws…");
                     Services.ServiceOps.StopService();
                     Services.ServiceOps.StartService();
                 });
             }
             finally
             {
-                _busy = false;
+                SetBusy(false);
                 Refresh();
             }
         }
@@ -387,7 +404,7 @@ private async void BtnRestart_Click(object sender, RoutedEventArgs e)
         private async void BtnStop_Click(object sender, RoutedEventArgs e)
         {
             if (_busy) return;
-            _busy = true;
+            SetBusy(true, "Останавливаю обход…");
             try
             {
                 await System.Threading.Tasks.Task.Run(() =>
@@ -398,9 +415,15 @@ private async void BtnRestart_Click(object sender, RoutedEventArgs e)
             }
             finally
             {
-                _busy = false;
+                SetBusy(false);
                 Refresh();
             }
+        }
+
+        /// <summary>Thread-safe step text update for the busy panel.</summary>
+        private void SetBusyText(string text)
+        {
+            Dispatcher.Invoke(() => BusyText.Text = text);
         }
 
         /// <summary>Jump to a section from the quick-actions card.</summary>

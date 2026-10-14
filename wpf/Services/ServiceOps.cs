@@ -186,6 +186,20 @@ namespace Ydp.Services
         // ---- winws process ----------------------------------------------
 
         /// <summary>Wait until winws.exe is gone (or present).</summary>
+        /// <summary>
+        /// Is a bypass process alive right now.
+        ///
+        /// Needed as its own cheap check because a strategy can die mid-run:
+        /// probing a strategy that is not actually running measures nothing and
+        /// used to be reported as a pass, which is how "winws never started"
+        /// could still end up counting as a working strategy.
+        /// </summary>
+        public static bool IsWinwsRunning()
+        {
+            try { return System.Diagnostics.Process.GetProcessesByName("winws").Length > 0; }
+            catch { return false; }
+        }
+
         public static bool WaitWinws(bool absent, int timeoutMs = 10000)
         {
             var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
@@ -501,7 +515,51 @@ namespace Ydp.Services
         }
 
         /// <summary>
-        /// Stop the service and make sure no winws survives it.
+        /// Delete the zapret service entry and wait until the name is really
+        /// free, so the next install cannot inherit the previous arguments.
+        /// </summary>
+        public static void DeleteServiceEntry()
+        {
+            KillWinws();
+            StopService();
+            using (var manager = OpenManager())
+            {
+                if (manager == null) return;
+                foreach (var name in new[] { Status.ZapretServiceName })
+                {
+                    using (var service = new ScHandle(OpenServiceW(manager.Handle, name, SERVICE_STOP | DELETE | SERVICE_QUERY_STATUS)))
+                    {
+                        if (service.Handle == IntPtr.Zero) continue;
+                        StopServiceRaw(service.Handle);
+                        DeleteService(service.Handle);
+                    }
+                }
+            }
+            // The entry lingers while a handle is open; close it first, then
+            // wait for the name to disappear.
+            WaitServiceGone(Status.ZapretServiceName, 15000);
+        }
+
+        /// <summary>
+        /// Return the machine to a state where no bypass is running at all.
+        ///
+        /// The strategy sweep needs this between candidates. Stopping the service
+        /// is not enough: the service entry keeps its old arguments, winws can
+        /// survive as an orphan still holding the WinDivert filter, and the
+        /// driver stays loaded. Any of those makes the NEXT candidate look like
+        /// it works when the previous one is still doing the work.
+        /// </summary>
+        public static void ResetBypass()
+        {
+            StopServiceAndWinws();
+            // Drop the entry so the next install cannot inherit the old command.
+            DeleteServiceEntry();
+            StopDrivers();
+            // Give WinDivert a moment to unload before the next start.
+            Thread.Sleep(700);
+        }
+
+        /// <summary>Stop the service and make sure no winws survives it.
         ///
         /// Order matters: stopping the service first can leave winws running as an
         /// orphan, and that orphan keeps holding the WinDivert filter, so the next

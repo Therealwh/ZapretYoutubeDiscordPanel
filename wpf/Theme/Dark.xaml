@@ -35,6 +35,10 @@
     <SolidColorBrush x:Key="WarnBrush" Color="{StaticResource WarnColor}" />
     <SolidColorBrush x:Key="ErrBrush" Color="{StaticResource ErrColor}" />
 
+    <!-- Spoiler blocks in the strategy report: bind Visibility straight to the
+         expand flag instead of writing converters at every use. -->
+    <BooleanToVisibilityConverter x:Key="BoolToVis" />
+
     <!-- Rounded card: the HTML build's .card -->
     <Style x:Key="Card" TargetType="Border">
         <Setter Property="Background" Value="{StaticResource BgCardBrush}" />

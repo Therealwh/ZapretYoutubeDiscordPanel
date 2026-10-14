@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using System.Threading;
+using System.Threading.Tasks;
 using Ydp.Services;
 
 namespace Ydp.Zapret
@@ -128,6 +129,46 @@ namespace Ydp.Zapret
             var decisive = list.Where(t => DecisiveTargets.Contains(t.Key, StringComparer.OrdinalIgnoreCase)).ToList();
             var rest = list.Where(t => !DecisiveTargets.Contains(t.Key, StringComparer.OrdinalIgnoreCase)).ToList();
             return decisive.Concat(rest).ToList();
+        }
+
+        /// <summary>
+        /// Per-target probe tokens in the same shape the bundled zapret tester
+        /// prints them: HTTP / TLS1.2 / TLS1.3, each marked OK, SSL, UNSUP or
+        /// ERR.
+        ///
+        /// The tester deliberately does not decide whether a strategy "works" -
+        /// it shows the evidence and lets the human judge. An invented score
+        /// hides the one thing that matters here: SSL and ERR next to a green
+        /// count still means the DPI got through.
+        /// </summary>
+        public static string TokenSummary(TargetResult t)
+        {
+            if (t == null) return "";
+            if (t.kind == "ping") return "ping " + (t.result ?? "n/a");
+            var parts = new List<string>();
+            foreach (var label in new[] { "HTTP", "TLS1.2", "TLS1.3" })
+            {
+                string v;
+                if (!t.results.TryGetValue(label, out v)) v = "ERR";
+                parts.Add(label + ":" + v);
+            }
+            return string.Join("  ", parts);
+        }
+
+        /// <summary>
+        /// Worst result across a target's probes, as a state the UI can colour.
+        /// Same palette as the bundled tester: OK green, UNSUP/TIMEOUT yellow,
+        /// SSL/ERROR red.
+        /// </summary>
+        public static string TokenState(TargetResult t)
+        {
+            if (t == null) return "warn";
+            if (t.kind == "ping") return t.result == "Timeout" ? "warn" : "good";
+            var values = t.results.Values.ToList();
+            if (values.Count == 0) return "warn";
+            if (values.Any(v => v == "SSL" || v == "DNS" || v == "REFUSED" || v.StartsWith("ERR"))) return "bad";
+            if (values.Any(v => v == "UNSUP" || v == "TIMEOUT")) return "warn";
+            return "good";
         }
 
         public static bool IsWorking(Groups groups)
@@ -268,6 +309,28 @@ namespace Ydp.Zapret
             return "Timeout";
         }
 
+        /// <summary>
+        /// Probe several targets at the same time.
+        ///
+        /// The bundled zapret tester uses a runspace pool for this, and the
+        /// reason is plain: every blocked target burns the whole timeout waiting
+        /// for something that will never answer, so probing one after another
+        /// makes a full sweep take an order of magnitude longer than it needs to
+        /// for no extra information.
+        /// </summary>
+        public static List<TargetResult> ProbeTargets(IList<KeyValuePair<string, string>> targets, int timeoutSec)
+        {
+            var results = new TargetResult[targets.Count];
+            if (targets.Count == 0) return new List<TargetResult>();
+            var options = new ParallelOptions
+            {
+                MaxDegreeOfParallelism = Math.Min(8, Math.Max(4, Environment.ProcessorCount)),
+            };
+            Parallel.For(0, targets.Count, options, i =>
+                results[i] = ProbeTarget(targets[i].Key, targets[i].Value, timeoutSec));
+            return new List<TargetResult>(results);
+        }
+
         public static TargetResult ProbeTarget(string name, string value, int timeoutSec)
         {
             if (value != null && value.StartsWith("PING:", StringComparison.OrdinalIgnoreCase))
@@ -301,17 +364,13 @@ namespace Ydp.Zapret
         }
 
         /// <summary>Probe reachability without touching the running bypass.</summary>
-        public static Reachability CheckReachability(string rootDir, int timeoutSec = 6)
+public static Reachability CheckReachability(string rootDir, int timeoutSec = 6)
         {
             var targets = OrderTargets(LoadTargets(rootDir));
-            var collected = new List<TargetResult>();
-            for (int i = 0; i < targets.Count; i += 4)
-            {
-                var batch = targets.Skip(i).Take(4).ToList();
-                foreach (var entry in batch) collected.Add(ProbeTarget(entry.Key, entry.Value, timeoutSec));
-                // Both groups answered: the rest cannot change the verdict.
-                if (IsWorking(GroupStats(collected))) break;
-            }
+            // Probed in parallel: with the bypass down every blocked target sits
+            // there for the full timeout, and doing that one at a time is what
+            // made the sweep look like it had frozen before it even started.
+            var collected = ProbeTargets(targets, timeoutSec);
             return new Reachability { groups = GroupStats(collected), targets = collected };
         }
 
@@ -347,6 +406,15 @@ namespace Ydp.Zapret
             public string file { get; set; }
             public bool failed { get; set; }
             public string failReason { get; set; }
+
+            /// <summary>
+            /// The probes were cut short by an abort.
+            ///
+            /// A half-measured strategy must not be presented as a normal verdict:
+            /// it has fewer probes than the rest of the sweep, so a green score on
+            /// it would not mean the same thing as a green score on a full run.
+            /// </summary>
+            public bool partial { get; set; }
             public Score score { get; set; }
             public Groups groups { get; set; }
 
@@ -363,6 +431,17 @@ namespace Ydp.Zapret
             public string winner { get; set; }
             public string winnerFile { get; set; }
             public bool aborted { get; set; }
+
+            /// <summary>
+            /// Reachability with NO bypass running, measured before the sweep.
+            ///
+            /// Without it a green row proves nothing: on a network where the
+            /// targets answer anyway, every strategy would look equally good.
+            /// With the baseline a user can see what the test actually changed.
+            /// </summary>
+            /// <summary>
+        /// What answered with no bypass at all.
+public Groups baseline { get; set; }
         }
 
         private static readonly object AbortGate = new object();
@@ -386,41 +465,81 @@ namespace Ydp.Zapret
                     .ToList();
             }
 
-            ServiceOps.KillWinws();
-            ServiceOps.WaitWinws(true, 8000);
+            // Every candidate starts from a clean machine: the service entry is removed
+            // so nothing can inherit the previous arguments, winws is gone and
+            // the driver unloaded. Without this the next candidate is measured
+            // while the previous one is still bypassing, and everything is green.
+            ServiceOps.ResetBypass();
 
             var result = new SweepResult();
+
+            // Baseline first: what the targets answer with no bypass at all.
+            try
+            {
+// No baseline pass before the sweep. The bundled tester does not
+            // measure one either: it prints the raw probe tokens per config and
+            // leaves the reading to a human. A "what answers with no bypass"
+            // banner on top of that only produced the confusing claim that
+            // everything was already open, and it cost a full extra round of
+            // timeouts before the first strategy even started.
+            onProgress?.Invoke(null, 0, strategies.Count);
+            }
+            catch { /* the sweep is still useful without the baseline */ }
+
             for (int i = 0; i < strategies.Count; i++)
             {
                 if (_aborted) break;
                 var strat = strategies[i];
                 onProgress?.Invoke(null, i, strategies.Count);
 
-                ServiceOps.KillWinws();
-                ServiceOps.WaitWinws(true, 8000);
+                ServiceOps.ResetBypass();
 
+                // Started as a plain process, the same way the bundled
+                // "test zapret.ps1" does and the same way a user double-clicks
+                // general*.bat to try a strategy by hand. Installing a Windows
+                // service for every candidate costs a service create/delete per
+                // strategy and is the slowest and most failure-prone part of the
+                // run; the service only matters for the one strategy that is
+                // finally chosen and installed on demand.
                 var start = ServiceOps.LaunchStrategyProcess(rootDir, strat.file);
-                if (!start.ok)
+                if (!start.ok || !ServiceOps.WaitWinws(false, 8000))
                 {
                     result.results.Add(new StrategyRunResult
                     {
                         name = strat.name,
                         file = strat.file,
                         failed = true,
-                        failReason = start.reason ?? "not_started",
+                        failReason = start.ok ? "winws_not_started" : (start.reason ?? "not_started"),
                         score = new Score(),
                     });
+                    ServiceOps.KillWinws();
                     continue;
                 }
 
-                Thread.Sleep(500);
-                var targets = OrderTargets(LoadTargets(rootDir));
-                var collected = new List<TargetResult>();
-                for (int j = 0; j < targets.Count && !_aborted; j += 4)
+var targets = OrderTargets(LoadTargets(rootDir));
+                List<TargetResult> collected;
+                if (_aborted) collected = new List<TargetResult>();
+                else collected = ProbeTargets(targets, timeoutSec);
+
+                // The bypass has to still be alive once the probes are done.
+                // If winws died or was never up, the probes measured the plain
+                // network and nothing about this strategy, so it cannot be
+                // counted as working no matter how many probes came back OK.
+                if (!ServiceOps.IsWinwsRunning())
                 {
-                    var batch = targets.Skip(j).Take(4).ToList();
-                    foreach (var entry in batch) collected.Add(ProbeTarget(entry.Key, entry.Value, timeoutSec));
-                    if (stopOnFirst && IsWorking(GroupStats(collected))) break;
+                    result.results.Add(new StrategyRunResult
+                    {
+                        name = strat.name,
+                        file = strat.file,
+                        failed = true,
+                        failReason = "winws_не_запустился",
+                        score = new Score(),
+                        targets = collected,
+                    });
+                    onProgress?.Invoke(result.results[result.results.Count - 1], i, strategies.Count);
+                    ServiceOps.KillWinws();
+                    if (_aborted) break;
+                    continue;
                 }
 
                 var score = ScoreResults(collected);
@@ -432,6 +551,7 @@ namespace Ydp.Zapret
                     score = score,
                     groups = groups,
                     targets = new List<TargetResult>(collected),
+                    partial = _aborted,
                 };
                 result.results.Add(runResult);
                 onProgress?.Invoke(runResult, i, strategies.Count);
@@ -444,7 +564,15 @@ namespace Ydp.Zapret
                     SaveResults(rootDir, result, strat.name);
                     return result;
                 }
+
+                // After an abort the bypass belongs to whoever asked for the stop.
+                // ResetBypass here would race "Подключить сейчас", which installs
+                // the picked strategy at the same moment, and whichever loses the
+                // race leaves the user without the strategy they just clicked on.
+                if (_aborted) break;
+
                 ServiceOps.KillWinws();
+                ServiceOps.WaitWinws(true, 8000);
             }
 
             var ok = result.results.Where(r => !r.failed).ToList();
@@ -460,6 +588,337 @@ namespace Ydp.Zapret
         }
 
         // ---- saved results ---------------------------------------------------
+
+        // ---- original zapret tester -----------------------------------------
+
+        // Report shapes shared by the tester's console stream and its saved
+        // test_results_*.txt, so both paths read identically.
+        private static readonly System.Text.RegularExpressions.Regex ReConfigMark =
+            new System.Text.RegularExpressions.Regex(@"^\s*\[(\d+)/(\d+)\]\s*(.+)$");
+        private static readonly System.Text.RegularExpressions.Regex ReConfigFile =
+            new System.Text.RegularExpressions.Regex("^Config: (.+?) \\(Type: (\\w+)\\)$");
+        private static readonly System.Text.RegularExpressions.Regex ReTarget =
+            new System.Text.RegularExpressions.Regex("^  (.+?) : (.*?) \\| Ping: (.+)$");
+        private static readonly System.Text.RegularExpressions.Regex ReToken =
+            new System.Text.RegularExpressions.Regex("(HTTP|TLS1\\.2|TLS1\\.3):(OK|ERROR|SSL|UNSUP)");
+        private static readonly System.Text.RegularExpressions.Regex ReBest =
+            new System.Text.RegularExpressions.Regex("^Best strategy: (.+)$");
+
+        // Console format: the name column is padded to a fixed width, so there
+        // is no "name : tokens" separator — the tokens simply start after a run
+        // of two or more spaces. The saved .txt file, in contrast, joins them
+        // with " : ". Two shapes, one parser.
+        private static readonly System.Text.RegularExpressions.Regex ReTargetConsole =
+            new System.Text.RegularExpressions.Regex(@"^\s*(?<name>.+?)\s{2,}(?<tokens>(?:HTTP|TLS1\.2|TLS1\.3):.+?)(?:\s*\|\s*Ping:\s*(?<ping>.*))?$");
+        private static readonly System.Text.RegularExpressions.Regex ReTargetConsolePing =
+            new System.Text.RegularExpressions.Regex(@"^\s*(?<name>.+?)\s{2,}Ping:\s*(?<ping>.+)$");
+
+        /// <summary>
+        /// One console/report line about a single target. Handles both shapes:
+        /// file ("  Name : HTTP:OK ... | Ping: 6 ms") and console
+        /// ("  Name    HTTP:OK ... | Ping: 6 ms", ping-only rows too).
+        /// </summary>
+        public static TargetResult ParseTargetLine(string line)
+        {
+            var t = new TargetResult();
+            string http, ping;
+
+            var m = ReTarget.Match(line);
+            if (m.Success)
+            {
+                t.name = m.Groups[1].Value.Trim();
+                http = m.Groups[2].Value;
+                ping = m.Groups[3].Value.Trim();
+            }
+            else
+            {
+                m = ReTargetConsole.Match(line);
+                if (m.Success)
+                {
+                    t.name = m.Groups["name"].Value.Trim();
+                    http = m.Groups["tokens"].Value;
+                    ping = m.Groups["ping"].Success ? m.Groups["ping"].Value.Trim() : null;
+                }
+                else
+                {
+                    m = ReTargetConsolePing.Match(line);
+                    if (!m.Success) return null;
+                    t.name = m.Groups["name"].Value.Trim();
+                    http = "";
+                    ping = m.Groups["ping"].Value.Trim();
+                }
+            }
+
+            t.url = t.name;
+            var words = ReToken.Matches(http ?? "");
+            if (words.Count == 0)
+            {
+                t.kind = "ping";
+                t.result = ping;
+            }
+            else
+            {
+                t.kind = "url";
+                if (ping != null) t.result = ping;
+                foreach (System.Text.RegularExpressions.Match w in words)
+                    t.results[w.Groups[1].Value] = w.Groups[2].Value;
+            }
+            return t;
+        }
+
+        /// <summary>
+        /// Run the zapret bundle's own tester (utils\test zapret.ps1) and parse
+        /// the report it writes.
+        ///
+        /// This is deliberately NOT a re-implementation. An earlier in-process
+        /// sweep reproduced the probe mechanics but got the state wrong: probes
+        /// ran while the previous strategy's bypass was still up, so every
+        /// config looked identical. The bundled script owns the whole cycle -
+        /// stop winws, start the .bat, wait for it, probe in parallel, restore
+        /// what was running - and refuses to run at all while a zapret service
+        /// is installed, which is exactly the isolation it is supposed to
+        /// enforce. Delegating to it means the panel shows literally what the
+        /// reference tool shows.
+        /// </summary>
+        /// <param name="onLine">Live console line from the script, for the status bar.</param>
+        public static SweepResult RunOriginalTester(string rootDir, Action<string> onLine, Action<StrategyRunResult, int, int> onProgress)
+        {
+            _aborted = false;
+            var result = new SweepResult();
+
+            string script = Path.Combine(rootDir, "utils", "test zapret.ps1");
+            if (!File.Exists(script))
+            {
+                Logger.Warn("Оригинальный тестер не найден: " + script, "tester");
+                return result;
+            }
+
+            // The script refuses to run while the zapret service is installed
+            // ("Remove the service before running tests"), and a clean start is
+            // what makes each config measurement independent anyway.
+            ServiceOps.ResetBypass();
+
+            string resultsDir = Path.Combine(rootDir, "utils", "test results");
+            var started = DateTime.Now.AddSeconds(-2);
+
+            var psi = new System.Diagnostics.ProcessStartInfo("powershell.exe",
+                "-NoProfile -ExecutionPolicy Bypass -Command \"[Console]::OutputEncoding=[System.Text.Encoding]::UTF8; & '\""
+                + script + "\"'\"")
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                WorkingDirectory = rootDir,
+                RedirectStandardInput = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                StandardOutputEncoding = System.Text.Encoding.UTF8,
+                StandardErrorEncoding = System.Text.Encoding.UTF8,
+            };
+
+            System.Diagnostics.Process proc;
+            try { proc = System.Diagnostics.Process.Start(psi); }
+            catch (Exception ex)
+            {
+                Logger.Warn("Не удалось запустить тестер zapret: " + ex.Message, "tester");
+                return result;
+            }
+            if (proc == null) return result;
+            string winnerLine = null;
+
+            using (proc)
+            {
+                // Standard tests → All configs. The trailing line is consumed by
+                // Wait-AnyKey, which falls back to Read-Host when the console is
+                // not interactive. The stream stays open on purpose: closing it
+                // would turn every later Read-Host into an endless menu loop.
+                try
+                {
+                    proc.StandardInput.Write("1\r\n1\r\nx\r\n");
+                    proc.StandardInput.Flush();
+                }
+                catch { /* the script exited before asking anything */ }
+
+                // The script prints each config's target table to the console as
+                // soon as that config is done. Parsing the stream means the UI
+                // shows config 1 in full detail within the first minute — with
+                // its connect button — instead of after all 22 configs.
+                int total = 0, index = -1;
+                string currentName = null;
+                var currentTargets = new List<TargetResult>();
+
+                var flush = new Action(() =>
+                {
+                    if (string.IsNullOrEmpty(currentName))
+                    {
+                        currentTargets = new List<TargetResult>();
+                        return;
+                    }
+                    // A config with zero target rows means winws never came up:
+                    // the script prints the header, tries to start, and moves on.
+                    // That is a real verdict the user needs to see, not something
+                    // to silently drop.
+                    if (currentTargets.Count == 0)
+                    {
+                        result.results.Add(new StrategyRunResult
+                        {
+                            name = currentName,
+                            file = currentName,
+                            failed = true,
+                            failReason = "winws не поднялся",
+                            score = new Score(),
+                        });
+                        onProgress?.Invoke(result.results[result.results.Count - 1], Math.Max(0, index), Math.Max(total, result.results.Count));
+                        currentName = null;
+                        currentTargets = new List<TargetResult>();
+                        return;
+                    }
+                    var run = new StrategyRunResult
+                    {
+                        name = currentName,
+                        file = currentName,
+                        targets = new List<TargetResult>(currentTargets),
+                    };
+                    run.groups = GroupStats(run.targets);
+                    run.score = ScoreResults(run.targets);
+                    result.results.Add(run);
+                    onProgress?.Invoke(run, Math.Max(0, index), Math.Max(total, result.results.Count));
+                    currentName = null;
+                    currentTargets = new List<TargetResult>();
+                });
+
+                proc.OutputDataReceived += (_, e) =>
+                {
+                    var line = e.Data;
+                    if (string.IsNullOrEmpty(line)) return;
+                    onLine?.Invoke(line);
+
+                    // "Best strategy" is printed after the last config, while
+                    // currentName is still set, so it has to be checked before
+                    // the target-table block or it would never be seen.
+                    var bm = ReBest.Match(line.Trim());
+                    if (bm.Success) { winnerLine = bm.Groups[1].Value.Trim(); return; }
+
+                    var m = ReConfigMark.Match(line);
+                    if (m.Success)
+                    {
+                        flush();
+                        index = int.Parse(m.Groups[1].Value) - 1;
+                        total = int.Parse(m.Groups[2].Value);
+                        currentName = m.Groups[3].Value.Trim();
+                        return;
+                    }
+                    if (currentName != null)
+                    {
+                        var target = ParseTargetLine(line);
+                        if (target != null) currentTargets.Add(target);
+                    }
+                };
+                proc.ErrorDataReceived += (_, e) => { if (!string.IsNullOrEmpty(e.Data)) onLine?.Invoke(e.Data); };
+                proc.BeginOutputReadLine();
+                proc.BeginErrorReadLine();
+
+                // The script prints its own "several minutes" warning: 22
+                // configs with per-target probes is minutes, not seconds.
+                var deadline = DateTime.Now.AddMinutes(45);
+                while (!proc.HasExited)
+                {
+                    if (_aborted)
+                    {
+                        try { proc.Kill(); } catch { }
+                        ServiceOps.KillWinws();
+                        result.aborted = true;
+                        onLine?.Invoke("[ПАНЕЛЬ] Проверка остановлена пользователем");
+                        break;
+                    }
+                    if (DateTime.Now > deadline)
+                    {
+                        try { proc.Kill(); } catch { }
+                        ServiceOps.KillWinws();
+                        onLine?.Invoke("[ПАНЕЛЬ] Тестер не уложился в 45 минут и был остановлен");
+                        break;
+                    }
+                    Thread.Sleep(400);
+                }
+
+                // Whatever the script printed last still needs its row.
+                flush();
+
+                ServiceOps.KillWinws();
+                ServiceOps.WaitWinws(true, 8000);
+            }
+
+            if (result.aborted) return result;
+
+            // The report file is now only consulted for the tester's own
+            // "Best strategy" pick; the rows themselves came from the stream.
+            var report = NewestResultFile(resultsDir, started);
+            if (report != null)
+            {
+                try
+                {
+                    foreach (var raw in File.ReadAllLines(report))
+                    {
+                        var m = ReBest.Match(raw.Trim());
+                        if (m.Success) { result.winner = m.Groups[1].Value.Trim(); break; }
+                    }
+                }
+                catch { /* winner stays empty; rows are already in place */ }
+            }
+            if (result.winner == null) result.winner = winnerLine;
+            SaveResults(rootDir, result, result.winner);
+            return result;
+        }
+
+        /// <summary>Newest report file the tester wrote since the run began.</summary>
+        private static string NewestResultFile(string dir, DateTime notOlderThan)
+        {
+            try
+            {
+                if (!Directory.Exists(dir)) return null;
+                return new DirectoryInfo(dir)
+                    .GetFiles("test_results_*.txt")
+                    .Where(f => f.LastWriteTime >= notOlderThan)
+                    .OrderByDescending(f => f.LastWriteTime)
+                    .Select(f => f.FullName)
+                    .FirstOrDefault();
+            }
+            catch { return null; }
+        }
+
+        /// <summary>
+        /// Read the tester's saved report: per-config target lines with raw probe
+        /// tokens and its "Best strategy" pick.
+        /// </summary>
+        public static SweepResult ParseOriginalReport(string file)
+        {
+            var sweep = new SweepResult();
+            StrategyRunResult current = null;
+            foreach (var raw in File.ReadAllLines(file))
+            {
+                var line = raw.TrimEnd();
+                var m = ReConfigFile.Match(line);
+                if (m.Success)
+                {
+                    current = new StrategyRunResult { name = m.Groups[1].Value.Trim(), file = m.Groups[1].Value.Trim() };
+                    sweep.results.Add(current);
+                    continue;
+                }
+                if (current != null)
+                {
+                    var t = ParseTargetLine(line);
+                    if (t != null) { current.targets.Add(t); continue; }
+                }
+                m = ReBest.Match(line);
+                if (m.Success) sweep.winner = m.Groups[1].Value.Trim();
+            }
+
+            foreach (var r in sweep.results)
+            {
+                r.groups = GroupStats(r.targets);
+                r.score = ScoreResults(r.targets);
+            }
+            return sweep;
+        }
 
         public static void SaveResults(string rootDir, SweepResult run, string winner)
         {

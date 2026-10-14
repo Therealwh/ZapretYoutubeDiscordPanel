@@ -47,9 +47,12 @@ namespace Ydp.Pages
 
         private void CfProxyBox_TextChanged(object sender, TextChangedEventArgs e) => UpdateRelayHints();
 
-        private void Page_Loaded(object sender, RoutedEventArgs e)
+private void Page_Loaded(object sender, RoutedEventArgs e)
         {
             Load();
+            // Listing adapters touches the network stack, so keep it off the UI thread.
+            System.Threading.Tasks.Task.Run(() => Win.ListDnsAdapters())
+                .ContinueWith(t => Dispatcher.Invoke(() => LoadDnsAdapters()));
         }
 
         private void Load()
@@ -242,6 +245,122 @@ namespace Ydp.Pages
             if (!string.IsNullOrEmpty(found)) Config.Set("zapretRoot", found);
             AutoNote.Text = string.IsNullOrEmpty(found) ? "Автоматически не нашёл." : "Найдено: " + found;
             Load();
+        }
+
+        /// <summary>
+        /// Fills the adapter list.
+        ///
+        /// A machine with several adapters (Ethernet + Wi-Fi + VPN) has no single
+        /// right answer, so the user picks rather than us guessing and silently
+        /// reconfiguring the wrong interface.
+        /// </summary>
+        private void LoadDnsAdapters()
+        {
+            var adapters = Win.ListDnsAdapters();
+            DnsAdapterBox.ItemsSource = adapters;
+            if (adapters.Count > 0) DnsAdapterBox.SelectedIndex = 0;
+            if (adapters.Count == 0)
+            {
+                DnsNote.Text = "Активных адаптеров не найдено.";
+                return;
+            }
+            var current = DnsAdapterBox.SelectedItem as Win.DnsAdapter;
+            if (current != null)
+            {
+                DnsNote.Text = current.Dhcp
+                    ? "Сейчас DNS от провайдера (DHCP): " + current.CurrentDns + ". Применение переключит на фиксированный DNS до перезагрузки сети."
+                    : "Сейчас задан вручную: " + current.CurrentDns;
+            }
+        }
+
+        private void DnsAdapterBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            var current = DnsAdapterBox.SelectedItem as Win.DnsAdapter;
+            if (current == null) return;
+            DnsNote.Text = current.Dhcp
+                ? "Сейчас DNS от провайдера (DHCP): " + current.CurrentDns + ". Применение переключит на фиксированный DNS до перезагрузки сети."
+                : "Сейчас задан вручную: " + current.CurrentDns;
+        }
+
+        private string SelectedAdapterName()
+        {
+            var current = DnsAdapterBox.SelectedItem as Win.DnsAdapter;
+            return current == null ? null : current.Name;
+        }
+
+        private void SetDnsNote(string text, bool error)
+        {
+            DnsNote.Text = text;
+            DnsNote.Foreground = error
+                ? (System.Windows.Media.Brush)FindResource("WarnBrush")
+                : (System.Windows.Media.Brush)FindResource("TextDimBrush");
+        }
+
+        private async void BtnApplyDns_Click(object sender, RoutedEventArgs e)
+        {
+            string adapter = SelectedAdapterName();
+            if (string.IsNullOrEmpty(adapter))
+            {
+                SetDnsNote("Сначала выбери сетевой адаптер.", true);
+                return;
+            }
+            string primary = (DnsPrimaryBox.Text ?? string.Empty).Trim();
+            string secondary = (DnsSecondaryBox.Text ?? string.Empty).Trim();
+
+            var button = sender as Button;
+            if (button != null) button.IsEnabled = false;
+            SetDnsNote("Применяю DNS…", false);
+            try
+            {
+                var result = await System.Threading.Tasks.Task.Run(() => Win.SetDns(adapter, primary, secondary));
+                if (result.ok)
+                {
+                    SetDnsNote("Готово: DNS " + primary + (string.IsNullOrEmpty(secondary) ? "" : " / " + secondary)
+                        + ". Если браузер уже открыт — перезапусти его, иначе он продолжит резолвить по старому резолверу.", false);
+                    LoadDnsAdapters();
+                    return;
+                }
+                if (result.reason == "bad_dns")
+                {
+                    SetDnsNote("Нужен корректный IPv4-адрес, например 8.8.8.8 или 77.88.8.8.", true);
+                    return;
+                }
+                SetDnsNote("Не удалось применить DNS. Возможно, нет прав администратора."
+                    + (string.IsNullOrEmpty(result.message) ? "" : " " + result.message), true);
+            }
+            finally
+            {
+                if (button != null) button.IsEnabled = true;
+            }
+        }
+
+        private async void BtnResetDns_Click(object sender, RoutedEventArgs e)
+        {
+            string adapter = SelectedAdapterName();
+            if (string.IsNullOrEmpty(adapter))
+            {
+                SetDnsNote("Сначала выбери сетевой адаптер.", true);
+                return;
+            }
+            var button = sender as Button;
+            if (button != null) button.IsEnabled = false;
+            SetDnsNote("Возвращаю DNS провайдера…", false);
+            try
+            {
+                var result = await System.Threading.Tasks.Task.Run(() => Win.ResetDns(adapter));
+                if (result.ok)
+                {
+                    SetDnsNote("Готово: DNS снова от провайдера (DHCP).", false);
+                    LoadDnsAdapters();
+                    return;
+                }
+                SetDnsNote("Не удалось вернуть DNS провайдера. Возможно, нет прав администратора."
+                    + (string.IsNullOrEmpty(result.message) ? "" : " " + result.message), true);
+            }
+            finally
+            {
+                if (button != null) button.IsEnabled = true;
+            }
         }
 
         private void BtnSaveWorker_Click(object sender, RoutedEventArgs e)

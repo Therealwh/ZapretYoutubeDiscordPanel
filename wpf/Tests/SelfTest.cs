@@ -389,6 +389,79 @@ namespace Ydp.Tests
 
         private static void TesterTests()
         {
+            // The report parser has to read exactly what the bundled zapret
+            // tester writes (test zapret.ps1 → Set-Content of per-target token
+            // lines). A wrong parse here would show the user probe results that
+            // never happened, so it gets checked against a real-shaped sample.
+            string sample = string.Join("\n", new[]
+            {
+                "=== ANALYTICS ===",
+                "Config: general (ALT).bat (Type: standard)",
+                "  DiscordMain : HTTP:OK    TLS1.2:OK    TLS1.3:UNSUP  | Ping: 6 ms",
+                "  YouTubeWeb : HTTP:OK    TLS1.2:OK    TLS1.3:UNSUP  | Ping: 4 ms",
+                "  CloudflareDNS1111 :  | Ping: 7 ms",
+                "",
+                "Config: general (ALT2).bat (Type: standard)",
+                "  DiscordMain : HTTP:ERROR TLS1.2:ERROR TLS1.3:UNSUP  | Ping: 7 ms",
+                "  YouTubeWeb : HTTP:ERROR TLS1.2:ERROR TLS1.3:UNSUP  | Ping: 4 ms",
+                "",
+                "Best strategy: general (ALT).bat",
+                "",
+            }) + "\n";
+            string tmp = Path.Combine(Path.GetTempPath(), "ydp-tester-sample-" + Guid.NewGuid().ToString("N") + ".txt");
+            File.WriteAllText(tmp, sample, Encoding.UTF8);
+            try
+            {
+                var parsed = Tester.ParseOriginalReport(tmp);
+                Check("orig: two configs", parsed.results.Count == 2, "получено " + parsed.results.Count);
+                var alt = parsed.results.FirstOrDefault(r => r.name == "general (ALT).bat");
+                Check("orig: config kept", alt != null);
+                if (alt != null)
+                {
+                    Check("orig: three targets", alt.targets.Count == 3, "получено " + alt.targets.Count);
+                    var dm = alt.targets[0];
+                    Equal("orig: HTTP token", "OK", dm.results.ContainsKey("HTTP") ? dm.results["HTTP"] : "нет");
+                    Equal("orig: TLS1.3 token", "UNSUP", dm.results.ContainsKey("TLS1.3") ? dm.results["TLS1.3"] : "нет");
+                    Equal("orig: url kind", "url", dm.kind);
+                    var dns = alt.targets[2];
+                    Equal("orig: ping-only kind", "ping", dns.kind);
+                    Equal("orig: ping value", "7 ms", dns.result);
+                }
+                Equal("orig: best strategy", "general (ALT).bat", parsed.winner);
+                var alt2 = parsed.results.FirstOrDefault(r => r.name == "general (ALT2).bat");
+                if (alt2 != null)
+                    Check("orig: ERROR is bad state", Tester.TokenState(alt2.targets[0]) == "bad",
+                        "получено " + Tester.TokenState(alt2.targets[0]));
+                Check("orig: UNSUP is warn state",
+                    alt != null && Tester.TokenState(alt.targets[0]) == "warn",
+                    alt == null ? "нет конфига" : "получено " + Tester.TokenState(alt.targets[0]));
+            }
+            finally
+            {
+                try { File.Delete(tmp); } catch { }
+            }
+
+            // Console format: padded name column, no " : " separator. This is
+            // what the live stream prints; missing it is how the whole report
+            // silently came out empty once already.
+            var consoleRow = Tester.ParseTargetLine("  DiscordMain    HTTP:OK    TLS1.2:OK    TLS1.3:UNSUP  | Ping: 6 ms");
+            Check("console: row parsed", consoleRow != null);
+            if (consoleRow != null)
+            {
+                Equal("console: name", "DiscordMain", consoleRow.name);
+                Equal("console: kind", "url", consoleRow.kind);
+                Equal("console: HTTP", "OK", consoleRow.results.ContainsKey("HTTP") ? consoleRow.results["HTTP"] : "нет");
+                Equal("console: ping", "6 ms", consoleRow.result);
+            }
+            var consolePing = Tester.ParseTargetLine("  CloudflareDNS1111    Ping: 7 ms");
+            Check("console: ping row parsed", consolePing != null);
+            if (consolePing != null)
+            {
+                Equal("console: ping name", "CloudflareDNS1111", consolePing.name);
+                Equal("console: ping kind", "ping", consolePing.kind);
+                Equal("console: ping value", "7 ms", consolePing.result);
+            }
+
             var targets = new List<KeyValuePair<string, string>>
             {
                 new KeyValuePair<string, string>("DiscordMain", "u"),

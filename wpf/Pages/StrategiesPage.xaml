@@ -15,7 +15,8 @@
                     Margin="0,0,10,0" Click="BtnApply_Click" />
             <Button x:Name="BtnStop" Content="Остановить обход" Style="{StaticResource Btn}"
                     Margin="0,0,10,0" Click="BtnStop_Click" />
-            <Button x:Name="BtnTest" Content="Полный тест всех стратегий" Style="{StaticResource Btn}" Margin="0,0,10,0" Click="BtnTest_Click" />
+            <Button x:Name="BtnTest" Content="Полный тест всех стратегий" Style="{StaticResource Btn}" Margin="0,0,10,0" Click="BtnTest_Click"
+                ToolTip="Каждая стратегия запускается с нуля и проверяется полностью, поэтому тест занимает продолжительное время." />
             <Button x:Name="BtnAbort" Content="Остановить проверку" Style="{StaticResource Btn}" Margin="0,0,10,0"
                     Visibility="Collapsed" Click="BtnAbort_Click" />
             <ProgressBar x:Name="Progress" Width="120" Height="4" Margin="14,0,0,0"
@@ -23,10 +24,14 @@
                          Foreground="{StaticResource AccentBrush}" Background="{StaticResource BgHoverBrush}" />
         </StackPanel>
 
-        <TextBlock x:Name="StatusNote" Style="{StaticResource Dim}" Margin="0,0,0,10" Text="" />
+        <TextBlock x:Name="StatusNote" Style="{StaticResource Dim}" Margin="0,0,0,6" Text="" />
+        <TextBlock Style="{StaticResource Dim}" Margin="0,0,0,10" TextWrapping="Wrap"
+                   Text="Внимание: проверка может занять продолжительное время. Каждая стратегия запускается с нуля — сначала полностью останавливается текущая, затем запускается проверяемая, — поэтому результат честный и не наследуется от предыдущей стратегии. Способ запуска такой же, как у zapret: как при двойном клике по general*.bat. Рабочая стратегия потом ставится в автозапуск как служба отдельной кнопкой. Проверку можно прервать кнопкой «Остановить проверку»." />
 
-        <!-- Live per-target verdicts during the full sweep: green/red dot, the
-             address that answered, and which protocols got through. -->
+        <!-- Cumulative results of the full sweep: one block per strategy, kept for
+             all of them. It used to be REPLACED on every step, so the panel
+             only ever showed the strategy being tested at that moment and the
+             finished ones vanished - which looked like the test had stuck. -->
         <Border x:Name="ProbePanel" Style="{StaticResource Card}" Padding="14,12" Margin="0,0,0,12"
                 Visibility="Collapsed">
             <StackPanel>
@@ -34,32 +39,100 @@
                 <ItemsControl x:Name="ProbeList" Margin="0,8,0,0">
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
-                            <Grid Margin="0,3">
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="Auto" />
-                                    <ColumnDefinition Width="150" />
-                                    <ColumnDefinition Width="*" />
-                                    <ColumnDefinition Width="Auto" />
-                                </Grid.ColumnDefinitions>
-                                <Ellipse Grid.Column="0" Width="9" Height="9" VerticalAlignment="Center" Margin="0,0,9,0">
-                                    <Ellipse.Style>
-                                        <Style TargetType="Ellipse">
-                                            <Setter Property="Fill" Value="{StaticResource ErrBrush}" />
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding ok}" Value="True">
-                                                    <Setter Property="Fill" Value="{StaticResource OkBrush}" />
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </Ellipse.Style>
-                                </Ellipse>
-                                <TextBlock Grid.Column="1" Text="{Binding name}" Foreground="{StaticResource TextBrush}"
-                                           VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
-                                <TextBlock Grid.Column="2" Text="{Binding address}" Style="{StaticResource Dim}"
-                                           VerticalAlignment="Center" Margin="8,0,8,0" TextTrimming="CharacterEllipsis" />
-                                <TextBlock Grid.Column="3" Text="{Binding probes}" Style="{StaticResource Dim}"
-                                           VerticalAlignment="Center" />
-                            </Grid>
+                            <StackPanel Margin="0,0,0,12">
+                                <!-- Header doubles as the spoiler toggle: click a finished strategy to fold it. -->
+                                <ToggleButton Style="{StaticResource SpoilerHeader}" Cursor="Hand"
+                                              IsChecked="{Binding Expanded, Mode=OneWay}"
+                                              Command="{Binding Toggle}">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                        </Grid.ColumnDefinitions>
+                                        <Ellipse Grid.Column="0" Width="9" Height="9" VerticalAlignment="Center" Margin="0,0,9,0">
+                                            <Ellipse.Style>
+                                                <Style TargetType="Ellipse">
+                                                    <Setter Property="Fill" Value="{StaticResource ErrBrush}" />
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding DotState}" Value="good">
+                                                            <Setter Property="Fill" Value="{StaticResource OkBrush}" />
+                                                        </DataTrigger>
+                                                        <DataTrigger Binding="{Binding DotState}" Value="warn">
+                                                            <Setter Property="Fill" Value="{StaticResource WarnBrush}" />
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </Ellipse.Style>
+                                        </Ellipse>
+                                        <TextBlock Grid.Column="1" Text="{Binding Name}" Foreground="{StaticResource TextBrush}"
+                                                   FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                                        <StackPanel Grid.Column="2" Orientation="Horizontal"
+                                                    VerticalAlignment="Center" Margin="8,0,0,0">
+                                            <TextBlock Text="{Binding Verdict}" Style="{StaticResource Dim}" VerticalAlignment="Center" />
+                                            <Button Content="Подключить сейчас" Style="{StaticResource BtnPrimary}"
+                                                    Margin="10,0,0,0" Padding="10,4" FontSize="12"
+                                                    Command="{Binding Connect}"
+                                                    Visibility="{Binding CanConnect, Converter={StaticResource BoolToVis}}"
+                                                    ToolTip="Остановить проверку и включить обход этой стратегией" />
+                                        </StackPanel>
+                                    </Grid>
+                                </ToggleButton>
+                                <ItemsControl ItemsSource="{Binding Targets}" Margin="18,4,0,0"
+                                              Visibility="{Binding Expanded, Converter={StaticResource BoolToVis}}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Grid Margin="0,2">
+                                                <Grid.ColumnDefinitions>
+                                                    <ColumnDefinition Width="Auto" />
+                                                    <ColumnDefinition Width="*" />
+                                                    <ColumnDefinition Width="Auto" />
+                                                </Grid.ColumnDefinitions>
+                                                <Ellipse Grid.Column="0" Width="7" Height="7" VerticalAlignment="Center" Margin="0,0,7,0">
+                                                    <Ellipse.Style>
+                                                        <Style TargetType="Ellipse">
+                                                            <Setter Property="Fill" Value="{StaticResource ErrBrush}" />
+                                                            <Style.Triggers>
+                                                                <DataTrigger Binding="{Binding ok}" Value="True">
+                                                                    <Setter Property="Fill" Value="{StaticResource OkBrush}" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Ellipse.Style>
+                                                </Ellipse>
+                                                <TextBlock Grid.Column="1" Text="{Binding address}" Style="{StaticResource Dim}"
+                                                           VerticalAlignment="Center" TextTrimming="CharacterEllipsis" />
+                                                <TextBlock Grid.Column="2" VerticalAlignment="Center" Margin="10,0,0,0">
+                                                            <TextBlock.Style>
+                                                                <!--
+                                                                Same colours as the bundled zapret tester: OK green, UNSUP
+                                                                yellow, SSL and ERR red. SSL in red is the important one -
+                                                                it is what a fake certificate from the DPI looks like.
+                                                                -->
+                                                                <Style TargetType="TextBlock">
+                                                                    <Setter Property="FontFamily" Value="Consolas" />
+                                                                    <Setter Property="FontSize" Value="12" />
+                                                                    <Setter Property="Text" Value="{Binding probes}" />
+                                                                    <Setter Property="Foreground" Value="{StaticResource Dim}" />
+                                                                    <Style.Triggers>
+                                                                        <DataTrigger Binding="{Binding state}" Value="bad">
+                                                                            <Setter Property="Foreground" Value="{StaticResource ErrBrush}" />
+                                                                        </DataTrigger>
+                                                                        <DataTrigger Binding="{Binding state}" Value="warn">
+                                                                            <Setter Property="Foreground" Value="{StaticResource WarnBrush}" />
+                                                                        </DataTrigger>
+                                                                        <DataTrigger Binding="{Binding state}" Value="good">
+                                                                            <Setter Property="Foreground" Value="{StaticResource OkBrush}" />
+                                                                        </DataTrigger>
+                                                                    </Style.Triggers>
+                                                                </Style>
+                                                            </TextBlock.Style>
+                                                        </TextBlock>
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </StackPanel>
                         </DataTemplate>
                     </ItemsControl.ItemTemplate>
                 </ItemsControl>

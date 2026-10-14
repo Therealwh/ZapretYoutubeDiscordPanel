@@ -90,6 +90,41 @@
             </StackPanel>
         </Border>
 
+        <!-- When the resolver itself is what is being cut -->
+        <Border Style="{StaticResource Card}" Margin="0,0,0,12">
+            <StackPanel>
+                <TextBlock Text="YouTube пишет «нет подключения к интернету»" Style="{StaticResource CardTitle}" />
+                <TextBlock Style="{StaticResource Dim}" Margin="0,4,0,10" TextWrapping="Wrap"
+                           Text="Интернет при этом есть — YouTube и Discord открываются. Значит режется системный DNS-резолвер, а не трафик. Помогает переключение на публичные DNS. Изменение легко откатить кнопкой справа." />
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="10" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="10" />
+                        <ColumnDefinition Width="200" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0">
+                        <TextBlock Text="Основной DNS" Style="{StaticResource Dim}" Margin="0,0,0,4" />
+                        <TextBox x:Name="DnsPrimaryBox" Padding="10,8" Text="8.8.8.8" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="2">
+                        <TextBlock Text="Запасной DNS" Style="{StaticResource Dim}" Margin="0,0,0,4" />
+                        <TextBox x:Name="DnsSecondaryBox" Padding="10,8" Text="77.88.8.8" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="4">
+                        <TextBlock Text="Сетевой адаптер" Style="{StaticResource Dim}" Margin="0,0,0,4" />
+                        <ComboBox x:Name="DnsAdapterBox" Padding="8,6" SelectionChanged="DnsAdapterBox_SelectionChanged" />
+                    </StackPanel>
+                </Grid>
+                <StackPanel Orientation="Horizontal" Margin="0,12,0,0">
+                    <Button Content="Применить DNS" Style="{StaticResource BtnPrimary}" Margin="0,0,10,0" Click="BtnApplyDns_Click" />
+                    <Button Content="Вернуть от провайдера" Style="{StaticResource Btn}" Click="BtnResetDns_Click" />
+                </StackPanel>
+                <TextBlock x:Name="DnsNote" Style="{StaticResource Hint}" Margin="0,10,0,0" TextWrapping="Wrap" />
+            </StackPanel>
+        </Border>
+
         <!-- Service mode -->
         <Border Style="{StaticResource Card}">
             <StackPanel>

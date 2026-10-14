@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.IO;
@@ -19,6 +20,13 @@ namespace Ydp.Pages
         public string name { get; set; }
         public string address { get; set; }
         public string probes { get; set; }
+
+        /// <summary>
+        /// Worst result on this target: bad = SSL/ERR, warn = UNSUP/TIMEOUT,
+        /// good = every probe OK. Mirrors how the bundled zapret tester colours
+        /// its tokens.
+        /// </summary>
+        public string state { get; set; }
         public bool ok { get; set; }
     }
 
@@ -194,39 +202,207 @@ private async void BtnTest_Click(object sender, RoutedEventArgs e)
         {
             if (!RequireRoot()) return;
             SetBusy(true, "Полный тест стратегий…");
+            // Start a fresh report: the list accumulates during the run.
+            _runs.Clear();
+            _tested = 0;
+            ProbeList.ItemsSource = _runs;
             var known = AutoConnect.KnownWorking();
-            var sweep = await System.Threading.Tasks.Task.Run(() => Tester.RunStrategyTests(_root, known, stopOnFirst: false,
-                onProgress: (run, i, total) => Dispatcher.Invoke(() => ShowRun(run, i, total))));
+            // Which targets answer with no bypass at all: a green dot next to one
+            // of those proves nothing, and the report has to say so instead of
+            // letting it look like the strategy did the work.
+            //
+            // Measured inside the sweep, after its own reset, and reused from the
+            // result. Doing a second measurement here cost as long as the whole
+            // baseline (every blocked target burns the full timeout) and left the
+            // user staring at an empty report for minutes before the first
+            // strategy even started.
+            
+            
 
-            var ok = sweep.results.Count(r => !r.failed);
+            // The bundled zapret tester does the whole cycle itself: refuses to
+            // run while a service is installed, stops winws, starts each .bat,
+            // probes in parallel, restores what was running. Delegating to it is
+            // the only way the panel shows the same picture the reference tool
+            // shows; my own re-implementation measured probes in the wrong
+            // bypass state and made every config look identical.
+            _sweepRunning = true;
+            var sweep = await System.Threading.Tasks.Task.Run(() => Tester.RunOriginalTester(_root,
+                line => Dispatcher.Invoke(() =>
+                {
+                    var text = line == null ? "" : line.Trim();
+                    if (text.Length > 0 && !text.StartsWith("[OK]") && !text.StartsWith("[INFO]"))
+                        StatusNote.Text = text.Length > 160 ? text.Substring(0, 160) : text;
+                }),
+                (run, i, total) => Dispatcher.Invoke(() => ShowRun(run, i, total))));
+            _sweepRunning = false;
+
+            // The report file is written at the very end, so the rows appear
+            // once, together — same as reading the tester's own console output.
+
+            // The sweep is over and nothing of it will touch the bypass again, so
+            // now it is safe to install what the user asked for.
+            if (!string.IsNullOrEmpty(_pendingConnectFile))
+            {
+                await ConnectPending();
+                await System.Threading.Tasks.Task.Yield();
+                Reload();
+                return;
+            }
+
             if (sweep.aborted)
             {
-                // The loop exits with the last tested strategy still running.
-                // Leaving that half-verified bypass in place would be worse than
-                // stopping it, so we stop it and say so plainly.
-                await System.Threading.Tasks.Task.Run(() => ServiceOps.StopServiceAndWinws());
-                SetBusy(false, "Проверка остановлена. Обход выключен — нажмите «Подключить рабочий обход», когда будете готовы.");
+                if (_keepConnected)
+                {
+                    // The user pressed "Подключить сейчас" on a passing strategy;
+                    // stopping the bypass now would undo exactly that.
+                    SetBusy(false, StatusNote.Text);
+                }
+                else
+                {
+                    // The loop exits with the last tested strategy still running.
+                    // Leaving that half-verified bypass in place is worse than
+                    // stopping it, so stop it and say so plainly.
+                    await System.Threading.Tasks.Task.Run(() => ServiceOps.ResetBypass());
+                    SetBusy(false, "Проверка остановлена. Обход выключен — нажмите «Подключить рабочий обход», когда будете готовы.");
+                }
             }
             else
             {
-                SetBusy(false, ok > 0
-                    ? $"Проверено стратегий: {sweep.results.Count}, запустилось: {ok}. Лучшая: {sweep.winner ?? "—"}"
-                    : "Ни одна стратегия не запустилась");
+                // The tester's own counting and its "Best strategy" pick, not a
+                // verdict I invented: the tokens above are the evidence, the
+                // best-config line is what the reference tool itself concludes.
+                SetBusy(false, string.IsNullOrEmpty(sweep.winner)
+                    ? $"Тестер завершил {sweep.results.Count} конфигураций, но не назвал лучшую — смотри пробы."
+                    : $"Тестер завершил {sweep.results.Count} конфигураций. Лучший по подсчёту оригинала: {sweep.winner}. Обход сейчас выключен.");
             }
 
-            // Keep the detail of the best strategy on screen so the user can see
-            // WHICH address answered, not just which strategy won.
-            var best = sweep.results.Where(r => !r.failed && r.targets != null && r.targets.Count > 0)
-                .OrderByDescending(r => r.score.ok).FirstOrDefault();
-            if (best != null)
-            {
-                Dispatcher.Invoke(() => ShowDetail(best));
-            }
+            // Like the bundled tester, the report is the evidence itself: every
+            // strategy with its raw probe tokens, nothing swapped in at the end.
+            ProbeTitle.Text = $"Проверено конфигураций: {_tested}"
+                + (string.IsNullOrEmpty(sweep.winner) ? "" : " · лучший по подсчёту тестера: " + sweep.winner)
+                + (sweep.aborted ? " · прервано досрочно" : "");
             await System.Threading.Tasks.Task.Yield();
             Reload();
         }
 
-        /// <summary>Show the live verdicts of the strategy being tested.</summary>
+        /// <summary>
+        /// One tested strategy in the running report.
+        /// </summary>
+        public sealed class RunRow
+        {
+            public string Name { get; set; }
+            public bool Ok { get; set; }
+
+            /// <summary>
+            /// Dot colour from the probe evidence: green = Discord and YouTube
+            /// answered everywhere, red = neither did, yellow = something in
+            /// between. UNSUP (curl without TLS 1.3) is not a failure.
+            /// </summary>
+            public string DotState { get; set; } = "warn";
+
+            public string Verdict { get; set; }
+            public bool Expanded
+            {
+                get { return _expanded; }
+                set { _expanded = value; if (PropertyChanged != null) PropertyChanged(this, new System.ComponentModel.PropertyChangedEventArgs("Expanded")); }
+            }
+            private bool _expanded;
+
+            /// <summary>Header is a toggle, so a finished strategy folds away.</summary>
+            public Action Toggle { get; set; }
+
+            public ObservableCollection<ProbeRow> Targets { get; set; } = new ObservableCollection<ProbeRow>();
+
+            /// <summary>Stops the sweep and connects this strategy, if it works.</summary>
+            public Action Connect { get; set; }
+            public bool CanConnect { get { return Ok && Connect != null; } }
+
+            public event System.ComponentModel.PropertyChangedEventHandler PropertyChanged;
+        }
+
+        private readonly ObservableCollection<RunRow> _runs = new ObservableCollection<RunRow>();
+        private int _tested;
+        
+        /// <summary>What the targets answered with no bypass, shown in the header.</summary>
+        private string sweepNote;
+
+        /// <summary>Set when the user connected a strategy, so abort must not stop it.</summary>
+        private bool _keepConnected;
+
+        /// <summary>True while the full strategy sweep is actually running.</summary>
+        private bool _sweepRunning;
+
+        /// <summary>
+        /// Strategy the user picked mid-sweep, installed by BtnTest_Click once the
+        /// sweep has fully stopped. See ConnectNow.
+        /// </summary>
+        private string _pendingConnectFile;
+        private string _pendingConnectName;
+
+        private async System.Threading.Tasks.Task ConnectPending()
+        {
+            string file = _pendingConnectFile;
+            string name = _pendingConnectName;
+            _pendingConnectFile = null;
+            _pendingConnectName = null;
+            if (string.IsNullOrEmpty(file)) return;
+
+            StatusNote.Text = "Подключаю " + name + "…";
+            var result = await System.Threading.Tasks.Task.Run(() => ServiceOps.InstallStrategyAsService(_root, file));
+            if (!result.ok)
+            {
+                _keepConnected = false;
+                SetBusy(false, "Не удалось подключить " + name + ": " + (result.reason ?? "ошибка"));
+                return;
+            }
+            Config.Set(AutoConnect.KeyLastWinner, file);
+            AutoConnect.RememberWorking(file);
+            SetBusy(false, "Подключено: " + name + " (служба Windows, автозапуск)");
+        }
+
+        /// <summary>Targets that answered before the sweep, i.e. prove nothing.</summary>
+        private readonly HashSet<string> _baselineOk = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// "Подключить сейчас" on a strategy that passed: stop the sweep and make
+        /// this one the live bypass. The sweep would otherwise keep testing and
+        /// would leave the last candidate running, not the one the user picked.
+        /// </summary>
+        private async void ConnectNow(string file, string name)
+        {
+            if (string.IsNullOrEmpty(_root))
+            {
+                StatusNote.Text = "Сначала укажите папку zapret.";
+                return;
+            }
+            _keepConnected = true;
+
+            if (_sweepRunning)
+            {
+                // Only record the request. Installing here would race the sweep on
+                // the same service name, and whoever lost would leave the user
+                // without the strategy they just clicked on.
+                _pendingConnectFile = file;
+                _pendingConnectName = name;
+                Tester.Abort();
+                StatusNote.Text = "Останавливаю проверку и подключаю " + name + "…";
+                BtnAbort.IsEnabled = false;
+                return;
+            }
+
+            _pendingConnectFile = file;
+            _pendingConnectName = name;
+            await ConnectPending();
+        }
+
+        /// <summary>
+        /// Add a strategy to the report instead of replacing it.
+        ///
+        /// The list used to be overwritten on every step, so only the strategy
+        /// being tested right now was visible and everything already finished
+        /// disappeared - which read as "the test is stuck on the first one".
+        /// Now every strategy stays, with its own verdicts.
+        /// </summary>
         private void ShowRun(Tester.StrategyRunResult run, int index, int total)
         {
             if (run == null)
@@ -234,20 +410,56 @@ private async void BtnTest_Click(object sender, RoutedEventArgs e)
                 StatusNote.Text = $"Запускаю {index + 1}/{total}…";
                 return;
             }
-            StatusNote.Text = $"{run.name} ({(index + 1)}/{total}): Discord ok={run.groups.discord.okTargets}, "
-                + $"YouTube={run.groups.youtube.state}, проб ok={run.score.ok}";
-            if (run.targets != null && run.targets.Count > 0) ShowDetail(run);
-        }
+            _tested++;
+            bool ok = !run.partial && !run.failed;
 
-        private void ShowDetail(Tester.StrategyRunResult run)
-        {
+            // Short header summary plus a dot colour, computed from the same raw
+            // tokens the table below shows. The tester itself never judges a
+            // config; this is only a fold/unfold aid, not a replacement for
+            // reading the probes.
+            string dotState, verdict;
+            CompactSummary(run, out dotState, out verdict);
+
+            StatusNote.Text = run.failed
+                ? $"{run.name} ({(index + 1)}/{total}): не запустилась — {run.failReason}"
+                : $"{run.name} ({(index + 1)}/{total}): {verdict}";
+
+                        var row = new RunRow
+            {
+                Name = run.name,
+                Ok = ok,
+                DotState = dotState,
+                Expanded = true,
+                Verdict = verdict,
+            };
+            // The one being tested stays open; the rest fold away so the report
+            // stays readable while it grows.
+            foreach (var previous in _runs) previous.Expanded = false;
+            row.Toggle = () => row.Expanded = !row.Expanded;
+            // Only a fully measured strategy can be connected: the partial run of an
+            // aborted sweep is a truncated score, not evidence that it works.
+            row.Connect = row.Ok ? (Action)(() => ConnectNow(run.file, run.name)) : null;
+            if (run.targets != null)
+            {
+                foreach (var target in run.targets) row.Targets.Add(TargetRow(target));
+            }
+            _runs.Add(row);
+
             ProbePanel.Visibility = Visibility.Visible;
-            ProbeTitle.Text = "Куда стучимся: " + run.name;
-            ProbeList.ItemsSource = run.targets.Select(TargetRow).ToList();
+            ProbeTitle.Text = $"Проверено {_tested}";
+            ProbeList.ItemsSource = _runs;
         }
 
-        /// <summary>Flatten a target for the binding: host, address reached, probes.</summary>
-        private static ProbeRow TargetRow(TargetResult target)
+        /// <summary>
+        /// Flatten a target for the binding: host, address reached, probes.
+        ///
+        /// Targets that answer with no bypass at all are marked, because a green
+        /// dot next to them is not evidence of anything: on this network Google
+        /// and Cloudflare were reachable with the bypass switched off, so a
+        /// strategy "passing" them says nothing about whether it works. Only
+        /// Discord and YouTube were actually blocked.
+        /// </summary>
+        private ProbeRow TargetRow(TargetResult target)
         {
             string host = target.url ?? "";
             if (target.kind == "ping") host = "ping " + host;
@@ -256,13 +468,67 @@ private async void BtnTest_Click(object sender, RoutedEventArgs e)
                 : host + "  →  " + target.ip;
             if (target.kind == "ping" && !string.IsNullOrEmpty(target.result) && target.result != "OK")
                 address += "  (" + target.result + ")";
+
             return new ProbeRow
             {
                 name = target.name,
                 address = address,
-                probes = target.probes,
+                probes = Tester.TokenSummary(target),
+                state = Tester.TokenState(target),
                 ok = target.ok,
             };
+        }
+
+
+        /// <summary>
+        /// Header line for a config: "Discord OK · YouTube ERR".
+        ///
+        /// The full per-target tokens stay in the expandable table; the header
+        /// only needs one glanceable line. UNSUP (the bundled curl has no
+        /// TLS 1.3) is not counted as a failure, matching the tester's own
+        /// analytics, which tracks it separately from ERR.
+        /// </summary>
+        private static void CompactSummary(Tester.StrategyRunResult run, out string dotState, out string verdict)
+        {
+            dotState = "warn";
+            verdict = "";
+            if (run == null || run.targets == null) return;
+
+            int dOk, dErr, yOk, yErr;
+            GroupCounts(run, "discord", out dOk, out dErr);
+            GroupCounts(run, "youtube", out yOk, out yErr);
+
+            string State(int ok, int err)
+            {
+                if (ok == 0 && err == 0) return "—";
+                if (err > 0 && ok > 0) return "часть";
+                if (err > 0) return "ERR";
+                return "OK";
+            }
+
+            verdict = "Discord " + State(dOk, dErr) + " · YouTube " + State(yOk, yErr);
+
+            bool dAlive = dOk > 0, yAlive = yOk > 0;
+            if (dAlive && yAlive) dotState = "good";
+            else if (!dAlive && !yAlive) dotState = "bad";
+            else dotState = "warn";
+        }
+
+        private static void GroupCounts(Tester.StrategyRunResult run, string prefix, out int okCount, out int errCount)
+        {
+            okCount = 0;
+            errCount = 0;
+            foreach (var t in run.targets)
+            {
+                if (t.kind != "url") continue;
+                if (!t.name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)) continue;
+                foreach (var v in t.results.Values)
+                {
+                    if (v == "OK") okCount++;
+                    else if (v == "UNSUP") continue;
+                    else errCount++;
+                }
+            }
         }
 
         private StrategyRow SelectedRow()
