@@ -11,11 +11,15 @@
             <StackPanel>
                 <TextBlock Text="Движок zapret" Style="{StaticResource H1}" />
                 <TextBlock x:Name="EngineState" Style="{StaticResource Dim}" Margin="0,6,0,10" TextWrapping="Wrap" />
-                <StackPanel Orientation="Horizontal">
-                    <Button x:Name="BtnInstallBundled" Content="Установить встроенный zapret" Style="{StaticResource BtnPrimary}" Margin="0,0,10,0" Click="BtnInstallBundled_Click" />
-                    <Button Content="Выбрать zip…" Style="{StaticResource Btn}" Margin="0,0,10,0" Click="BtnChooseZip_Click" />
-                    <Button x:Name="BtnReleases" Content="Проверить обновления" Style="{StaticResource Btn}" Click="BtnReleases_Click" />
+<StackPanel Orientation="Horizontal">
+                    <Button x:Name="BtnReleases" Content="Проверить обновления" Style="{StaticResource BtnPrimary}" Margin="0,0,10,0" Click="BtnReleases_Click" />
+                    <Button x:Name="BtnUpdateEngine" Content="Скачать и установить" Style="{StaticResource Btn}" Margin="0,0,10,0"
+                            IsEnabled="False" Click="BtnUpdateEngine_Click" />
+                    <Button x:Name="BtnInstallBundled" Content="Установить встроенный zapret" Style="{StaticResource Btn}" Margin="0,0,10,0" Click="BtnInstallBundled_Click" />
+                    <Button Content="Выбрать zip…" Style="{StaticResource Btn}" Click="BtnChooseZip_Click" />
                 </StackPanel>
+                <ProgressBar x:Name="EngineProgress" Height="4" Margin="0,12,0,0" Minimum="0" Maximum="100"
+                             Style="{StaticResource ThinProgress}" Visibility="Collapsed" />
                 <TextBlock x:Name="Releases" Style="{StaticResource Dim}" Margin="0,10,0,0" TextWrapping="Wrap" />
             </StackPanel>
         </Border>
