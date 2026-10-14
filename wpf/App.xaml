@@ -1,7 +1,10 @@
+<!-- No StartupUri on purpose: App.OnStartup builds the window itself (it has
+     to set up the tray icon, the single-instance handoff and the page switch
+     before the window shows). Leaving StartupUri here opened a SECOND main
+     window, which is why two panel windows appeared at the bottom. -->
 <Application x:Class="Ydp.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             StartupUri="MainWindow.xaml">
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <Application.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>

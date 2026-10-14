@@ -115,15 +115,59 @@ namespace Ydp.Zapret
 
         public static IEnumerable<string> CandidateRoots()
         {
-            yield return @"C:\Zapret";
-            yield return @"C:\zapret";
-            yield return @"C:\zapret-discord-youtube";
-            var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-            if (!string.IsNullOrEmpty(localAppData))
-            {
-                yield return Path.Combine(localAppData, "zapret-discord-youtube");
-            }
-        }
+yield return @"C:\Zapret";
+  yield return @"C:\zapret";
+  yield return @"C:\zapret-discord-youtube";
+
+  // The panel itself may live under Program Files, and zapret is commonly
+  // unpacked next to it. The old list knew only about C:\Zapret, so an install
+  // anywhere else looked "missing" forever and the nag dialog kept returning.
+  var programFiles = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles);
+  if (!string.IsNullOrEmpty(programFiles))
+  {
+    yield return Path.Combine(programFiles, "Zapret");
+    yield return Path.Combine(programFiles, "zapret-discord-youtube");
+  }
+  var programFilesX86 = Environment.GetFolderPath(Environment.SpecialFolder.ProgramFilesX86);
+  if (!string.IsNullOrEmpty(programFilesX86))
+  {
+    yield return Path.Combine(programFilesX86, "Zapret");
+  }
+
+  // A Zapret folder next to the panel executable, whichever drive that is.
+  string appDir = null;
+  try
+  {
+    appDir = System.IO.Path.GetDirectoryName(
+        System.Reflection.Assembly.GetExecutingAssembly().Location);
+  }
+  catch { /* an unknown app location is not a reason to fail */ }
+  if (!string.IsNullOrEmpty(appDir))
+  {
+    yield return Path.Combine(appDir, "Zapret");
+    string parent = System.IO.Path.GetDirectoryName(appDir.TrimEnd('\\'));
+    if (!string.IsNullOrEmpty(parent)) yield return Path.Combine(parent, "Zapret");
+  }
+
+  var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
+  if (!string.IsNullOrEmpty(localAppData))
+  {
+    yield return Path.Combine(localAppData, "zapret-discord-youtube");
+    yield return Path.Combine(localAppData, "Zapret");
+  }
+
+  // Any drive root that has it: the installer may have been pointed at D:.
+  foreach (var drive in DriveInfo.GetDrives())
+  {
+    string root = null;
+    bool ready = false;
+    try { ready = drive.IsReady; root = drive.RootDirectory.FullName; }
+    catch { /* an unreadable or removed drive is simply skipped */ }
+    if (!ready || string.IsNullOrEmpty(root)) continue;
+    yield return System.IO.Path.Combine(root, "Zapret");
+    yield return System.IO.Path.Combine(root, "zapret");
+  }
+  }
 
         /// <summary>Validate a candidate root and report the known problem classes.</summary>
         public static RootValidation ValidateRoot(string dir)

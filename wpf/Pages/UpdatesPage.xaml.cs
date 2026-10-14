@@ -44,8 +44,25 @@ namespace Ydp.Pages
             EngineState.Text = "Устанавливаю…";
             var result = await Task.Run(() => Engine.Install(_root, Engine.BundledZipPath));
             EngineState.Text = result.ok
-                ? "Готово: обновлено файлов — " + result.copied.Length
+                ? "Готово: обновлено файлов — " + result.copied.Length + RememberIfUnfound()
                 : "Ошибка: " + (result.reason ?? "?") + " " + result.message;
+        }
+
+        /// <summary>
+        /// Record where the engine went, if the panel had no idea.
+        ///
+        /// Installing from this page used to leave zapretRoot untouched, so the
+        /// panel kept failing to find the folder it had just filled, and kept
+        /// offering to install it again.
+        /// </summary>
+        private string RememberIfUnfound()
+        {
+            if (string.IsNullOrEmpty(_root)) return "";
+            if (!string.IsNullOrEmpty(Status.ResolveRoot(Config.Get("zapretRoot", null)))) return "";
+            Config.Set("zapretRoot", _root);
+            Config.Set("zapretDeclined", "false");
+            Zapret.FirstRun.EnsureTelegramDomains(_root);
+            return Environment.NewLine + "Папка zapret сохранена: " + _root;
         }
 
         private async void BtnChooseZip_Click(object sender, RoutedEventArgs e)

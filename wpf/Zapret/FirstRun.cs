@@ -89,8 +89,30 @@ namespace Ydp.Zapret
             return await InstallAsync(owner, dir);
         }
 
+        /// <summary>
+        /// Ask for the location and install, without any yes/no question.
+        ///
+        /// Used by "Подключить рабочий обход": the user has already said what
+        /// they want by pressing the button, so a further question is noise.
+        /// </summary>
+        public static async Task<string> InstallInteractiveAsync(Window owner)
+        {
+            string parent = PickLocation(owner);
+            if (parent == null) return null;
+            string dir = Path.Combine(parent, FolderName);
+            try { Directory.CreateDirectory(dir); }
+            catch (Exception ex)
+            {
+                MessageBox.Show(owner, "Не удалось создать папку:\n" + dir + "\n\n" + ex.Message,
+                    "Zapret Panel", MessageBoxButton.OK, MessageBoxImage.Error);
+                return null;
+            }
+            var outcome = await InstallAsync(owner, dir);
+            return outcome == FirstRunOutcome.Installed ? dir : null;
+        }
+
         /// <summary>Where to install. Always one folder, named Zapret.</summary>
-        private static string PickLocation(Window owner)
+        public static string PickLocation(Window owner)
         {
             using (var dialog = new System.Windows.Forms.FolderBrowserDialog())
             {

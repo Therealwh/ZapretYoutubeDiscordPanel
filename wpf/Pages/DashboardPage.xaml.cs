@@ -1,5 +1,6 @@
 using System;
 using System.Windows;
+using System.Windows.Input;
 using System.Windows.Controls;
 using System.Windows.Threading;
 using Ydp.Services;
@@ -66,6 +67,25 @@ _timer.Start();
             
             TgProxy.Stats.port = TgPort();
             
+        }
+
+/// <summary>
+        /// The switch on this page is the primary control, so it has to do the
+        /// obvious thing: off means connect, on means disconnect. It used to be a
+        /// picture with no handler at all.
+        /// </summary>
+        private async void Switch_Click(object sender, MouseButtonEventArgs e)
+        {
+            if (_busy) return;
+            var status = Status.GetStatus(Status.ResolveRoot(Config.Get("zapretRoot", null)));
+            bool on = (status.service != null && status.service.running) || status.winwsProcess;
+            if (on)
+            {
+                BtnStop_Click(sender, new RoutedEventArgs());
+                return;
+            }
+            BtnAuto_Click(sender, new RoutedEventArgs());
+            await System.Threading.Tasks.Task.Yield();
         }
 
         private async void BtnTgToggle_Click(object sender, RoutedEventArgs e)
@@ -303,11 +323,22 @@ private void Refresh()
             string root = Status.ResolveRoot(Config.Get("zapretRoot", null));
             try
             {
-                if (string.IsNullOrEmpty(root))
-                {
-                    PowerState.Text = "Папка zapret не найдена";
-                    return;
-                }
+if (string.IsNullOrEmpty(root))
+    {
+        // The user pressed "connect" - do the obvious thing instead of printing
+        // "zapret not found" and leaving them stuck. An earlier design asked the
+        // same question in a modal box on startup, where it swallowed every
+        // click on the main window and looked exactly like a hang.
+        PowerState.Text = "zapret не найден — ставлю его, выберите папку…";
+        string installed = await Zapret.FirstRun.InstallInteractiveAsync(Window.GetWindow(this));
+        if (string.IsNullOrEmpty(installed))
+        {
+            PowerState.Text = "zapret не установлен. Поставьте его в «Обновления» или в настройках укажите папку.";
+            return;
+        }
+        root = installed;
+        PowerState.Text = "zapret установлен, подключаю обход…";
+    }
                 var result = await System.Threading.Tasks.Task.Run(() => AutoConnect.Connect(root,
                     msg => Dispatcher.Invoke(() => PowerState.Text = msg), null));
                 PowerState.Text = DescribeResult(result);

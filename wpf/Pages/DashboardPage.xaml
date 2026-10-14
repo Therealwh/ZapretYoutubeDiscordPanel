@@ -13,8 +13,12 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
+                <!-- The switch is the primary control on this page, so it has to work.
+                     It used to be a plain Border with no handler: it looked
+                     clickable and silently did nothing. -->
                 <Border x:Name="SwitchTrack" Grid.Column="0" Width="58" Height="34" CornerRadius="17"
-                        Background="{StaticResource BorderBrush2}" VerticalAlignment="Center">
+                        Background="{StaticResource BorderBrush2}" VerticalAlignment="Center"
+                        Cursor="Hand" MouseLeftButtonUp="Switch_Click" ToolTip="Включить или выключить обход">
                     <Ellipse x:Name="Knob" Width="26" Height="26" Fill="{StaticResource TextDimBrush}"
                              HorizontalAlignment="Left" Margin="4,0,0,0" VerticalAlignment="Center" />
                 </Border>

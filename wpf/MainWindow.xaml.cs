@@ -47,21 +47,7 @@ Navigate(start ?? "dashboard");
                 App.Tray.Notify("YoutubeDiscordPanel", "Панель свёрнута в трей — значок рядом с часами.");
             };
 
-            Loaded += async (s, e) =>
-        {
-            if (!Zapret.FirstRun.NeedsInstall()) return;
-            try
-            {
-                // Awaited, not blocked: the download runs for tens of seconds
-                // and a synchronous call froze the whole window meanwhile.
-                var outcome = await Zapret.FirstRun.RunInteractiveAsync(this);
-                if (outcome != Zapret.FirstRunOutcome.Skipped) UpdateFooter();
-            }
-            catch (Exception ex)
-            {
-                Logger.Error("Первичная установка zapret не удалась: " + ex.Message, "engine");
-            }
-        };
+            Loaded += (s, e) => UpdateFooter();
         }
 
         /// <summary>Open a section by its tag. Also used by the --page= switch.</summary>
