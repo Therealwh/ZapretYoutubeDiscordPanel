@@ -10,6 +10,12 @@ on:
   push:
     paths:
       - '.github/release-notes/**'
+  # The push trigger alone is not enough: when a notes file and its tag land
+  # together, this workflow can run BEFORE release-wpf.yml has created the
+  # release, and the new release would keep its generated body. Listening to
+  # the release itself closes that race.
+  release:
+    types: [ published ]
   workflow_dispatch:
 
 permissions:
