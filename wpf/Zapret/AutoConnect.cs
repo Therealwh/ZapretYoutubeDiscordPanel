@@ -259,9 +259,47 @@ namespace Ydp.Zapret
             }
         }
 
+        /// <summary>
+        /// Make sure the login item points at THIS executable.
+        ///
+        /// The entry is written by the installer, which may have been run with a
+        /// different folder than the one the panel ended up in. A stale entry is
+        /// invisible in the UI but silently means the bypass never comes back
+        /// after a reboot, so it is repaired here on every start.
+        /// </summary>
+        public static bool EnsureAutoStartEntry()
+        {
+            string exe = ExePath();
+            if (string.IsNullOrEmpty(exe)) return false;
+            string subKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
+            string current = Win.ReadRegistryString("HKCU", subKey, "YoutubeDiscordPanel");
+            string wanted = "\"" + exe + "\" --autoconnect";
+            if (string.Equals(current, wanted, StringComparison.OrdinalIgnoreCase)) return false;
+
+            try
+            {
+                using (var key = Microsoft.Win32.Registry.CurrentUser.CreateSubKey(subKey))
+                {
+                    if (key == null) return false;
+                    key.SetValue("YoutubeDiscordPanel", wanted);
+                }
+                Logger.Info("Запись автозапуска исправлена: " + (current ?? "не было") + " -> " + wanted, "autoconnect");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn("Не удалось исправить автозапуск: " + ex.Message, "autoconnect");
+                return false;
+            }
+        }
+
         public static bool AutoApplyEnabled()
         {
-            return string.Equals(Config.Get(AutoConnect.KeyAutoApply, "false"), "true", StringComparison.OrdinalIgnoreCase);
+            // On by default: the whole point of the panel is that the bypass is
+            // up after a reboot without anyone opening anything. A fresh install
+            // used to come up in "panel only" mode, which looked like the
+            // program had not done its job.
+            return string.Equals(Config.Get(AutoConnect.KeyAutoApply, "true"), "true", StringComparison.OrdinalIgnoreCase);
         }
 
         public static string ExePath()

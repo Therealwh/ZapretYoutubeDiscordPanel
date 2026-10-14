@@ -171,7 +171,15 @@ if (!silent)
                 using (var form = new InstallForm(InstallDir))
                 {
                     if (form.ShowDialog() != DialogResult.OK) return 0;
-                    chosenDir = form.SelectedDirectory;
+                    // Always land in a folder named YoutubeDiscordPanel. Taking
+                    // the picked folder verbatim allowed files to be dropped
+                    // straight into "C:\Program Files", and that is exactly how
+                    // a mismatched autostart path got written.
+                    chosenDir = form.SelectedDirectory.TrimEnd('\\');
+                    if (!string.Equals(Path.GetFileName(chosenDir), ProductName, StringComparison.OrdinalIgnoreCase))
+                    {
+                        chosenDir = Path.Combine(chosenDir, ProductName);
+                    }
                     createShortcuts = form.CreateShortcuts;
                     createDesktopShortcut = form.CreateDesktopShortcut;
                     addAutoStart = form.AddAutoStart;

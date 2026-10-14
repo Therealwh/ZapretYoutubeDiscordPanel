@@ -389,6 +389,33 @@ private static async Task RefreshCfDomainsAsync()
             }
         }
 
+        /// <summary>
+        /// Summarise bad handshakes instead of logging each one.
+        ///
+        /// A desktop Telegram client that cannot complete the handshake simply
+        /// reconnects, so this can fire dozens of times per second. One line per
+        /// attempt made the log useless and pushed the panel's UI thread to the
+        /// ground, which is what looked like the program hanging.
+        /// </summary>
+        private static void ReportBadHandshake()
+        {
+            int count = Interlocked.Increment(ref _badHandshakes);
+            DateTime now = DateTime.UtcNow;
+            if (_lastBadHandshakeReport == DateTime.MinValue
+                || (now - _lastBadHandshakeReport).TotalSeconds >= 30)
+            {
+                _lastBadHandshakeReport = now;
+                _log("неудачных подключений за 30 секунд: " + count
+                    + ". Значит кто-то подключается к локальному прокси и не может"
+                    + " пройти handshake. Чаще всего в настройках Telegram указан"
+                    + " секрет веб-прокси, а нужен секрет локального MTProto-прокси"
+                    + " (он показан на главной странице).", "warn");
+            }
+        }
+
+        private static int _badHandshakes;
+        private static DateTime _lastBadHandshakeReport = DateTime.MinValue;
+
         private static async Task HandleClientAsync(TcpClient client, CancellationToken token)
         {
             var stats = Stats;
@@ -401,10 +428,13 @@ private static async Task RefreshCfDomainsAsync()
                 var handshake = await ReadExactlyAsync(stream, TgCrypto.HandshakeLen, token);
                 if (handshake == null) return;
 
-                var parsed = TgCrypto.ParseHandshake(handshake, _secret);
+var parsed = TgCrypto.ParseHandshake(handshake, _secret);
                 if (parsed == null)
                 {
-                    _log("handshake parse failed (wrong secret or not MTProto)", "warn");
+                    // Telegram retries in a tight loop when the proxy answers
+                    // but the secret does not fit. Logging every attempt filled
+                    // the log with hundreds of lines a second and buried the UI.
+                    ReportBadHandshake();
                     return;
                 }
 

@@ -192,8 +192,12 @@ var window = new MainWindow();
                 ListenForShowRequests(window);
                 Log("window shown");
 
-                // `--autoconnect` comes from the login item: apply the
+// `--autoconnect` comes from the login item: apply the
                 // remembered working strategy in the background, no questions.
+                // Repair the login entry first: if it points at a path that no
+                // longer exists, the bypass silently stays down after a reboot.
+                AutoStart.EnsureAutoStartEntry();
+
                 if (AutoStart.StartedWithAutoApply())
                 {
                     string root = Status.ResolveRoot(Config.Get("zapretRoot", null));

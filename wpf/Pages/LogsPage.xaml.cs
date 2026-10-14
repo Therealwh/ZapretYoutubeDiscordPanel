@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Windows;
+using System.Windows.Threading;
 using System.Windows.Controls;
 using Ydp.Services;
 
@@ -26,18 +27,44 @@ namespace Ydp.Pages
 
         private void OnAppended(LogEntry entry)
         {
-            Dispatcher.BeginInvoke(new Action(() =>
+            // Batch, do not queue one dispatcher item per line. A burst of a few
+            // hundred entries (a reconnect loop, a download) used to enqueue
+            // hundreds of dispatcher operations and freeze the window.
+            lock (_pending)
             {
-                // Only auto-follow when the user is looking at the tail.
-                if (LogList.Items.Count > 400)
-                {
-                    var items = LogList.Items.Cast<LogEntry>().Skip(200).ToList();
-                    LogList.Items.Clear();
-                    foreach (var item in items) LogList.Items.Add(item);
-                }
+                _pending.Add(entry);
+                if (_flushScheduled) return;
+                _flushScheduled = true;
+            }
+            Dispatcher.BeginInvoke(new Action(FlushPending), DispatcherPriority.Background);
+        }
+
+        private readonly List<LogEntry> _pending = new List<LogEntry>();
+        private bool _flushScheduled;
+
+        private void FlushPending()
+        {
+            List<LogEntry> batch;
+            lock (_pending)
+            {
+                batch = new List<LogEntry>(_pending);
+                _pending.Clear();
+                _flushScheduled = false;
+            }
+            if (batch.Count == 0) return;
+
+            // Only auto-follow when the user is looking at the tail.
+            if (LogList.Items.Count > 400)
+            {
+                var items = LogList.Items.Cast<LogEntry>().Skip(200).ToList();
+                LogList.Items.Clear();
+                foreach (var item in items) LogList.Items.Add(item);
+            }
+            foreach (var entry in batch)
+            {
                 if (Matches(entry)) LogList.Items.Add(entry);
-                if (LogList.Items.Count > 0) LogList.ScrollIntoView(LogList.Items[LogList.Items.Count - 1]);
-            }));
+            }
+            if (LogList.Items.Count > 0) LogList.ScrollIntoView(LogList.Items[LogList.Items.Count - 1]);
         }
 
         private bool Matches(LogEntry entry)
