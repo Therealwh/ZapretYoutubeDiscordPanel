@@ -1,5 +1,6 @@
 using System;
 using System.Windows;
+using Ydp.Services;
 using System.Windows.Controls;
 using Ydp.Pages;
 using Ydp.Zapret;
@@ -45,6 +46,22 @@ Navigate(start ?? "dashboard");
                 Hide();
                 App.Tray.Notify("YoutubeDiscordPanel", "Панель свёрнута в трей — значок рядом с часами.");
             };
+
+            Loaded += async (s, e) =>
+        {
+            if (!Zapret.FirstRun.NeedsInstall()) return;
+            try
+            {
+                // Awaited, not blocked: the download runs for tens of seconds
+                // and a synchronous call froze the whole window meanwhile.
+                var outcome = await Zapret.FirstRun.RunInteractiveAsync(this);
+                if (outcome != Zapret.FirstRunOutcome.Skipped) UpdateFooter();
+            }
+            catch (Exception ex)
+            {
+                Logger.Error("Первичная установка zapret не удалась: " + ex.Message, "engine");
+            }
+        };
         }
 
         /// <summary>Open a section by its tag. Also used by the --page= switch.</summary>
