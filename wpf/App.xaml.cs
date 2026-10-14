@@ -149,9 +149,20 @@ base.OnStartup(e);
 
                 Logger.Info("Панель запущена (админ=" + Win.IsAdmin() + ")", "panel");
 
-                var window = new MainWindow();
+var window = new MainWindow();
                 MainWindow = window;
                 window.SourceInitialized += (s, args) => WindowChrome.ApplyDarkTitleBar(window);
+
+                // `--page logs` opens straight on a section: handy for support
+                // ("open the logs and look at me") instead of clicking there.
+                for (int i = 0; i < e.Args.Length - 1; i++)
+                {
+                    if (!e.Args[i].StartsWith("--page=", StringComparison.OrdinalIgnoreCase)) continue;
+                    string tag = e.Args[i].Substring("--page=".Length);
+                    if (string.IsNullOrEmpty(tag)) continue;
+                    window.Dispatcher.BeginInvoke(new Action(() => window.Navigate(tag)));
+                    break;
+                }
 
                 Tray = new TrayIcon(window);
                 window.Closed += (s, args) => Tray.Dispose();

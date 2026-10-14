@@ -137,9 +137,15 @@
             <Setter.Value>
                 <ControlTemplate TargetType="ComboBox">
                     <Grid>
+                        <!-- Order matters: the display border is drawn first and
+                             the transparent toggle sits ON TOP of it. With the
+                             toggle underneath, the opaque border swallowed the
+                             click and the dropdown never opened for real mouse
+                             input, even though automation could still expand it. -->
                         <Border Background="{TemplateBinding Background}"
                                 BorderBrush="{TemplateBinding BorderBrush}"
-                                BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="8">
+                                BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="8"
+                                IsHitTestVisible="False">
                             <Grid>
                                 <Grid.ColumnDefinitions>
                                     <ColumnDefinition Width="*" />
@@ -153,6 +159,17 @@
                                            Foreground="{StaticResource TextDimBrush}" VerticalAlignment="Center" />
                             </Grid>
                         </Border>
+                        <!-- WPF opens the dropdown through the template's toggle
+                             button, so a custom template without one is dead. -->
+                        <ToggleButton x:Name="PART_DropDownToggle"
+                                      Focusable="False" ClickMode="Press"
+                                      IsChecked="{Binding IsDropDownOpen, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}">
+                            <ToggleButton.Template>
+                                <ControlTemplate TargetType="ToggleButton">
+                                    <Border Background="Transparent" />
+                                </ControlTemplate>
+                            </ToggleButton.Template>
+                        </ToggleButton>
                         <Popup IsOpen="{TemplateBinding IsDropDownOpen}" Placement="Bottom" AllowsTransparency="True"
                                Focusable="False" PopupAnimation="Fade">
                             <Border Background="{StaticResource BgCardBrush}"
@@ -307,21 +324,37 @@
 
     <Style x:Key="ListItemStyle" TargetType="ListViewItem">
         <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+        <Setter Property="BorderThickness" Value="0" />
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="ListViewItem">
-                    <Border x:Name="bg" Background="Transparent" Padding="0,3">
-                        <ContentPresenter />
+                    <Border x:Name="bg" Background="Transparent" Padding="2,3">
+                        <!--
+                          GridViewRowPresenter, not a bare ContentPresenter: a
+                          ListView with columns renders through it. Swapping in a
+                          plain ContentPresenter made every row fall back to
+                          ToString(), so the log showed "Ydp.Services.LogEntry"
+                          instead of time/level/source/message.
+                        -->
+                        <GridViewRowPresenter
+                                              Columns="{Binding Path=View.Columns, RelativeSource={RelativeSource TemplatedParent}}"
+                                              VerticalAlignment="Center" />
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
                             <Setter TargetName="bg" Property="Background" Value="{StaticResource BgHoverBrush}" />
+                        </Trigger>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter TargetName="bg" Property="Background" Value="{StaticResource AccentBrush}" />
+                            <Setter Property="Foreground" Value="#0B0D12" />
                         </Trigger>
                     </ControlTemplate.Triggers>
                 </ControlTemplate>
             </Setter.Value>
         </Setter>
     </Style>
+
+    <Style TargetType="ListViewItem" BasedOn="{StaticResource ListItemStyle}" />
 
     <Style x:Key="ThinProgress" TargetType="ProgressBar">
         <Setter Property="Height" Value="4" />

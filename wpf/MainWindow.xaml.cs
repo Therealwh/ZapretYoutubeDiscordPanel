@@ -33,7 +33,8 @@ namespace Ydp
             UpdateFooter();
         }
 
-        private void Navigate(string tag)
+        /// <summary>Open a section by its tag. Also used by the --page= switch.</summary>
+        public void Navigate(string tag)
         {
             try
             {

@@ -53,12 +53,39 @@ namespace Ydp.Setup
             }
         }
 
+        /// <summary>
+        /// Locate the panel exe next to the installer.
+        ///
+        /// Releases publish it as "YoutubeDiscordPanel-2.0.0.exe" (versioned so
+        /// users can tell builds apart), but downloads land it under the plain
+        /// name, and old archives use the plain name too. Accept all of them
+        /// instead of failing with "no file next to the installer".
+        /// </summary>
+        private static string FindPanelExe(string dir)
+        {
+            string plain = Path.Combine(dir, ProductName + ".exe");
+            if (File.Exists(plain)) return plain;
+
+            string newest = null;
+            DateTime newestTime = DateTime.MinValue;
+            foreach (var file in Directory.GetFiles(dir, ProductName + "*.exe"))
+            {
+                string name = Path.GetFileName(file);
+                // Never mistake the installer or an old setup for the panel.
+                if (name.IndexOf("setup", StringComparison.OrdinalIgnoreCase) >= 0) continue;
+                if (string.Equals(name, ProductName + "-latest.exe", StringComparison.OrdinalIgnoreCase)) continue;
+                var stamp = File.GetLastWriteTimeUtc(file);
+                if (stamp > newestTime) { newestTime = stamp; newest = file; }
+            }
+            return newest;
+        }
+
         private static int Install(bool silent)
         {
             string sourceDir = Path.GetDirectoryName(new Uri(Assembly.GetExecutingAssembly().CodeBase).LocalPath);
-            string sourceExe = Path.Combine(sourceDir, ProductName + ".exe");
+            string sourceExe = FindPanelExe(sourceDir);
 
-            if (!File.Exists(sourceExe))
+            if (sourceExe == null)
             {
                 MessageBox.Show("Рядом с установщиком нет файла " + ProductName + ".exe",
                     ProductName, MessageBoxButtons.OK, MessageBoxIcon.Error);

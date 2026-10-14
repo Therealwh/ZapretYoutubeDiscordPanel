@@ -2,6 +2,8 @@
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              Loaded="Page_Loaded">
+    <!-- Форма выше окна: без скролла нижние поля недоступны. -->
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,10,0">
     <StackPanel>
         <TextBlock Text="Фильтры" FontSize="20" FontWeight="Bold" Margin="0,0,0,16" />
 
@@ -46,4 +48,5 @@
             </StackPanel>
         </Border>
     </StackPanel>
+    </ScrollViewer>
 </UserControl>

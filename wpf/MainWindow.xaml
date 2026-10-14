@@ -24,24 +24,32 @@
     </shell:WindowChrome.WindowChrome>
 
     <Window.Resources>
-        <!-- Sidebar item, same shape as the HTML .nav-item -->
+        <!-- Sidebar item: a coloured rail marks the active page, so the current
+             section is obvious at a glance instead of relying on a subtle
+             fill. Icons are vector shapes - no icon font to go missing. -->
         <Style x:Key="NavItem" TargetType="RadioButton">
             <Setter Property="Foreground" Value="{StaticResource TextDimBrush}" />
             <Setter Property="Cursor" Value="Hand" />
-            <Setter Property="Margin" Value="8,2" />
-            <Setter Property="Padding" Value="12,9" />
+            <Setter Property="Margin" Value="10,1" />
+            <Setter Property="Height" Value="38" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="RadioButton">
-                        <Border x:Name="bg" Background="Transparent" CornerRadius="8" Padding="{TemplateBinding Padding}">
-                            <ContentPresenter VerticalAlignment="Center" />
-                        </Border>
+                        <Grid>
+                            <Border x:Name="rail" Width="3" Height="18" CornerRadius="2"
+                                    HorizontalAlignment="Left" Background="Transparent" />
+                            <Border x:Name="bg" CornerRadius="8" Padding="12,0">
+                                <ContentPresenter VerticalAlignment="Center" />
+                            </Border>
+                        </Grid>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
                                 <Setter TargetName="bg" Property="Background" Value="{StaticResource BgHoverBrush}" />
+                                <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
                             </Trigger>
                             <Trigger Property="IsChecked" Value="True">
                                 <Setter TargetName="bg" Property="Background" Value="{StaticResource BgCardBrush}" />
+                                <Setter TargetName="rail" Property="Background" Value="{StaticResource AccentBrush}" />
                                 <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
                                 <Setter Property="FontWeight" Value="SemiBold" />
                             </Trigger>
@@ -92,6 +100,25 @@
                     </ControlTemplate>
                 </Setter.Value>
             </Setter>
+        </Style>
+
+        <!-- Nav icons: vector strokes that inherit the item's colour, so the
+             active item lights up together with its label. -->
+        <Style x:Key="NavIcon" TargetType="Path">
+            <Setter Property="Width" Value="14" />
+            <Setter Property="Height" Value="14" />
+            <Setter Property="Stretch" Value="Uniform" />
+            <Setter Property="StrokeThickness" Value="1.3" />
+            <Setter Property="SnapsToDevicePixels" Value="True" />
+            <Setter Property="Stroke" Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Margin" Value="0,0,11,0" />
+        </Style>
+
+        <Style x:Key="NavText" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="13.5" />
+            <Setter Property="VerticalAlignment" Value="Center" />
+            <Setter Property="Foreground" Value="{Binding Foreground, RelativeSource={RelativeSource AncestorType=RadioButton}}" />
         </Style>
     </Window.Resources>
 
@@ -147,25 +174,70 @@
                     <RowDefinition Height="*" />
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
-                <TextBlock Grid.Row="0" Text="YOUTUBEDISCORDPANEL" Margin="18,20,12,18"
-                           FontWeight="Bold" FontSize="13" Foreground="{StaticResource TextBrush}" />
+                <!-- Sidebar header -->
+                <StackPanel Grid.Row="0" Margin="18,20,12,18">
+                    <TextBlock Text="Zapret" FontWeight="Bold" FontSize="15"
+                               Foreground="{StaticResource TextBrush}" />
+                    <TextBlock Text="обход DPI для Discord и YouTube" FontSize="11.5"
+                               Style="{StaticResource Dim}" Margin="0,3,0,0" />
+                </StackPanel>
                 <StackPanel Grid.Row="1" VerticalAlignment="Top">
                     <RadioButton x:Name="NavDashboard" Style="{StaticResource NavItem}" GroupName="nav" IsChecked="True"
-                                 Content="Обход" Tag="dashboard" Checked="Nav_Checked" />
+                                 Tag="dashboard" Checked="Nav_Checked">
+                        <StackPanel Orientation="Horizontal">
+                            <Path Style="{StaticResource NavIcon}" Data="M1,1.5 L9,1.5 L9,6 L5,9.5 L1,6 Z" />
+                            <TextBlock Style="{StaticResource NavText}" Text="Обход" />
+                        </StackPanel>
+                    </RadioButton>
                     <RadioButton x:Name="NavStrategies" Style="{StaticResource NavItem}" GroupName="nav"
-                                 Content="Стратегии" Tag="strategies" Checked="Nav_Checked" />
+                                 Tag="strategies" Checked="Nav_Checked">
+                        <StackPanel Orientation="Horizontal">
+                            <Path Style="{StaticResource NavIcon}" Data="M0.5,2.5 H9.5 M0.5,7 H9.5" />
+                            <TextBlock Style="{StaticResource NavText}" Text="Стратегии" />
+                        </StackPanel>
+                    </RadioButton>
                     <RadioButton x:Name="NavFilters" Style="{StaticResource NavItem}" GroupName="nav"
-                                 Content="Фильтры" Tag="filters" Checked="Nav_Checked" />
+                                 Tag="filters" Checked="Nav_Checked">
+                        <StackPanel Orientation="Horizontal">
+                            <Path Style="{StaticResource NavIcon}" Data="M0.5,0.8 L9.5,0.8 L6.2,5 V9.8 L3.8,8.6 V5 Z" />
+                            <TextBlock Style="{StaticResource NavText}" Text="Фильтры" />
+                        </StackPanel>
+                    </RadioButton>
                     <RadioButton x:Name="NavLists" Style="{StaticResource NavItem}" GroupName="nav"
-                                 Content="Списки" Tag="lists" Checked="Nav_Checked" />
+                                 Tag="lists" Checked="Nav_Checked">
+                        <StackPanel Orientation="Horizontal">
+                            <Path Style="{StaticResource NavIcon}" Data="M2,0.5 L6.4,0.5 L8.5,2.8 L8.5,9.5 L2,9.5 Z M6.4,0.5 L6.4,2.8 L8.5,2.8" />
+                            <TextBlock Style="{StaticResource NavText}" Text="Списки" />
+                        </StackPanel>
+                    </RadioButton>
                     <RadioButton x:Name="NavUpdates" Style="{StaticResource NavItem}" GroupName="nav"
-                                 Content="Обновления" Tag="updates" Checked="Nav_Checked" />
+                                 Tag="updates" Checked="Nav_Checked">
+                        <StackPanel Orientation="Horizontal">
+                            <Path Style="{StaticResource NavIcon}" Data="M9,3.6 A4,4 0 1 0 8.6,6.6 M9,0.6 L9,3.9 L5.9,3.9" />
+                            <TextBlock Style="{StaticResource NavText}" Text="Обновления" />
+                        </StackPanel>
+                    </RadioButton>
                     <RadioButton x:Name="NavDiagnostics" Style="{StaticResource NavItem}" GroupName="nav"
-                                 Content="Диагностика" Tag="diagnostics" Checked="Nav_Checked" />
+                                 Tag="diagnostics" Checked="Nav_Checked">
+                        <StackPanel Orientation="Horizontal">
+                            <Path Style="{StaticResource NavIcon}" Data="M0.5,5 L3,5 L4.4,1.4 L6.4,8.8 L7.8,5 L9.5,5" />
+                            <TextBlock Style="{StaticResource NavText}" Text="Диагностика" />
+                        </StackPanel>
+                    </RadioButton>
                     <RadioButton x:Name="NavLogs" Style="{StaticResource NavItem}" GroupName="nav"
-                                 Content="Логи" Tag="logs" Checked="Nav_Checked" />
+                                 Tag="logs" Checked="Nav_Checked">
+                        <StackPanel Orientation="Horizontal">
+                            <Path Style="{StaticResource NavIcon}" Data="M0.5,2 H9.5 M0.5,5 H9.5 M0.5,8 H6.5" />
+                            <TextBlock Style="{StaticResource NavText}" Text="Логи" />
+                        </StackPanel>
+                    </RadioButton>
                     <RadioButton x:Name="NavSettings" Style="{StaticResource NavItem}" GroupName="nav"
-                                 Content="Настройки" Tag="settings" Checked="Nav_Checked" />
+                                 Tag="settings" Checked="Nav_Checked">
+                        <StackPanel Orientation="Horizontal">
+                            <Path Style="{StaticResource NavIcon}" Data="M5,1.6 A3.4,3.4 0 1 0 5,8.4 A3.4,3.4 0 1 0 5,1.6 M5,0 L5,1.8 M5,8.2 L5,10 M0,5 L1.8,5 M8.2,5 L10,5" />
+                            <TextBlock Style="{StaticResource NavText}" Text="Настройки" />
+                        </StackPanel>
+                    </RadioButton>
                 </StackPanel>
                 <TextBlock x:Name="FooterNote" Grid.Row="2" Margin="18,10,12,16" Style="{StaticResource Dim}" TextWrapping="Wrap" />
             </Grid>
