@@ -1,9 +1,27 @@
-# Zapret Panel
+<div align="center">
+
+# 🛡️ Zapret Panel
+
+**Настольная панель для [zapret-discord-youtube](https://github.com/Flowseal/zapret-discord-youtube)**
+**A beautiful control panel for [zapret-discord-youtube](https://github.com/Flowseal/zapret-discord-youtube)**
+
+🎛 Обход блокировок Discord / YouTube на Windows · 📡 встроенный **MTProxy** для Telegram · 🔍 темы: `zapret`, `mtproxy`, `anti-dpi`, `obhod-blokirovok`
+
+![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-blue)
+![Release](https://img.shields.io/github/v/release/Therealwh/ZapretYoutubeDiscordPanel)
+![License](https://img.shields.io/badge/license-MIT-green)
+![.NET](https://img.shields.io/badge/.NET-Framework%204.8-512BD4)
+![WPF](https://img.shields.io/badge/WPF-1%20process-0078D4)
+
+*Один процесс · ~90 МБ памяти · exe 280 КБ · ничего доустанавливать не нужно*
+
+</div>
+
+---
 
 Настольная панель для zapret — обхода DPI, который возвращает Discord, YouTube и
-Telegram при «задушенном» интернете. Пишет пользователь, **не подключая
-Telegram**: панель сама находит рабочую стратегию, ставит её службой Windows и
-поднимает обход при входе в систему.
+Telegram при «задушенном» интернете. Панель сама находит рабочую стратегию,
+ставит её службой Windows и поднимает обход при входе в систему.
 
 ![Главная](docs/images/01-dashboard.png)
 
@@ -140,8 +158,22 @@ docs/images/         скриншоты для этого README
 legacy/              версия 1.x на Electron и замеры Tauri, оставлены для справки
 ```
 
+## Благодарность
+
+Проект не работает сам по себе — всё держится на чужих разработках.
+
+- **[Flowseal/zapret-discord-youtube](https://github.com/Flowseal/zapret-discord-youtube)** — **главный источник**: панель скачивает и обновляет движок только отсюда, готовые стратегии и хостлисты оттуда же
+- **[bol-van/zapret](https://github.com/bol-van/zapret)** — ядро обхода DPI и `winws.exe`, установка которого требует WinDivert; панель умеет обновлять движок до любого его тега
+- **[Flowseal/tg-ws-proxy](https://github.com/Flowseal/tg-ws-proxy)** — эталонная реализация MTProto → WebSocket моста для Telegram; встроенный прокси в панели написан по ней
+- **[basil00/DivertWFP](https://github.com/basil00/DivertWFP)** и **[WinDivert](https://github.com/basil00/WinDivert)** — перехват сетевых вызовов, без которого zapret не запустится
+
+Отдельно: `zapret` — проект с открытым исходным кодом, и панель является удобной
+оболочкой над ним, а не заменой. Вся логика обхода принадлежит его авторам.
+
+---
+
 ## Лицензия
 
-MIT — см. [LICENSE](LICENSE).
+MIT — см. [LICENSE](LICENSE)
 
-Проект не связан с Telegram и не является его клиентом.
+Проект не связан с Telegram, Discord и YouTube и не является их клиентом.
