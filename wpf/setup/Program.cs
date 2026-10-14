@@ -20,24 +20,52 @@ namespace Ydp.Setup
     /// uninstall entry and turns on the login item so the panel comes back after
     /// a reboot with the remembered strategy already applied.
     /// </summary>
-    internal static class Program
+internal static class Program
     {
         private const string ProductName = "YoutubeDiscordPanel";
+        internal static string ProductNamePublic => ProductName;
         private const string InstallDirName = "YoutubeDiscordPanel";
         private const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
         private const string RunValue = "YoutubeDiscordPanel";
         private const string UninstallKey = @"Software\Microsoft\Windows\CurrentVersion\Uninstall\YoutubeDiscordPanel";
+        /// <summary>Where the user chose to install, remembered for uninstall/reinstall.</summary>
+        private const string SettingsKey = @"Software\YoutubeDiscordPanel";
 
-        private static string InstallDir => Path.Combine(
+        /// <summary>
+        /// Install folder. Empty until Install() runs: before that, the value
+        /// chosen in the dialog wins, then a /dir switch, then the folder
+        /// remembered from the previous install, and only then the default
+        /// per-user location.
+        /// </summary>
+        private static string chosenDir;
+
+        private static string DefaultDir => Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "Programs", InstallDirName);
+
+        private static string InstallDir
+        {
+            get
+            {
+                if (!string.IsNullOrEmpty(chosenDir)) return chosenDir;
+                string remembered = ReadSetting("InstallDir");
+                return string.IsNullOrEmpty(remembered) ? DefaultDir : remembered;
+            }
+        }
 
         [STAThread]
         private static int Main(string[] args)
         {
-            Application.EnableVisualStyles();
+Application.EnableVisualStyles();
             bool silent = Array.IndexOf(args, "/silent") >= 0 || Array.IndexOf(args, "/S") >= 0;
             bool uninstall = Array.IndexOf(args, "/uninstall") >= 0;
+
+            // /dir "D:\Programs\Panel" installs into a chosen folder without
+            // any dialog, for scripted installs and unattended setups.
+            for (int i = 0; i < args.Length - 1; i++)
+            {
+                if (string.Equals(args[i], "/dir", StringComparison.OrdinalIgnoreCase)) chosenDir = args[i + 1];
+            }
 
 try
             {
@@ -126,6 +154,7 @@ try
 private static int Install(bool silent)
         {
             Log("Install: старт, silent=" + silent);
+            bool createShortcuts = true, createDesktopShortcut = true, addAutoStart = true;
             string sourceDir = Path.GetDirectoryName(new Uri(Assembly.GetExecutingAssembly().CodeBase).LocalPath);
             string sourceExe = FindPanelExe(sourceDir);
             Log("Install: панель = " + (sourceExe ?? "НЕ НАЙДЕНА"));
@@ -137,15 +166,18 @@ private static int Install(bool silent)
                 return 1;
             }
 
-            if (!silent)
+if (!silent)
             {
-                var answer = MessageBox.Show(
-                    "Установить " + ProductName + "?\r\n\r\nПапка: " + InstallDir + "\r\n"
-                    + "Ничего дополнительно скачивать не нужно: программа работает на .NET Framework, "
-                    + "который уже есть в Windows.",
-                    ProductName, MessageBoxButtons.YesNo, MessageBoxIcon.Question);
-                if (answer != DialogResult.Yes) return 0;
+                using (var form = new InstallForm(InstallDir))
+                {
+                    if (form.ShowDialog() != DialogResult.OK) return 0;
+                    chosenDir = form.SelectedDirectory;
+                    createShortcuts = form.CreateShortcuts;
+                    createDesktopShortcut = form.CreateDesktopShortcut;
+                    addAutoStart = form.AddAutoStart;
+                }
             }
+            WriteSetting("InstallDir", InstallDir);
 
 StopRunning();
 
@@ -172,11 +204,11 @@ string bigZip = Path.Combine(sourceDir, "zapret-discord-youtube.zip");
             }
             Log("Install: движок = " + (bundled == null ? "нет" : bundled));
 
-            CreateShortcuts();
+            if (createShortcuts || createDesktopShortcut) CreateShortcuts(createDesktopShortcut);
             Log("Install: ярлыки обработаны");
             WriteUninstallEntry();
-            SetAutoStart(true, true);
-            Log("Install: готово");
+            SetAutoStart(addAutoStart, addAutoStart);
+            Log("Install: готово, папка " + InstallDir);
 
             if (!silent)
             {
@@ -240,7 +272,7 @@ private static void StopRunning()
             }
         }
 
-private static void CreateShortcuts()
+private static void CreateShortcuts(bool desktop)
         {
             try
             {
@@ -256,7 +288,7 @@ private static void CreateShortcuts()
                 var shell = (dynamic)Activator.CreateInstance(shellType);
 
                 string startMenu = Environment.GetFolderPath(Environment.SpecialFolder.Programs);
-                string desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
+                string desktopDir = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
 
                 var startLink = (dynamic)shell.CreateShortcut(Path.Combine(startMenu, ProductName + ".lnk"));
                 startLink.TargetPath = target;
@@ -264,7 +296,9 @@ private static void CreateShortcuts()
                 startLink.Description = description;
                 startLink.Save();
 
-                var desktopLink = (dynamic)shell.CreateShortcut(Path.Combine(desktop, ProductName + ".lnk"));
+                if (!desktop) return;
+
+                var desktopLink = (dynamic)shell.CreateShortcut(Path.Combine(desktopDir, ProductName + ".lnk"));
                 desktopLink.TargetPath = target;
                 desktopLink.WorkingDirectory = workDir;
                 desktopLink.Description = description;
@@ -288,6 +322,28 @@ private static void CreateShortcuts()
                     "[" + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + "] " + message + Environment.NewLine);
             }
             catch { /* logging must never break the install */ }
+        }
+
+        private static string ReadSetting(string name)
+        {
+            try
+            {
+                using (var key = Registry.CurrentUser.OpenSubKey(SettingsKey))
+                {
+                    return key == null ? null : key.GetValue(name) as string;
+                }
+            }
+            catch { return null; }
+        }
+
+        private static void WriteSetting(string name, string value)
+        {
+            try
+            {
+                using (var key = Registry.CurrentUser.CreateSubKey(SettingsKey))
+                    key.SetValue(name, value ?? "");
+            }
+            catch { /* a missing preference must not fail the install */ }
         }
 
         private static void RemoveShortcuts()
