@@ -217,7 +217,8 @@ var window = new MainWindow();
             }
         }
 
-        private static TrayIcon Tray;
+        /// <summary>The tray icon, once created. Windows hide on minimize only if it exists.</summary>
+        public static TrayIcon Tray;
         private static bool _allowClose;
 
         private static Mutex _singleInstance;

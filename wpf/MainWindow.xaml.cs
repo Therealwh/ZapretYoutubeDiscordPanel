@@ -29,8 +29,22 @@ namespace Ydp
             {
                 if (arg.StartsWith("--page=", StringComparison.OrdinalIgnoreCase)) start = arg.Substring(7);
             }
-            Navigate(start ?? "dashboard");
+Navigate(start ?? "dashboard");
             UpdateFooter();
+
+            // Minimizing goes to the tray instead of the taskbar: the panel is a
+            // background tool that stays resident while the bypass runs, and the
+            // user asked for it not to sit in the taskbar. The tray icon brings
+            // it back (TrayIcon.Show resets WindowState back to Normal).
+            StateChanged += (s, e) =>
+            {
+                // Only hide if there is really a tray icon to come back from:
+                // hiding without one would make the panel unreachable.
+                if (WindowState != WindowState.Minimized) return;
+                if (App.Tray == null) return;
+                Hide();
+                App.Tray.Notify("YoutubeDiscordPanel", "Панель свёрнута в трей — значок рядом с часами.");
+            };
         }
 
         /// <summary>Open a section by its tag. Also used by the --page= switch.</summary>

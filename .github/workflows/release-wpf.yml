@@ -1,0 +1,94 @@
+name: Release (WPF 2.x)
+
+# Version 2 of the panel is a .NET Framework 4.8 WPF app: no Node, no
+# electron-builder, no Chromium. The exe is ~250 KB and runs on the .NET
+# Framework that already ships with Windows, so there is nothing to download
+# and nothing to install besides the program itself.
+on:
+  push:
+    tags: [ 'v2*' ]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+
+      # net48 is a Windows-only target and the GitHub runner is Windows, so the
+      # reference-assembly package is belt-and-braces, but it keeps the build
+      # working if the runner image changes.
+
+      - name: Resolve version
+        id: ver
+        shell: bash
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          if gh release view "$tag" --repo ${{ github.repository }} >/dev/null 2>&1; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "Release $tag already exists, nothing to do."
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Fetch the current zapret engine for the offline bundle
+        if: steps.ver.outputs.skip != 'true'
+        shell: pwsh
+        run: |
+          # The installer offers a fully offline first run, so the release
+          # ships the latest zapret zip next to the setup exe.
+          $json = Invoke-RestMethod `
+            -Uri 'https://api.github.com/repos/Flowseal/zapret-discord-youtube/releases/latest' `
+            -Headers @{ 'User-Agent' = 'YoutubeDiscordPanel' }
+          $asset = $json.assets | Where-Object { $_.name -like '*.zip' } | Select-Object -First 1
+          if (-not $asset) { throw 'No zapret .zip asset in the latest release' }
+          Invoke-WebRequest -Uri $asset.browser_download_url -OutFile 'zapret-bundled.zip'
+          Write-Host "bundled zapret $($json.tag_name): $($asset.name)"
+
+      - name: Run self tests
+        if: steps.ver.outputs.skip != 'true'
+        shell: pwsh
+        run: |
+          dotnet build wpf/YoutubeDiscordPanel.csproj -c Release -v minimal
+          $out = & 'wpf/bin/Release/net48/YoutubeDiscordPanel.exe' --selftest
+          $out | Out-Host
+          if ($out -notmatch 'fail: 0') { throw 'Self tests failed' }
+
+      - name: Build panel and installer
+        if: steps.ver.outputs.skip != 'true'
+        shell: pwsh
+        run: |
+          dotnet build wpf/setup/Setup.csproj -c Release -v minimal
+          $v = "${{ steps.ver.outputs.tag }}".TrimStart('v')
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Copy-Item 'wpf/bin/Release/net48/YoutubeDiscordPanel.exe' "dist/YoutubeDiscordPanel-$v.exe"
+          Copy-Item 'wpf/setup/bin/Release/net48/YoutubeDiscordPanel-Setup.exe' "dist/YoutubeDiscordPanel-Setup-$v.exe"
+          Copy-Item 'zapret-bundled.zip' 'dist/zapret-bundled.zip'
+          Get-ChildItem dist | Format-Table Name, Length
+
+      - name: Create draft release
+        if: steps.ver.outputs.skip != 'true'
+        run: gh release create "${{ steps.ver.outputs.tag }}" --draft --title "${{ steps.ver.outputs.tag }}" --generate-notes --repo ${{ github.repository }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Upload assets and publish
+        if: steps.ver.outputs.skip != 'true'
+        shell: pwsh
+        run: |
+          $tag = "${{ steps.ver.outputs.tag }}"
+          gh release upload $tag 'dist/*.exe' 'dist/zapret-bundled.zip' --clobber --repo ${{ github.repository }}
+          gh release edit $tag --draft=false --repo ${{ github.repository }}
+        env:
+          GH_TOKEN: ${{ github.token }}

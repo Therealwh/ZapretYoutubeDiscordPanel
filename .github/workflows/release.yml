@@ -2,11 +2,10 @@ name: Release
 
 on:
   push:
-    tags: [ 'v*' ]
-    # A version bump merged into main releases automatically: the tag is
-    # created by the "Create draft release" step (skipped if it already exists).
-    branches: [ main ]
-    paths: [ package.json ]
+    tags: [ 'v1*' ]
+  # Version 2 is the WPF/net48 panel and is built by release-wpf.yml. This
+  # workflow stays on v1 tags: a v2 tag must not trigger an Electron build that
+  # would publish a 100 MB app nobody wants any more.
 
 permissions:
   contents: write
