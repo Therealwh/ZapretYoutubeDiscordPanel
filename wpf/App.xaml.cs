@@ -77,10 +77,23 @@ base.OnStartup(e);
 
                 // `--selftest` runs the ported-logic tests and exits, so CI and
                 // a quick manual check can verify the build without a UI.
+                // `--selftest --root <dir>` additionally runs the path-independence test against
+                // that zapret root (used with a spaced path on another drive).
+                string selftestRoot = null;
+                for (int i = 0; i < e.Args.Length - 1; i++)
+                {
+                    if (string.Equals(e.Args[i], "--root", StringComparison.OrdinalIgnoreCase))
+                    {
+                        selftestRoot = e.Args[i + 1];
+                        break;
+                    }
+                }
                 foreach (var arg in e.Args)
                 {
                     if (!string.Equals(arg, "--selftest", StringComparison.OrdinalIgnoreCase)) continue;
-                    Environment.ExitCode = Ydp.Tests.SelfTest.Run();
+                    int failures = Ydp.Tests.SelfTest.Run();
+                    if (selftestRoot != null) failures += Ydp.Tests.PathTest.Run(selftestRoot);
+                    Environment.ExitCode = failures == 0 ? 0 : 1;
                     Shutdown();
                     return;
                 }

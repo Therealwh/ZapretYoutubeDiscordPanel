@@ -6,6 +6,7 @@ using System.Linq;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Threading;
+using System.ServiceProcess;
 using Ydp.Zapret;
 
 namespace Ydp.Services
@@ -104,33 +105,82 @@ namespace Ydp.Services
         }
 
         /// <summary>Poll the service state. A missing service counts as STOPPED.</summary>
+        /// <summary>
+        /// Poll until the service reaches <paramref name="want"/>.
+        ///
+        /// State is read through ServiceController rather than our hand-rolled
+        /// QueryServiceStatusEx call: the raw interop returned all-zero statuses,
+        /// which made a perfectly healthy service look like it had failed to
+        /// start. ServiceController is also what Diagnostics already uses, so
+        /// both views agree.
+        /// </summary>
         public static bool WaitServiceState(string name, string want, int timeoutMs = 15000)
         {
-            uint wantCode;
+            ServiceControllerStatus target;
             switch (want)
             {
-                case "RUNNING": wantCode = SERVICE_RUNNING; break;
-                case "START_PENDING": wantCode = 2; break;
-                case "STOP_PENDING": wantCode = 3; break;
-                default: wantCode = SERVICE_STOPPED; break;
+                case "RUNNING": target = ServiceControllerStatus.Running; break;
+                case "START_PENDING": target = ServiceControllerStatus.StartPending; break;
+                case "STOP_PENDING": target = ServiceControllerStatus.StopPending; break;
+                default: target = ServiceControllerStatus.Stopped; break;
             }
+
             var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
             do
             {
-                uint state;
-                using (var manager = OpenManager())
+                using (var controller = OpenController(name))
                 {
-                    if (manager == null) return wantCode == SERVICE_STOPPED;
-                    using (var service = new ScHandle(OpenServiceW(manager.Handle, name, SERVICE_QUERY_STATUS)))
+                    // A missing service counts as STOPPED.
+                    if (controller == null) return target == ServiceControllerStatus.Stopped;
+                    controller.Refresh();
+                    if (controller.Status == target) return true;
+                    // It fell back to STOPPED while we were waiting for it to come
+                    // up: it died, so stop polling instead of burning the timeout.
+                    if (target == ServiceControllerStatus.Running && controller.Status == ServiceControllerStatus.Stopped)
                     {
-                        if (service.Handle == IntPtr.Zero) return wantCode == SERVICE_STOPPED;
-                        state = QueryStateRaw(service.Handle);
+                        return false;
                     }
                 }
-                if (state == wantCode) return true;
                 if (DateTime.UtcNow > deadline) return false;
-                Thread.Sleep(400);
+                Thread.Sleep(300);
             } while (true);
+        }
+
+        private static ServiceController OpenController(string name)
+        {
+            try { return new ServiceController(name); }
+            catch { return null; }
+        }
+
+        /// <summary>Poll until the service can no longer be opened (deleted for good).</summary>
+        private static bool WaitServiceGone(string name, int timeoutMs)
+        {
+            var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
+            do
+            {
+                if (OpenController(name) == null) return true;
+                if (DateTime.UtcNow > deadline) return false;
+                Thread.Sleep(300);
+            } while (true);
+        }
+
+        /// <summary>
+        /// Delete an existing instance and WAIT until SCM really dropped it.
+        /// DeleteService only marks the entry while a handle is open, so the next
+        /// CreateService would fail with ERROR_SERVICE_EXISTS (1073) and the entry
+        /// would vanish later on its own — the panel would then report that
+        /// nothing was installed.
+        /// </summary>
+        private static void DropExistingService(IntPtr manager, string name)
+        {
+            IntPtr existing = OpenServiceW(manager, name, SERVICE_STOP | DELETE | SERVICE_QUERY_STATUS);
+            if (existing != IntPtr.Zero)
+            {
+                StopServiceRaw(existing);
+                DeleteService(existing);
+                CloseServiceHandle(existing);
+            }
+            WaitServiceGone(name, 15000);
         }
 
         // ---- winws process ----------------------------------------------
@@ -251,7 +301,7 @@ namespace Ydp.Services
             if (!started.ok) return started;
 
             // Trust the observed state, not the exit codes.
-            bool up = WaitServiceState(Status.ZapretServiceName, "RUNNING", 15000);
+            bool up = WaitServiceState(Status.ZapretServiceName, "RUNNING", 40000);
             if (!up)
             {
                 return new OperationResult { ok = false, reason = "service_start_failed", message = imagePath };
@@ -297,7 +347,7 @@ namespace Ydp.Services
                     }
                 }
             }
-            bool up = WaitServiceState(Status.ZapretServiceName, "RUNNING", 15000);
+            bool up = WaitServiceState(Status.ZapretServiceName, "RUNNING", 40000);
             return up ? new OperationResult { ok = true } : new OperationResult { ok = false, reason = "service_start_failed" };
         }
 

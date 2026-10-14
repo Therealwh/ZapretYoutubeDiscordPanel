@@ -142,10 +142,10 @@ namespace Ydp.Zapret
                     break;
                 }
             }
-            foreach (var ch in dir)
-            {
-                if (char.IsWhiteSpace(ch)) { issues.Add("spaces"); break; }
-            }
+            // Spaces are NOT an issue any more: the SCM call and the direct spawn
+            // both quote their arguments, verified against
+            // "D:\Program Files\AZ Tools\zapret" by Tests/PathTest.cs. Reporting
+            // them pushed users towards a C:\Zapret copy for no reason.
             if (dir.IndexOf("onedrive", StringComparison.OrdinalIgnoreCase) >= 0) issues.Add("onedrive");
             return new RootValidation { ok = true, issues = issues.ToArray() };
         }

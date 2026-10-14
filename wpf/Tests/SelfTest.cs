@@ -359,6 +359,14 @@ namespace Ydp.Tests
             Equal("quote arg keeps a spaced value wrapped",
                 "\"C:\\Program Files\\x.txt\"", Strategy.QuoteArg("C:\\Program Files\\x.txt"));
             Equal("quote arg leaves a plain value alone", "--new", Strategy.QuoteArg("--new"));
+            // Regression: quoting an argument that already carries its own quotes
+            // produced "--hostlist="C:\a b\x.txt"" and the service died with 1067.
+            Equal("quote arg does not double-quote an already quoted value",
+                "--hostlist=\"C:\\Program Files\\x.txt\"",
+                Strategy.QuoteArg("--hostlist=\"C:\\Program Files\\x.txt\""));
+            Equal("quote arg keeps a fully quoted value",
+                "\"C:\\Program Files\\x.txt\"",
+                Strategy.QuoteArg("\"C:\\Program Files\\x.txt\""));
 
             var methods = Strategy.DetectMethods(new[]
             {

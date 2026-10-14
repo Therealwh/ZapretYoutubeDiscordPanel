@@ -269,9 +269,14 @@ namespace Ydp.Zapret
         }
 
         /// <summary>
-        /// Quote an argument for a Windows command line. Anything containing a
-        /// space is wrapped in double quotes; that is what lets a zapret folder
-        /// with spaces work as a plain process launch.
+        /// Quote an argument for a Windows command line.
+        ///
+        /// The parser already emits winws' documented form
+        /// (--hostlist="C:\path with spaces\x.txt"), and the reference passes
+        /// that through untouched. Wrapping such an argument AGAIN produced
+        /// "--hostlist="C:\path..."" - double quotes - which winws rejects, and
+        /// the service died with 1067 while the same strategy worked as a
+        /// process. So: anything that already carries quotes is left alone.
         /// </summary>
         public static string QuoteArg(string arg)
         {
@@ -280,6 +285,7 @@ namespace Ydp.Zapret
             {
                 return arg; // Already quoted by the parser — keep it intact.
             }
+            if (arg.IndexOf('"') >= 0) return arg; // e.g. --hostlist="C:\a b\x.txt"
             if (arg.IndexOf(' ') < 0) return arg;
             return "\"" + arg + "\"";
         }
