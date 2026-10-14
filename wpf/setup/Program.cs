@@ -39,18 +39,26 @@ namespace Ydp.Setup
             bool silent = Array.IndexOf(args, "/silent") >= 0 || Array.IndexOf(args, "/S") >= 0;
             bool uninstall = Array.IndexOf(args, "/uninstall") >= 0;
 
-            try
+try
             {
                 return uninstall ? Uninstall(silent) : Install(silent);
             }
             catch (Exception ex)
             {
+                // Silent mode used to swallow every failure: nothing was shown
+                // and nothing was written, so a broken install looked like a
+                // no-op. Always record it.
+                Log("Установка прервана: " + ex);
                 if (!silent)
                 {
                     MessageBox.Show("Установка не удалась:\r\n" + ex.Message,
                         ProductName, MessageBoxButtons.OK, MessageBoxIcon.Error);
                 }
                 return 1;
+            }
+            finally
+            {
+                CleanupPayloads();
             }
         }
 
@@ -115,10 +123,12 @@ namespace Ydp.Setup
             extractedFiles.Clear();
         }
 
-        private static int Install(bool silent)
+private static int Install(bool silent)
         {
+            Log("Install: старт, silent=" + silent);
             string sourceDir = Path.GetDirectoryName(new Uri(Assembly.GetExecutingAssembly().CodeBase).LocalPath);
             string sourceExe = FindPanelExe(sourceDir);
+            Log("Install: панель = " + (sourceExe ?? "НЕ НАЙДЕНА"));
 
             if (sourceExe == null)
             {
@@ -137,10 +147,12 @@ namespace Ydp.Setup
                 if (answer != DialogResult.Yes) return 0;
             }
 
-            StopRunning();
+StopRunning();
 
             Directory.CreateDirectory(InstallDir);
+            Log("Install: копирую панель в " + InstallDir);
             File.Copy(sourceExe, Path.Combine(InstallDir, ProductName + ".exe"), true);
+            Log("Install: панель скопирована");
 
             // The engine archive travels with the panel so a first install works
             // with no network at all. Prefer the copy embedded in this
@@ -153,15 +165,18 @@ namespace Ydp.Setup
             }
             // The offline zapret package is large; copying it is optional and only
             // done when it actually sits next to the installer.
-            string bigZip = Path.Combine(sourceDir, "zapret-discord-youtube.zip");
+string bigZip = Path.Combine(sourceDir, "zapret-discord-youtube.zip");
             if (File.Exists(bigZip))
             {
                 File.Copy(bigZip, Path.Combine(InstallDir, "zapret-discord-youtube.zip"), true);
             }
+            Log("Install: движок = " + (bundled == null ? "нет" : bundled));
 
             CreateShortcuts();
+            Log("Install: ярлыки обработаны");
             WriteUninstallEntry();
             SetAutoStart(true, true);
+            Log("Install: готово");
 
             if (!silent)
             {
@@ -199,25 +214,46 @@ namespace Ydp.Setup
             return 0;
         }
 
-        private static void StopRunning()
+private static void StopRunning()
         {
+            // Never kill ourselves. The loop below used to match the installer's
+            // own name when the file was called YoutubeDiscordPanel-Setup.exe,
+            // so the installer terminated itself mid-install: exit code -1, no
+            // files copied, and not even a chance to report the failure.
+            int self = Process.GetCurrentProcess().Id;
             foreach (var name in new[] { ProductName, ProductName + "-Setup" })
             {
-                foreach (var process in Process.GetProcessesByName(name))
+                Process[] processes;
+                try { processes = Process.GetProcessesByName(name); }
+                catch { continue; }
+                foreach (var process in processes)
                 {
-                    try { process.Kill(); process.WaitForExit(3000); } catch { /* not running */ }
+                    try
+                    {
+                        if (process.Id == self) continue;
+                        process.Kill();
+                        process.WaitForExit(3000);
+                    }
+                    catch { /* already gone */ }
+                    finally { process.Dispose(); }
                 }
             }
         }
 
-        private static void CreateShortcuts()
+private static void CreateShortcuts()
         {
             try
             {
                 string target = Path.Combine(InstallDir, ProductName + ".exe");
                 string workDir = InstallDir;
                 string description = "Панель обхода zapret";
-                var shell = (dynamic)Type.GetTypeFromProgID("WScript.Shell");
+                // Activator.CreateInstance, not a cast of Type to dynamic:
+                // GetTypeFromProgID returns a Type, and casting it yields a
+                // TypeInfo whose members are not the COM object's, so
+                // CreateShortcut threw RuntimeBinderException.
+                Type shellType = Type.GetTypeFromProgID("WScript.Shell");
+                if (shellType == null) throw new InvalidOperationException("WScript.Shell недоступен");
+                var shell = (dynamic)Activator.CreateInstance(shellType);
 
                 string startMenu = Environment.GetFolderPath(Environment.SpecialFolder.Programs);
                 string desktop = Environment.GetFolderPath(Environment.SpecialFolder.DesktopDirectory);
@@ -234,10 +270,24 @@ namespace Ydp.Setup
                 desktopLink.Description = description;
                 desktopLink.Save();
             }
-            catch
+            catch (Exception ex)
             {
-                // Shortcuts are a nicety; the install itself already succeeded.
+                // This used to be an empty catch, so shortcuts silently never
+                // appeared and nobody could tell why. Log it instead.
+                Log("Не удалось создать ярлыки: " + ex);
             }
+        }
+
+        /// <summary>Append to a small log next to the installer, for support.</summary>
+        private static void Log(string message)
+        {
+            try
+            {
+                string path = Path.Combine(Path.GetTempPath(), "ydp-setup.log");
+                File.AppendAllText(path,
+                    "[" + DateTime.Now.ToString("yyyy-MM-dd HH:mm:ss") + "] " + message + Environment.NewLine);
+            }
+            catch { /* logging must never break the install */ }
         }
 
         private static void RemoveShortcuts()
