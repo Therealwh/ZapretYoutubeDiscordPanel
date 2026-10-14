@@ -69,7 +69,13 @@ jobs:
         if: steps.ver.outputs.skip != 'true'
         shell: pwsh
         run: |
+          # The installer embeds the panel exe and the zapret archive, so it has
+          # to be built AFTER both exist. This is what makes a single download
+          # work instead of "download two files and keep them together".
+          New-Item -ItemType Directory -Force -Path 'wpf/setup/Payload' | Out-Null
+          Copy-Item 'zapret-bundled.zip' 'wpf/setup/Payload/zapret-bundled.zip' -Force
           dotnet build wpf/setup/Setup.csproj -c Release -v minimal
+
           $v = "${{ steps.ver.outputs.tag }}".TrimStart('v')
           New-Item -ItemType Directory -Force -Path dist | Out-Null
           Copy-Item 'wpf/bin/Release/net48/YoutubeDiscordPanel.exe' "dist/YoutubeDiscordPanel-$v.exe"

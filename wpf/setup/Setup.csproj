@@ -33,4 +33,20 @@
     <Reference Include="System.IO.Compression.FileSystem" />
   </ItemGroup>
 
+<ItemGroup>
+    <!--
+      The installer is self-contained: the panel exe and the offline zapret
+      archive travel inside it. Asking the user to download two files and keep
+      them in the same folder is a real failure mode - the website offers one
+      file, and the setup then refused to run with "no YoutubeDiscordPanel.exe
+      next to the installer".
+    -->
+    <EmbeddedResource Include="..\bin\Release\net48\YoutubeDiscordPanel.exe"
+                      LogicalName="Setup.Payload.panel.exe"
+                      Condition="Exists('..\bin\Release\net48\YoutubeDiscordPanel.exe')" />
+    <EmbeddedResource Include="Payload\zapret-bundled.zip"
+                      LogicalName="Setup.Payload.zapret.zip"
+                      Condition="Exists('Payload\zapret-bundled.zip')" />
+  </ItemGroup>
+
 </Project>

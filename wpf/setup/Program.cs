@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
@@ -54,15 +55,14 @@ namespace Ydp.Setup
         }
 
         /// <summary>
-        /// Locate the panel exe next to the installer.
-        ///
-        /// Releases publish it as "YoutubeDiscordPanel-2.0.0.exe" (versioned so
-        /// users can tell builds apart), but downloads land it under the plain
-        /// name, and old archives use the plain name too. Accept all of them
-        /// instead of failing with "no file next to the installer".
+        /// Locate the panel exe: first inside the installer itself, then next to
+        /// it. The embedded copy is what makes a single download work.
         /// </summary>
         private static string FindPanelExe(string dir)
         {
+            string extracted = ExtractPayload("Setup.Payload.panel.exe", "panel.exe");
+            if (extracted != null) return extracted;
+
             string plain = Path.Combine(dir, ProductName + ".exe");
             if (File.Exists(plain)) return plain;
 
@@ -78,6 +78,41 @@ namespace Ydp.Setup
                 if (stamp > newestTime) { newestTime = stamp; newest = file; }
             }
             return newest;
+        }
+
+        /// <summary>Write an embedded resource to a temp file and return its path.</summary>
+        private static string ExtractPayload(string resourceName, string fileName)
+        {
+            try
+            {
+                using (var stream = Assembly.GetExecutingAssembly()
+                    .GetManifestResourceStream(resourceName))
+                {
+                    if (stream == null) return null;
+                    string target = Path.Combine(Path.GetTempPath(),
+                        "ydp-setup-" + Guid.NewGuid().ToString("N").Substring(0, 8) + "-" + fileName);
+                    using (var output = new FileStream(target, FileMode.Create, FileAccess.Write))
+                        stream.CopyTo(output);
+                    extractedFiles.Add(target);
+                    return target;
+                }
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        /// <summary>Temp files written from embedded resources, removed on exit.</summary>
+        private static readonly List<string> extractedFiles = new List<string>();
+
+        private static void CleanupPayloads()
+        {
+            foreach (var file in extractedFiles)
+            {
+                try { if (File.Exists(file)) File.Delete(file); } catch { }
+            }
+            extractedFiles.Clear();
         }
 
         private static int Install(bool silent)
@@ -108,8 +143,10 @@ namespace Ydp.Setup
             File.Copy(sourceExe, Path.Combine(InstallDir, ProductName + ".exe"), true);
 
             // The engine archive travels with the panel so a first install works
-            // with no network at all.
-            string bundled = Path.Combine(sourceDir, "zapret-bundled.zip");
+            // with no network at all. Prefer the copy embedded in this
+            // installer; fall back to one sitting next to it.
+            string bundled = ExtractPayload("Setup.Payload.zapret.zip", "zapret-bundled.zip");
+            if (bundled == null) bundled = Path.Combine(sourceDir, "zapret-bundled.zip");
             if (File.Exists(bundled))
             {
                 File.Copy(bundled, Path.Combine(InstallDir, "zapret-bundled.zip"), true);
