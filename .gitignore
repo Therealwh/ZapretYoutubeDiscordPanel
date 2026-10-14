@@ -1,21 +1,27 @@
-# ---- Node / Electron (v1 line) ----
+# ---- Node / Electron (v1 line, now under legacy/) ----
 node_modules/
+legacy/**/node_modules/
 dist/
 release/
 smoke.log
 footprint-*.json
 
-# ---- Rust (Tauri spike kept only as a measurement artifact) ----
-tauri-spike/node_modules/
-tauri-spike/src-tauri/target/
-tauri-spike/src-tauri/gen/
-src-tauri/target/
+# ---- Rust (Tauri spike, kept under legacy/ as a measurement artifact) ----
+legacy/tauri-spike/src-tauri/target/
+legacy/tauri-spike/src-tauri/gen/
+legacy/src-tauri/target/
 
-# ---- .NET / WPF (v2 line) ----
+# ---- .NET / WPF (v2, the current program) ----
 wpf/bin/
 wpf/obj/
+wpf/setup/bin/
+wpf/setup/obj/
+wpf/setup/Payload/
 *.user
 
 # ---- misc ----
 *.log
 Thumbs.db
+
+# отдельный репозиторий сайта, намеренно не входит сюда
+website/
