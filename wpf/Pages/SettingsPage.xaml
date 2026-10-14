@@ -59,7 +59,10 @@
                 <TextBlock Text="Свой Cloudflare worker для Telegram" Style="{StaticResource CardTitle}" />
                 <TextBlock Style="{StaticResource Hint}" Margin="0,4,0,8" TextWrapping="Wrap"
                            Text="Если в вашей сети адреса Telegram недоступны напрямую, помогает собственный worker: он подключается к Telegram со стороны Cloudflare, а панель обращается к обычному домену. Свой worker бесплатен, инструкция — в документации проекта tg-ws-proxy (docs/CfWorker.md)." />
-                <TextBox x:Name="WorkerBox" Padding="10,8" Margin="0,0,0,10" />
+                <TextBox x:Name="WorkerBox" Padding="10,8" Margin="0,0,0,4" TextChanged="WorkerBox_TextChanged"
+                         ToolTip="Домен вашего воркера, например patient-band-1850.workers.dev" />
+                <TextBlock x:Name="WorkerHint" Style="{StaticResource Hint}" Margin="2,0,0,10" TextWrapping="Wrap"
+                           Text="Не задан. Пример: patient-band-1850.workers.dev — без него панель идёт к Telegram напрямую." />
                 <StackPanel Orientation="Horizontal">
                     <Button Content="Сохранить" Style="{StaticResource BtnPrimary}" Margin="0,0,10,0" Click="BtnSaveWorker_Click" />
                     <Button x:Name="BtnProbeWorker" Content="Проверить маршруты" Style="{StaticResource Btn}" Click="BtnProbeRoutes_Click" />
@@ -74,7 +77,10 @@
                 <TextBlock Text="Свой Cloudflare-релей для Telegram" Style="{StaticResource CardTitle}" />
                 <TextBlock Style="{StaticResource Hint}" Margin="0,4,0,8" TextWrapping="Wrap"
                            Text="Если в Cloudflare сделаны записи kws1..kws6.&lt;ваш домен&gt; на IP Telegram, укажите домен здесь — прокси пойдёт через них, а Cloudflare обратится к Telegram вместо вас. Домены должны быть прописаны и в списках zapret (вкладка «Списки»), иначе обход их не пропустит." />
-                <TextBox x:Name="CfProxyBox" Padding="10,8" Margin="0,0,0,10" />
+                <TextBox x:Name="CfProxyBox" Padding="10,8" Margin="0,0,0,4" TextChanged="CfProxyBox_TextChanged"
+                         ToolTip="Ваш домен, например wtfprivet.online" />
+                <TextBlock x:Name="CfProxyHint" Style="{StaticResource Hint}" Margin="2,0,0,10" TextWrapping="Wrap"
+                           Text="Не задан. Пример: wtfprivet.online — в Cloudflare должны быть записи kws1..kws6 на этот домен." />
                 <StackPanel Orientation="Horizontal">
                     <Button Content="Сохранить" Style="{StaticResource BtnPrimary}" Margin="0,0,10,0" Click="BtnSaveCfProxy_Click" />
                     <Button x:Name="BtnProbe" Content="Проверить маршруты" Style="{StaticResource Btn}" Click="BtnProbeRoutes_Click" />

@@ -20,6 +20,33 @@ namespace Ydp.Pages
             InitializeComponent();
         }
 
+        /// <summary>
+        /// An empty box looked like a broken panel. Say plainly whether the value
+        /// is set, and give an example of the expected format.
+        /// </summary>
+        private void UpdateRelayHints()
+        {
+            if (WorkerBox == null) return;
+            bool hasWorker = !string.IsNullOrWhiteSpace(WorkerBox.Text);
+            WorkerHint.Visibility = hasWorker ? Visibility.Collapsed : Visibility.Visible;
+            if (hasWorker)
+            {
+                WorkerNote.Text = "Сохранён: " + WorkerBox.Text.Trim();
+            }
+            else
+            {
+                WorkerNote.Text = "Воркер не задан. Telegram подключается напрямую.";
+            }
+
+            bool hasRelay = !string.IsNullOrWhiteSpace(CfProxyBox.Text);
+            CfProxyHint.Visibility = hasRelay ? Visibility.Collapsed : Visibility.Visible;
+            if (hasRelay) CfProxyNote.Text = "Сохранён: " + CfProxyBox.Text.Trim();
+        }
+
+        private void WorkerBox_TextChanged(object sender, TextChangedEventArgs e) => UpdateRelayHints();
+
+        private void CfProxyBox_TextChanged(object sender, TextChangedEventArgs e) => UpdateRelayHints();
+
         private void Page_Loaded(object sender, RoutedEventArgs e)
         {
             Load();
@@ -33,10 +60,13 @@ namespace Ydp.Pages
                 ChkAutostart.IsChecked = AutoStart.IsEnabled();
                 ChkAutoApply.IsChecked = AutoStart.AutoApplyEnabled();
                 ChkServiceMode.IsChecked = !string.Equals(Config.Get(AutoConnect.KeyPreferService, "true"), "false", StringComparison.OrdinalIgnoreCase);
-                WorkerBox.Text = Config.Get("tgWorkerDomain", string.Empty);
-                Tg.TgProxy.WorkerDomain = WorkerBox.Text;
-                CfProxyBox.Text = Config.Get("tgCfProxyDomain", string.Empty);
-                Tg.TgProxy.CustomCfDomain = CfProxyBox.Text;
+// Ship pre-filled: a fresh install works immediately, and anyone with their
+    // own infrastructure overwrites it here.
+    WorkerBox.Text = Config.Get("tgWorkerDomain", Tg.TgProxy.DefaultWorkerDomain);
+  Tg.TgProxy.WorkerDomain = WorkerBox.Text;
+  CfProxyBox.Text = Config.Get("tgCfProxyDomain", Tg.TgProxy.DefaultCfDomain);
+  Tg.TgProxy.CustomCfDomain = CfProxyBox.Text;
+  UpdateRelayHints();
 
                 var known = AutoConnect.KnownWorking();
                 Remembered.Text = string.IsNullOrEmpty(AutoConnect.LastWinner()) ? "— ещё не запомнена" : Path.GetFileName(AutoConnect.LastWinner());

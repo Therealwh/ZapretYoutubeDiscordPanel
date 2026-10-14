@@ -92,7 +92,18 @@ private static volatile bool _cfEnabled = true;
             set => _workerDomain = (value ?? string.Empty).Trim().ToLowerInvariant();
         }
 
-        private static string _workerDomain = string.Empty;
+        /// <summary>
+    /// The relay and worker the project ships with.
+    ///
+    /// A fresh install is expected to work out of the box, so the settings show
+    /// these pre-filled and the proxy uses them without the user configuring
+    /// anything. Anyone who wants their own infrastructure replaces them in
+    /// Настройки and the change is saved.
+    /// </summary>
+    public const string DefaultWorkerDomain = "patient-band-1850.therealwh.workers.dev";
+    public const string DefaultCfDomain = "wtfprivet.online";
+
+    private static string _workerDomain = DefaultWorkerDomain;
         private static volatile bool _cfUsable = true;
 
         private static int DcAddress(int dc)
@@ -367,7 +378,7 @@ private static async Task RefreshCfDomainsAsync()
             set => _customCfDomain = (value ?? string.Empty).Trim().ToLowerInvariant();
         }
 
-        private static string _customCfDomain = string.Empty;
+        private static string _customCfDomain = DefaultCfDomain;
 
         private static IEnumerable<string> CfPool()
         {
