@@ -43,13 +43,13 @@ protected override void OnStartup(StartupEventArgs e)
         {
             // One panel at a time. Two instances fight over the Telegram port, and
             // the loser shows "proxy off" while the winner works - which reads as
-            // a broken panel. The second instance says so and exits.
+            // a broken panel. A second launch instead signals the running one to
+            // show itself and exits; no modal dialog, nothing to click away.
             bool firstInstance;
             _singleInstance = new Mutex(true, @"Local\YoutubeDiscordPanelSingleton", out firstInstance);
             if (!firstInstance)
             {
-                MessageBox.Show("Панель уже запущена — проверьте значок в трее.",
-                    "YoutubeDiscordPanel", MessageBoxButton.OK, MessageBoxImage.Information);
+                SignalRunningInstance();
                 Shutdown();
                 return;
             }
@@ -156,6 +156,7 @@ base.OnStartup(e);
                 Tray.AllowClose = () => _allowClose = true;
 
                 window.Show();
+                ListenForShowRequests(window);
                 Log("window shown");
 
                 // `--autoconnect` comes from the login item: apply the
@@ -187,6 +188,61 @@ base.OnStartup(e);
         private static bool _allowClose;
 
         private static Mutex _singleInstance;
+        private const string ShowEventName = @"Local\YoutubeDiscordPanelShow";
+        private static EventWaitHandle _showEvent;
+
+        /// <summary>Ask an already-running panel to come to the foreground.</summary>
+        private static void SignalRunningInstance()
+        {
+            try
+            {
+                using (var signal = EventWaitHandle.OpenExisting(ShowEventName))
+                {
+                    signal.Set();
+                }
+            }
+            catch
+            {
+                // The other instance may be shutting down; nothing to do.
+            }
+        }
+
+        /// <summary>Listen for "show me" requests from later launches.</summary>
+        private static void ListenForShowRequests(Window window)
+        {
+            try
+            {
+                _showEvent = new EventWaitHandle(false, EventResetMode.AutoReset, ShowEventName);
+            }
+            catch
+            {
+                return;
+            }
+            var thread = new Thread(() =>
+            {
+                while (true)
+                {
+                    try
+                    {
+                        _showEvent.WaitOne();
+                        window.Dispatcher.Invoke(() =>
+                        {
+                            window.Show();
+                            window.WindowState = WindowState.Normal;
+                            window.Activate();
+                            window.Topmost = true;
+                            window.Topmost = false;
+                        });
+                    }
+                    catch
+                    {
+                        return;
+                    }
+                }
+            })
+            { IsBackground = true };
+            thread.Start();
+        }
 
         /// <summary>
         /// Headless proxy route probe (--proxy-test). Writes the result next to
