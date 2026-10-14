@@ -238,6 +238,13 @@
                             <TextBlock Style="{StaticResource NavText}" Text="Настройки" />
                         </StackPanel>
                     </RadioButton>
+                    <RadioButton x:Name="NavSupport" Style="{StaticResource NavItem}" GroupName="nav"
+                                 Tag="support" Checked="Nav_Checked">
+                        <StackPanel Orientation="Horizontal">
+                            <Path Style="{StaticResource NavIcon}" Data="M5,9 C1.5,6 0.5,4 1.8,2.6 A2.4,2.4 0 0 1 5,3.4 A2.4,2.4 0 0 1 8.2,2.6 C9.5,4 8.5,6 5,9 Z" />
+                            <TextBlock Style="{StaticResource NavText}" Text="Поддержать" />
+                        </StackPanel>
+                    </RadioButton>
                 </StackPanel>
                 <TextBlock x:Name="FooterNote" Grid.Row="2" Margin="18,10,12,16" Style="{StaticResource Dim}" TextWrapping="Wrap" />
             </Grid>

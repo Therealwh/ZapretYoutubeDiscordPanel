@@ -158,6 +158,28 @@ docs/images/         скриншоты для этого README
 legacy/              версия 1.x на Electron и замеры Tauri, оставлены для справки
 ```
 
+<div align="center">
+
+## ❤️ Поддержать проект
+
+Панель бесплатная, без рекламы и без телеметрии. Если она оказалась полезной — можно помочь.
+
+| Сеть | Кошелёк |
+|---|---|
+| **USDT · TRC-20** | `TGWtYdfLEVEVXScaE4Ut7ornk1A3CXCCfe` |
+| **TRX · TRON** | `TGWtYdfLEVEVXScaE4Ut7ornk1A3CXCCfe` |
+| **USDT · TON** | `UQCGYVM9hg2JcqnEQpTPibPxHUuSOB03zhaSE8Yn-C2aHlH-` |
+| **GRAM · TON** | `UQCGYVM9hg2JcqnEQpTPibPxHUuSOB03zhaSE8Yn-C2aHlH-` |
+| **BNB · Smart Chain (BEP-20)** | `0xde5a28A77359cdCf32666Db8Aae5f5Bb13c5f886` |
+
+В самой программе эти адреса копируются кнопкой: **Настройки → Поддержать** в боковом меню.
+
+Спасибо! 💙
+
+</div>
+
+---
+
 ## Благодарность
 
 Проект не работает сам по себе — всё держится на чужих разработках.

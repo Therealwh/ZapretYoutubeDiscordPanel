@@ -19,6 +19,7 @@ namespace Ydp
         private DiagnosticsPage _diagnostics;
         private LogsPage _logs;
         private SettingsPage _settings;
+        private SupportPage _support;
 
         public MainWindow()
         {
@@ -88,9 +89,13 @@ Navigate(start ?? "dashboard");
                         if (_logs == null) _logs = new LogsPage();
                         PageHost.Content = _logs;
                         break;
-                    case "settings":
+case "settings":
                         if (_settings == null) _settings = new SettingsPage();
                         PageHost.Content = _settings;
+                        break;
+                    case "support":
+                        if (_support == null) _support = new SupportPage();
+                        PageHost.Content = _support;
                         break;
                     default:
                         if (_dashboard == null) _dashboard = new DashboardPage();
@@ -117,6 +122,7 @@ Navigate(start ?? "dashboard");
                 case "updates": NavUpdates.IsChecked = true; break;
                 case "diagnostics": NavDiagnostics.IsChecked = true; break;
                 case "logs": NavLogs.IsChecked = true; break;
+            case "support": NavSupport.IsChecked = true; break;
                 default: NavDashboard.IsChecked = true; break;
             }
             Show();
