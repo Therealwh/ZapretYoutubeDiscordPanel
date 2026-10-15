@@ -739,6 +739,37 @@ var targets = OrderTargets(LoadTargets(rootDir));
         /// enforce. Delegating to it means the panel shows literally what the
         /// reference tool shows.
         /// </summary>
+        /// <summary>
+        /// Map a config label printed by the tester ("general (ALT2).bat") to the
+        /// real .bat file inside the zapret root. The tester prints a title, not a
+        /// path; passing that title straight to ParseStrategyFile resolved it against
+        /// the panel's own working directory and failed with parse_failed.
+        /// </summary>
+        public static string ResolveStrategyFile(string rootDir, string label)
+        {
+            if (string.IsNullOrEmpty(label)) return label;
+            if (Path.IsPathRooted(label)) return label;
+            string name = label.Trim();
+            string root = rootDir ?? string.Empty;
+            try
+            {
+                string exact = Path.Combine(root, name);
+                if (File.Exists(exact)) return exact;
+                // The tester sometimes prints the title without the extension.
+                if (!name.EndsWith(".bat", StringComparison.OrdinalIgnoreCase))
+                {
+                    string withExt = Path.Combine(root, name + ".bat");
+                    if (File.Exists(withExt)) return withExt;
+                }
+                // Case-insensitive match against the actual files on disk.
+                foreach (var f in Directory.GetFiles(root, "*.bat"))
+                    if (string.Equals(Path.GetFileName(f), name, StringComparison.OrdinalIgnoreCase))
+                        return f;
+            }
+            catch { /* best effort: fall through to the plain combine */ }
+            return Path.Combine(root, name);
+        }
+
         /// <param name="onLine">Live console line from the script, for the status bar.</param>
         public static SweepResult RunOriginalTester(string rootDir, Action<string> onLine, Action<StrategyRunResult, int, int> onProgress)
         {
@@ -823,7 +854,7 @@ var targets = OrderTargets(LoadTargets(rootDir));
                         result.results.Add(new StrategyRunResult
                         {
                             name = currentName,
-                            file = currentName,
+                            file = ResolveStrategyFile(rootDir, currentName),
                             failed = true,
                             failReason = "winws не поднялся",
                             score = new Score(),
@@ -836,7 +867,7 @@ var targets = OrderTargets(LoadTargets(rootDir));
                     var run = new StrategyRunResult
                     {
                         name = currentName,
-                        file = currentName,
+                        file = ResolveStrategyFile(rootDir, currentName),
                         targets = new List<TargetResult>(currentTargets),
                         // An abort in the middle of the probes leaves this config
                         // with fewer rows than the rest; marking it partial keeps

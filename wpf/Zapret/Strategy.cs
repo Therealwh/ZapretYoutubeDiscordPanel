@@ -164,6 +164,12 @@ namespace Ydp.Zapret
 
         public static ParsedStrategy ParseStrategyFile(string file, string rootDir = null)
         {
+            // A bare file name ("general (ALT2).bat") must be resolved against the
+            // zapret root, never against the process working directory (the exe's
+            // own bin folder), otherwise ReadAllLines below looks in the wrong
+            // place and every call fails with parse_failed.
+            if (!string.IsNullOrEmpty(file) && !Path.IsPathRooted(file) && !string.IsNullOrEmpty(rootDir))
+                file = Path.Combine(rootDir, file);
             if (rootDir == null) rootDir = Path.GetDirectoryName(file);
             var vars = BuildVarMap(rootDir);
             string[] rawLines = File.ReadAllLines(file);
