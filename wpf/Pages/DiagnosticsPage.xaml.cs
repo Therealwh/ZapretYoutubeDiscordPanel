@@ -124,19 +124,32 @@ namespace Ydp.Pages
         {
             try
             {
-                var startInfo = new ProcessStartInfo(exe, args)
+                // Russian Windows console tools (ipconfig, sc) emit text in the
+                // OEM codepage (CP866). Decoding it as ANSI produced mojibake,
+                // so the whole command runs under chcp 65001 and is read as
+                // UTF-8. Both streams are drained concurrently — reading them
+                // one after another deadlocks when stderr fills its buffer.
+                var startInfo = new ProcessStartInfo("cmd.exe", "/c chcp 65001 >nul & \"" + exe + "\" " + args)
                 {
                     UseShellExecute = false,
                     CreateNoWindow = true,
                     RedirectStandardOutput = true,
                     RedirectStandardError = true,
+                    StandardOutputEncoding = System.Text.Encoding.UTF8,
+                    StandardErrorEncoding = System.Text.Encoding.UTF8,
                 };
                 using (var p = Process.Start(startInfo))
                 {
                     if (p == null) return "не удалось запустить";
-                    string output = p.StandardOutput.ReadToEnd() + p.StandardError.ReadToEnd();
-                    p.WaitForExit(15000);
-                    return output.Trim();
+                    var outTask = p.StandardOutput.ReadToEndAsync();
+                    var errTask = p.StandardError.ReadToEndAsync();
+                    if (!p.WaitForExit(30000))
+                    {
+                        try { p.Kill(); } catch { }
+                        return "превышено время ожидания команды";
+                    }
+                    string output = (outTask.Result ?? "") + (errTask.Result ?? "");
+                    return string.IsNullOrWhiteSpace(output) ? "пустой вывод" : output.TrimEnd();
                 }
             }
             catch (Exception ex)
