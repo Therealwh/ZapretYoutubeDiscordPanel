@@ -256,14 +256,34 @@ namespace Ydp.Pages
             var strategies = Strategy.ListStrategies(root);
             if (strategies.Count == 0) { AutoNote.Text = "В папке zapret нет стратегий."; return; }
 
-            var list = new ListBox
-            {
-                DisplayMemberPath = "name",
-                Height = 280,
-                Margin = new Thickness(0, 0, 0, 12),
-            };
-            foreach (var s in strategies) list.Items.Add(s);
-            list.SelectedIndex = 0;
+var textBrush = TryFindResource("TextBrush") as System.Windows.Media.Brush;
+var accentBrush = TryFindResource("AccentBrush") as System.Windows.Media.Brush;
+var hoverBrush = TryFindResource("BgHoverBrush") as System.Windows.Media.Brush;
+
+var list = new ListBox
+{
+    DisplayMemberPath = "name",
+    Height = 280,
+    Margin = new Thickness(0, 0, 0, 12),
+    BorderThickness = new Thickness(0),
+};
+// The dialog is built in code, so a plain ListBox keeps the default WHITE
+// background while inheriting the app's light foreground - white on white,
+// unreadable. Give the items an explicit dark style so the list matches the
+// rest of the panel.
+if (textBrush != null) list.Foreground = textBrush;
+if (hoverBrush != null) list.Background = hoverBrush;
+var itemStyle = new Style(typeof(ListBoxItem));
+itemStyle.Setters.Add(new Setter(Control.BackgroundProperty, System.Windows.Media.Brushes.Transparent));
+itemStyle.Setters.Add(new Setter(Control.ForegroundProperty, textBrush ?? System.Windows.Media.Brushes.White));
+itemStyle.Setters.Add(new Setter(Control.PaddingProperty, new Thickness(10, 7, 10, 7)));
+var selTrigger = new Trigger { Property = ListBoxItem.IsSelectedProperty, Value = true };
+selTrigger.Setters.Add(new Setter(Control.BackgroundProperty, accentBrush ?? System.Windows.Media.Brushes.DodgerBlue));
+selTrigger.Setters.Add(new Setter(Control.ForegroundProperty, System.Windows.Media.Brushes.White));
+itemStyle.Triggers.Add(selTrigger);
+list.ItemContainerStyle = itemStyle;
+foreach (var s in strategies) list.Items.Add(s);
+list.SelectedIndex = 0;
 
             Window dlg = null;
             var okBtn = new Button { Content = "Запомнить", IsDefault = true, Margin = new Thickness(0, 0, 8, 0), Padding = new Thickness(16, 6, 16, 6), MinWidth = 120 };
@@ -295,6 +315,7 @@ namespace Ydp.Pages
                 ShowInTaskbar = false,
             };
             if (TryFindResource("BgCardBrush") is System.Windows.Media.Brush cardBg) dlg.Background = cardBg;
+            if (textBrush != null) dlg.Foreground = textBrush;
             dlg.ShowDialog();
             if (!confirmed) return;
 
