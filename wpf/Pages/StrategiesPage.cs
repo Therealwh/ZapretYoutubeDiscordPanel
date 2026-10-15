@@ -206,12 +206,17 @@ private void SetBusy(bool busy, string note = null)
         {
             if (!RequireRoot()) return;
             SetBusy(true, "Останавливаю обход…");
-            var stopped = await System.Threading.Tasks.Task.Run(() => new[]
+            // Stop the service BEFORE killing winws: when the bypass is the
+            // "zapret" service, killing winws first makes the SCM restart it and
+            // the bypass comes right back. StopServiceAndWinws stops cleanly,
+            // then clears any orphan winws, then waits for it to be gone.
+            var wasRunning = await System.Threading.Tasks.Task.Run(() =>
             {
-                ServiceOps.KillWinws(),
-                ServiceOps.StopService().ok,
+                bool on = Status.GetStatus(_root).activeMode != "off";
+                ServiceOps.StopServiceAndWinws();
+                return on;
             });
-            SetBusy(false, stopped[0] || stopped[1] ? "Обход остановлен" : "Останавливать было нечего");
+            SetBusy(false, wasRunning ? "Обход остановлен" : "Останавливать было нечего");
             await System.Threading.Tasks.Task.Yield();
             Reload();
         }

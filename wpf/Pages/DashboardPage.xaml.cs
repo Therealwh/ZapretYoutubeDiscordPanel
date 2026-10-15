@@ -546,11 +546,13 @@ if (string.IsNullOrEmpty(root))
             SetBusy(true, "Останавливаю обход…");
             try
             {
+                // Stop the service BEFORE killing winws. When the bypass runs as
+                // the "zapret" service, killing winws first makes the SCM restart
+                // the service and winws comes straight back, so the bypass never
+                // actually goes off. StopServiceAndWinws does it in the right
+                // order and then waits for winws to disappear.
                 await System.Threading.Tasks.Task.Run(() =>
-                {
-                    Services.ServiceOps.KillWinws();
-                    Services.ServiceOps.StopService();
-                });
+                    Services.ServiceOps.StopServiceAndWinws());
             }
             catch (Exception ex)
             {
