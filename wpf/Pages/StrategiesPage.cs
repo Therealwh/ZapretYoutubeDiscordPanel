@@ -421,6 +421,22 @@ private async void BtnTest_Click(object sender, RoutedEventArgs e)
 
             if (_sweepRunning)
             {
+                // Ask first: stopping mid-sweep cancels the rest of the test.
+                // «Да» — stop and connect; «Нет» — keep testing, do nothing.
+                var answer = MessageBox.Show(
+                    "Идёт проверка стратегий.\r\n\r\n" +
+                    "«Да» — остановить проверку и подключить «" + name + "» как обход.\r\n" +
+                    "«Нет» — продолжить проверку остальных стратегий.",
+                    "Подключить «" + name + "» сейчас?",
+                    MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.Yes);
+
+                if (answer != MessageBoxResult.Yes)
+                {
+                    _keepConnected = false;
+                    StatusNote.Text = "Проверка продолжается — «" + name + "» не подключена.";
+                    return;
+                }
+
                 // Only record the request. Installing here would race the sweep on
                 // the same service name, and whoever lost would leave the user
                 // without the strategy they just clicked on.
