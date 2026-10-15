@@ -234,11 +234,98 @@ namespace Ydp.Pages
                 : "Не удалось: " + (result.reason ?? "ошибка");
         }
 
+/// <summary>
+        /// Modal list picker used by both "remember" and "forget". Returns the
+        /// chosen index, or null if the user cancelled. Built in code, so the
+        /// list gets an explicit dark style - a bare ListBox keeps the default
+        /// white background while inheriting the app's light foreground, which
+        /// is white-on-white and unreadable.
+        /// </summary>
+        private int? ShowStrategyPicker(string title, string question, List<string> labels, string okText)
+        {
+            var textBrush = TryFindResource("TextBrush") as System.Windows.Media.Brush;
+            var accentBrush = TryFindResource("AccentBrush") as System.Windows.Media.Brush;
+            var hoverBrush = TryFindResource("BgHoverBrush") as System.Windows.Media.Brush;
+
+            var list = new ListBox
+            {
+                Height = 280,
+                Margin = new Thickness(0, 0, 0, 12),
+                BorderThickness = new Thickness(0),
+            };
+            if (textBrush != null) list.Foreground = textBrush;
+            if (hoverBrush != null) list.Background = hoverBrush;
+            var itemStyle = new Style(typeof(ListBoxItem));
+            itemStyle.Setters.Add(new Setter(Control.BackgroundProperty, System.Windows.Media.Brushes.Transparent));
+            itemStyle.Setters.Add(new Setter(Control.ForegroundProperty, textBrush ?? System.Windows.Media.Brushes.White));
+            itemStyle.Setters.Add(new Setter(Control.PaddingProperty, new Thickness(10, 7, 10, 7)));
+            var selTrigger = new Trigger { Property = ListBoxItem.IsSelectedProperty, Value = true };
+            selTrigger.Setters.Add(new Setter(Control.BackgroundProperty, accentBrush ?? System.Windows.Media.Brushes.DodgerBlue));
+            selTrigger.Setters.Add(new Setter(Control.ForegroundProperty, System.Windows.Media.Brushes.White));
+            itemStyle.Triggers.Add(selTrigger);
+            list.ItemContainerStyle = itemStyle;
+            foreach (var label in labels) list.Items.Add(label);
+            if (list.Items.Count > 0) list.SelectedIndex = 0;
+
+            Window dlg = null;
+            var okBtn = new Button { Content = okText, IsDefault = true, Margin = new Thickness(0, 0, 8, 0), Padding = new Thickness(16, 6, 16, 6), MinWidth = 120 };
+            if (TryFindResource("BtnPrimary") is Style primary) okBtn.Style = primary;
+            var cancelBtn = new Button { Content = "Отмена", IsCancel = true, Padding = new Thickness(16, 6, 16, 6), MinWidth = 100 };
+            if (TryFindResource("Btn") is Style normal) cancelBtn.Style = normal;
+            var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
+            buttons.Children.Add(okBtn);
+            buttons.Children.Add(cancelBtn);
+            var panel = new StackPanel { Margin = new Thickness(18) };
+            panel.Children.Add(new TextBlock { Text = question, FontWeight = FontWeights.SemiBold, FontSize = 14, Margin = new Thickness(0, 0, 0, 10) });
+            panel.Children.Add(list);
+            panel.Children.Add(buttons);
+
+            bool confirmed = false;
+            okBtn.Click += (s, e2) => { confirmed = true; dlg?.Close(); };
+            dlg = new Window
+            {
+                Title = title,
+                Content = panel,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                Owner = Window.GetWindow(this),
+                SizeToContent = SizeToContent.WidthAndHeight,
+                MinWidth = 440,
+                ResizeMode = ResizeMode.NoResize,
+                ShowInTaskbar = false,
+            };
+            if (TryFindResource("BgCardBrush") is System.Windows.Media.Brush cardBg) dlg.Background = cardBg;
+            if (textBrush != null) dlg.Foreground = textBrush;
+            dlg.ShowDialog();
+            return confirmed ? list.SelectedIndex : (int?)null;
+        }
+
+        /// <summary>
+        /// Forget ONE remembered strategy instead of wiping the whole list, so
+        /// the good ones survive.
+        /// </summary>
         private void BtnForget_Click(object sender, RoutedEventArgs e)
         {
-            Config.Set(AutoConnect.KeyKnownWorking, string.Empty);
-            Config.Set(AutoConnect.KeyLastWinner, string.Empty);
-            AutoNote.Text = "Запомненные стратегии очищены.";
+            var known = AutoConnect.KnownWorking();
+            if (known.Count == 0) { AutoNote.Text = "Запоминаемых стратегий нет."; return; }
+
+            var labels = known.Select(Path.GetFileNameWithoutExtension).ToList();
+            var index = ShowStrategyPicker("Забыть стратегию", "Какую стратегию забыть?", labels, "Забыть");
+            if (index == null) return;
+            int i = index.Value;
+            if (i < 0 || i >= known.Count) return;
+
+            string gone = known[i];
+            var remaining = new List<string>(known);
+            remaining.RemoveAt(i);
+            Config.Set(AutoConnect.KeyKnownWorking, string.Join("|", remaining));
+            // If we just forgot the current winner, move the pointer to the
+            // next remembered one (or clear it) so the dashboard does not keep
+            // pointing at something the user removed.
+            if (string.Equals(AutoConnect.LastWinner(), gone, StringComparison.OrdinalIgnoreCase))
+                Config.Set(AutoConnect.KeyLastWinner, remaining.Count > 0 ? remaining[0] : string.Empty);
+            AutoNote.Text = "Забыта стратегия: " + Path.GetFileNameWithoutExtension(gone)
+                + (remaining.Count > 0 ? ". Осталось запомненных: " + remaining.Count : ". Больше ничего не запомнено.");
+            Logger.Info("Стратегия забыта вручную: " + gone, "settings");
             Load();
         }
 
@@ -256,71 +343,13 @@ namespace Ydp.Pages
             var strategies = Strategy.ListStrategies(root);
             if (strategies.Count == 0) { AutoNote.Text = "В папке zapret нет стратегий."; return; }
 
-var textBrush = TryFindResource("TextBrush") as System.Windows.Media.Brush;
-var accentBrush = TryFindResource("AccentBrush") as System.Windows.Media.Brush;
-var hoverBrush = TryFindResource("BgHoverBrush") as System.Windows.Media.Brush;
+            var labels = strategies.Select(s => s.name).ToList();
+            var index = ShowStrategyPicker("Запомнить стратегию", "Какую стратегию запомнить?", labels, "Запомнить");
+            if (index == null) return;
+            int i = index.Value;
+            if (i < 0 || i >= strategies.Count) return;
 
-var list = new ListBox
-{
-    DisplayMemberPath = "name",
-    Height = 280,
-    Margin = new Thickness(0, 0, 0, 12),
-    BorderThickness = new Thickness(0),
-};
-// The dialog is built in code, so a plain ListBox keeps the default WHITE
-// background while inheriting the app's light foreground - white on white,
-// unreadable. Give the items an explicit dark style so the list matches the
-// rest of the panel.
-if (textBrush != null) list.Foreground = textBrush;
-if (hoverBrush != null) list.Background = hoverBrush;
-var itemStyle = new Style(typeof(ListBoxItem));
-itemStyle.Setters.Add(new Setter(Control.BackgroundProperty, System.Windows.Media.Brushes.Transparent));
-itemStyle.Setters.Add(new Setter(Control.ForegroundProperty, textBrush ?? System.Windows.Media.Brushes.White));
-itemStyle.Setters.Add(new Setter(Control.PaddingProperty, new Thickness(10, 7, 10, 7)));
-var selTrigger = new Trigger { Property = ListBoxItem.IsSelectedProperty, Value = true };
-selTrigger.Setters.Add(new Setter(Control.BackgroundProperty, accentBrush ?? System.Windows.Media.Brushes.DodgerBlue));
-selTrigger.Setters.Add(new Setter(Control.ForegroundProperty, System.Windows.Media.Brushes.White));
-itemStyle.Triggers.Add(selTrigger);
-list.ItemContainerStyle = itemStyle;
-foreach (var s in strategies) list.Items.Add(s);
-list.SelectedIndex = 0;
-
-            Window dlg = null;
-            var okBtn = new Button { Content = "Запомнить", IsDefault = true, Margin = new Thickness(0, 0, 8, 0), Padding = new Thickness(16, 6, 16, 6), MinWidth = 120 };
-            if (TryFindResource("BtnPrimary") is Style primary) okBtn.Style = primary;
-            var cancelBtn = new Button { Content = "Отмена", IsCancel = true, Padding = new Thickness(16, 6, 16, 6), MinWidth = 100 };
-            if (TryFindResource("Btn") is Style normal) cancelBtn.Style = normal;
-
-            var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
-            buttons.Children.Add(okBtn);
-            buttons.Children.Add(cancelBtn);
-
-            var panel = new StackPanel { Margin = new Thickness(18) };
-            panel.Children.Add(new TextBlock { Text = "Какую стратегию запомнить?", FontWeight = FontWeights.SemiBold, FontSize = 14, Margin = new Thickness(0, 0, 0, 10) });
-            panel.Children.Add(list);
-            panel.Children.Add(buttons);
-
-            bool confirmed = false;
-            okBtn.Click += (s, e2) => { confirmed = true; dlg?.Close(); };
-
-            dlg = new Window
-            {
-                Title = "Запомнить стратегию",
-                Content = panel,
-                WindowStartupLocation = WindowStartupLocation.CenterOwner,
-                Owner = Window.GetWindow(this),
-                SizeToContent = SizeToContent.WidthAndHeight,
-                MinWidth = 440,
-                ResizeMode = ResizeMode.NoResize,
-                ShowInTaskbar = false,
-            };
-            if (TryFindResource("BgCardBrush") is System.Windows.Media.Brush cardBg) dlg.Background = cardBg;
-            if (textBrush != null) dlg.Foreground = textBrush;
-            dlg.ShowDialog();
-            if (!confirmed) return;
-
-            var picked = list.SelectedItem as Ydp.Zapret.StrategyInfo;
-            if (picked == null) return;
+            var picked = strategies[i];
             AutoConnect.RememberWorking(picked.file);
             Config.Set(AutoConnect.KeyLastWinner, picked.file);
             AutoNote.Text = "Запомнена стратегия: " + picked.name + " — тумблер в «Обход» будет включать её.";
