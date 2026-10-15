@@ -18,6 +18,7 @@
     <AssemblyName>YoutubeDiscordPanel</AssemblyName>
     <RootNamespace>Ydp</RootNamespace>
     <ApplicationIcon>Resources\app.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
     <AssemblyTitle>YoutubeDiscordPanel</AssemblyTitle>
     <Product>YoutubeDiscordPanel</Product>
     <Version>2.1.4</Version>

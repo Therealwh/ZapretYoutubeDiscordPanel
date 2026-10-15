@@ -647,5 +647,21 @@ public void Execute(object parameter)
             if (Hint != null)
                 Hint.Text = "Выбрана стратегия: " + row.Name + " — кнопка «Применить выбранную» подключит её.";
         }
+
+        /// <summary>
+        /// Forward the wheel from the strategy table to the page ScrollViewer.
+        ///
+        /// The DataGrid carries its own internal ScrollViewer and consumes the
+        /// wheel even when it cannot scroll (its height already equals its
+        /// content, because the page ScrollViewer is what scrolls). Hovering the
+        /// table therefore did nothing until the cursor left it. Here the wheel
+        /// is always handed to the page scroller.
+        /// </summary>
+        private void StrategyList_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
+        {
+            if (PageScroll == null) return;
+            PageScroll.ScrollToVerticalOffset(PageScroll.VerticalOffset - e.Delta);
+            e.Handled = true;
+        }
     }
 }

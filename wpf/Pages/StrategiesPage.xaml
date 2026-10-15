@@ -3,7 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              Loaded="Page_Loaded">
     <!-- Форма выше окна: без скролла нижние поля недоступны. -->
-    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,10,0">
+    <ScrollViewer x:Name="PageScroll" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,10,0">
     <StackPanel Margin="0,0,0,12">
         <TextBlock Text="Стратегии" Style="{StaticResource SectionTitle}" />
         <TextBlock x:Name="Hint" Style="{StaticResource Dim}" Margin="0,4,0,12" Text="Загрузка…" />
@@ -234,6 +234,7 @@
             <DataGrid x:Name="StrategyList" ItemsSource="{Binding Rows}" AutoGenerateColumns="False"
                       HeadersVisibility="Column" GridLinesVisibility="None" BorderThickness="0"
                       SelectionChanged="StrategyList_SelectionChanged"
+                      PreviewMouseWheel="StrategyList_PreviewMouseWheel"
                       Background="Transparent" RowBackground="Transparent"
                       Foreground="{StaticResource TextBrush}"
                       AlternatingRowBackground="{StaticResource BgHoverBrush}"
