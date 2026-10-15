@@ -340,7 +340,12 @@ public void Execute(object parameter)
         /// <summary>
         /// One tested strategy in the running report.
         /// </summary>
-        public sealed class RunRow
+        // INotifyPropertyChanged is required, not optional: WPF only subscribes to
+        // PropertyChanged through this interface. RunRow raised the event but did
+        // not implement it, so the binding engine never listened and the
+        // Expanded-driven Visibility (and the button label) stayed frozen at the
+        // initial False even though the property itself flipped to true.
+        public sealed class RunRow : System.ComponentModel.INotifyPropertyChanged
         {
             public string Name { get; set; }
             public bool Ok { get; set; }
