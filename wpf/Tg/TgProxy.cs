@@ -167,55 +167,67 @@ private static volatile bool _cfEnabled = true;
         }
 
         /// <summary>
-        /// Find whatever process is holding the local proxy port and kill it.
+        /// PID of the process LISTENING on a local TCP port, via netstat -ano, or
+        /// 0 when the port is free. netstat is used (not IP helper tables) because
+        /// it needs no P/Invoke and the port is a single, local, 127.0.0.1 value.
+        /// </summary>
+        private static int FindPortOwnerPid(int port)
+        {
+            var psi = new System.Diagnostics.ProcessStartInfo("netstat.exe", "-ano -p tcp")
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                StandardOutputEncoding = Encoding.UTF8,
+            };
+            var sb = new StringBuilder();
+            using (var p = System.Diagnostics.Process.Start(psi))
+            {
+                if (p == null) return 0;
+                sb.Append(p.StandardOutput.ReadToEnd());
+                p.WaitForExit(5000);
+            }
+            foreach (var line in sb.ToString().Split('\n'))
+            {
+                var cols = line.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+                // TCP  Local  Foreign  State  PID
+                if (cols.Length < 5) continue;
+                if (!cols[3].Equals("LISTENING", StringComparison.OrdinalIgnoreCase)) continue;
+                var local = cols[1];
+                int colon = local.LastIndexOf(':');
+                if (colon < 0) continue;
+                if (!int.TryParse(local.Substring(colon + 1), out int lp) || lp != port) continue;
+                if (int.TryParse(cols[4], out int pid) && pid != 0) return pid;
+            }
+            return 0;
+        }
+
+        /// <summary>
+        /// Find whatever process is holding the local proxy port and free it.
         ///
-        /// The "порт занят" error assumed the holder was another panel instance,
-        /// but it can equally be a stale winws or an unrelated app; Telegram then
-        /// keeps retrying a dead port. Being able to reclaim the port from the UI
-        /// is the practical fix, so the owner is looked up (netstat -ano) and
-        /// closed. Killing the current panel is refused: if our own proxy holds
-        /// the port, "Стоп" is the right control.
+        /// The netstat snapshot and the kill are not atomic: by the time we try to
+        /// kill the owner it may already have exited on its own (a stale panel
+        /// proxy releasing the port). So the PORT, not the kill exit code, is the
+        /// source of truth — after any attempt we re-check whether it is still
+        /// held and report accordingly, instead of surfacing a scary "process not
+        /// running" error when the port is in fact free.
+        ///
+        /// Killing the current panel is refused: if our own proxy holds the port,
+        /// "Стоп" is the right control.
         /// </summary>
         public static string FreePort(int port)
         {
             if (port <= 0) port = DefaultPort;
             try
             {
-                var psi = new System.Diagnostics.ProcessStartInfo("netstat.exe", "-ano -p tcp")
-                {
-                    UseShellExecute = false,
-                    CreateNoWindow = true,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    StandardOutputEncoding = Encoding.UTF8,
-                };
-                var sb = new StringBuilder();
-                using (var p = System.Diagnostics.Process.Start(psi))
-                {
-                    if (p == null) return "Не удалось прочитать список занятых портов.";
-                    sb.Append(p.StandardOutput.ReadToEnd());
-                    p.WaitForExit(5000);
-                }
-
-                int owner = 0;
-                foreach (var line in sb.ToString().Split('\n'))
-                {
-                    var cols = line.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
-                    // TCP  Local  Foreign  State  PID
-                    if (cols.Length < 5) continue;
-                    if (!cols[3].Equals("LISTENING", StringComparison.OrdinalIgnoreCase)) continue;
-                    var local = cols[1];
-                    int colon = local.LastIndexOf(':');
-                    if (colon < 0) continue;
-                    if (!int.TryParse(local.Substring(colon + 1), out int lp) || lp != port) continue;
-                    if (int.TryParse(cols[4], out int pid) && pid != 0) { owner = pid; break; }
-                }
-
+                int owner = FindPortOwnerPid(port);
                 if (owner == 0) return "Порт " + port + " свободен.";
                 if (owner == System.Diagnostics.Process.GetCurrentProcess().Id)
                     return "Порт " + port + " держит текущая панель — останови прокси кнопкой «Стоп».";
 
-                string name;
+                string name = null;
+                string killError = null;
                 try
                 {
                     using (var proc = System.Diagnostics.Process.GetProcessById(owner))
@@ -227,9 +239,19 @@ private static volatile bool _cfEnabled = true;
                 }
                 catch (Exception ex)
                 {
-                    return "Не удалось освободить порт (PID " + owner + "): " + ex.Message;
+                    // Most often the owner already exited between netstat and
+                    // here — benign, and settled by the port re-check below.
+                    killError = ex.Message;
                 }
-                return "Порт " + port + " освобождён — закрыт процесс " + name + " (PID " + owner + ").";
+
+                // Source of truth: is anything still holding the port?
+                if (FindPortOwnerPid(port) != 0)
+                    return "Не удалось освободить порт (PID " + owner + "): процесс всё ещё держит порт."
+                        + (killError != null ? " " + killError : "");
+
+                if (killError != null)
+                    return "Порт " + port + " свободен — державший его процесс " + (name ?? owner.ToString()) + " уже завершился.";
+                return "Порт " + port + " освобождён — закрыт процесс " + (name ?? "?") + " (PID " + owner + ").";
             }
             catch (Exception ex)
             {
