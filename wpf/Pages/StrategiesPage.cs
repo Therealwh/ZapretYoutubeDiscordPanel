@@ -182,12 +182,14 @@ private void SetBusy(bool busy, string note = null)
             var row = SelectedRow();
             if (row == null) { StatusNote.Text = "Выберите стратегию в списке."; return; }
             if (!RequireRoot()) return;
+            Logger.Info("Применяю выбранную стратегию: " + row.Name + " (" + row.File + ")", "apply");
             SetBusy(true, "Применяю " + row.Name + "…");
             bool preferService = string.Equals(Config.Get(AutoConnect.KeyPreferService, "true"), "true", StringComparison.OrdinalIgnoreCase);
             var result = await System.Threading.Tasks.Task.Run(() =>
                 preferService
                     ? ServiceOps.InstallStrategyAsService(_root, row.File)
                     : ServiceOps.LaunchStrategyProcess(_root, row.File));
+            Logger.Info("Применение " + row.Name + ": " + (result.ok ? "успех " + (result.mode ?? "") : "ошибка " + (result.reason ?? "?") + " " + (result.message ?? "")), "apply");
             SetBusy(false, result.ok
                 ? $"Подключено: {row.Name} ({(result.mode ?? "process")})"
                 : "Не удалось: " + (result.reason ?? "ошибка"));
@@ -329,7 +331,10 @@ private async void BtnTest_Click(object sender, RoutedEventArgs e)
             public event EventHandler CanExecuteChanged { add { } remove { } }
             public DelegateCommand(Action execute) { _execute = execute; }
             public bool CanExecute(object parameter) { return true; }
-            public void Execute(object parameter) { _execute?.Invoke(); }
+public void Execute(object parameter)
+            {
+                _execute?.Invoke();
+            }
         }
 
         /// <summary>
@@ -360,8 +365,14 @@ private async void BtnTest_Click(object sender, RoutedEventArgs e)
 
             public ObservableCollection<ProbeRow> Targets { get; set; } = new ObservableCollection<ProbeRow>();
 
-            /// <summary>Stops the sweep and connects this strategy, if it works.</summary>
-            public Action Connect { get; set; }
+            /// <summary>
+            /// Stops the sweep and connects this strategy, if it works.
+            ///
+            /// ICommand, not Action: the XAML binds it through Command, and Command
+            /// only accepts ICommand. As an Action the binding silently did nothing,
+            /// so "Подключить сейчас" never fired.
+            /// </summary>
+            public System.Windows.Input.ICommand Connect { get; set; }
             public bool CanConnect { get { return Ok && Connect != null; } }
 
         public event System.ComponentModel.PropertyChangedEventHandler PropertyChanged;
@@ -513,7 +524,8 @@ private async void BtnTest_Click(object sender, RoutedEventArgs e)
             row.ToggleCmd = new DelegateCommand(() => row.Expanded = !row.Expanded);
             // Only a fully measured strategy can be connected: the partial run of an
             // aborted sweep is a truncated score, not evidence that it works.
-            row.Connect = row.Ok ? (Action)(() => ConnectNow(run.file, run.name)) : null;
+            // Wrapped in DelegateCommand because the XAML binds Connect via Command.
+            row.Connect = row.Ok ? new DelegateCommand(() => ConnectNow(run.file, run.name)) : null;
             if (run.targets != null)
             {
                 foreach (var target in run.targets) row.Targets.Add(TargetRow(target));
@@ -608,7 +620,27 @@ private async void BtnTest_Click(object sender, RoutedEventArgs e)
 
         private StrategyRow SelectedRow()
         {
-            return StrategyList.SelectedItem as StrategyRow;
+            // Prefer the live selection, but fall back to the remembered one:
+            // clicking a row can hand focus to a button in the same click and
+            // clear SelectedItem, which made "Применить выбранную" act as if
+            // nothing was selected at all.
+            return StrategyList.SelectedItem as StrategyRow ?? _selectedRow;
+        }
+
+        /// <summary>
+        /// Remember the highlighted strategy. Reload() rebuilds Rows, which drops
+        /// the DataGrid selection; keeping the row here means the apply buttons
+        /// still know what the user picked.
+        /// </summary>
+        private StrategyRow _selectedRow;
+
+        private void StrategyList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            var row = StrategyList.SelectedItem as StrategyRow;
+            if (row == null) return;
+            _selectedRow = row;
+            if (Hint != null)
+                Hint.Text = "Выбрана стратегия: " + row.Name + " — кнопка «Применить выбранную» подключит её.";
         }
     }
 }

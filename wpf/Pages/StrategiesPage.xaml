@@ -111,10 +111,15 @@
                     <ItemsControl.ItemTemplate>
                         <DataTemplate>
                             <StackPanel Margin="0,0,0,12">
-                                <!-- Header doubles as the spoiler toggle: click a finished strategy to fold it. -->
-                                    <ToggleButton Style="{StaticResource SpoilerHeader}" Cursor="Hand"
-                                                  IsChecked="{Binding Expanded, Mode=OneWay}"
-                                                  Command="{Binding ToggleCmd}">
+                                <!--
+                                    Header row. NOT a ToggleButton: it used to wrap the
+                                    explicit Open button below, and a Button nested
+                                    inside a ToggleButton with the same Command fires
+                                    twice on one click - expand then collapse, so the
+                                    card looked frozen. Only the explicit button is
+                                    interactive now.
+                                -->
+                                    <Border Background="Transparent" CornerRadius="7" Padding="6,4,6,4">
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="Auto" />
@@ -141,8 +146,7 @@
                                         <StackPanel Grid.Column="2" Orientation="Horizontal"
                                                     VerticalAlignment="Center" Margin="8,0,0,0">
                                             <TextBlock Text="{Binding Verdict}" Style="{StaticResource Dim}" VerticalAlignment="Center" />
-                                            <!-- Open/close the per-target table for THIS row:
-                                                 explicit button, because header clicks are easy to miss. -->
+                                            <!-- Open/close the per-target table for THIS row. -->
                                             <Button Margin="10,0,0,0" Padding="10,4" FontSize="12"
                                                     Command="{Binding ToggleCmd}"
                                                     ToolTip="Показать или скрыть пробы по каждой цели">
@@ -164,7 +168,7 @@
                                                     ToolTip="Остановить проверку и включить обход этой стратегией" />
                                         </StackPanel>
                                     </Grid>
-                                </ToggleButton>
+                                    </Border>
                                 <ItemsControl ItemsSource="{Binding Targets}" Margin="18,4,0,0"
                                               Visibility="{Binding Expanded, Converter={StaticResource BoolToVis}}">
                                     <ItemsControl.ItemTemplate>
@@ -229,6 +233,7 @@
         <Border Style="{StaticResource Card}" Padding="0">
             <DataGrid x:Name="StrategyList" ItemsSource="{Binding Rows}" AutoGenerateColumns="False"
                       HeadersVisibility="Column" GridLinesVisibility="None" BorderThickness="0"
+                      SelectionChanged="StrategyList_SelectionChanged"
                       Background="Transparent" RowBackground="Transparent"
                       Foreground="{StaticResource TextBrush}"
                       AlternatingRowBackground="{StaticResource BgHoverBrush}"
