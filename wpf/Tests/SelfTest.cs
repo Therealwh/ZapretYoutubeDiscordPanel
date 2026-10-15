@@ -49,6 +49,7 @@ namespace Ydp.Tests
             Guard("strategy", StrategyTests);
             Guard("tester", TesterTests);
             Guard("lists", ListTests);
+            Guard("ui", UiBindingTests);
 
             var report = new StringBuilder();
             report.Append("tests: ").Append(_passed + Failures.Count)
@@ -524,6 +525,52 @@ namespace Ydp.Tests
             {
                 try { Directory.Delete(root, true); } catch { /* best effort */ }
             }
+        }
+
+        private static void PumpDispatcher()
+        {
+            var frame = new System.Windows.Threading.DispatcherFrame();
+            System.Windows.Threading.Dispatcher.CurrentDispatcher.BeginInvoke(
+                System.Windows.Threading.DispatcherPriority.Background,
+                new Action(() => frame.Continue = false));
+            System.Windows.Threading.Dispatcher.PushFrame(frame);
+        }
+
+        /// <summary>
+        /// Regression guard for the "Открыть" bug: RunRow used to raise
+        /// PropertyChanged WITHOUT implementing INotifyPropertyChanged, so WPF
+        /// never subscribed and the Expanded-driven Visibility stayed Collapsed
+        /// no matter what the property was set to. Binding a real element to a
+        /// real RunRow and flipping Expanded catches that exact mistake in
+        /// milliseconds, with no sweep needed.
+        /// </summary>
+        private static void UiBindingTests()
+        {
+            var row = new Ydp.Pages.StrategiesPage.RunRow();
+            var block = new System.Windows.Controls.TextBlock();
+            System.Windows.Data.BindingOperations.SetBinding(block,
+                System.Windows.Controls.TextBlock.VisibilityProperty,
+                new System.Windows.Data.Binding("Expanded")
+                {
+                    Converter = new System.Windows.Controls.BooleanToVisibilityConverter(),
+                    Source = row,
+                });
+
+            Check("ui: RunRow starts collapsed",
+                block.Visibility == System.Windows.Visibility.Collapsed,
+                "visibility=" + block.Visibility);
+
+            row.Expanded = true;
+            PumpDispatcher();
+            Check("ui: Expanded binding updates the UI",
+                block.Visibility == System.Windows.Visibility.Visible,
+                "visibility=" + block.Visibility);
+
+            row.Expanded = false;
+            PumpDispatcher();
+            Check("ui: collapsing hides it again",
+                block.Visibility == System.Windows.Visibility.Collapsed,
+                "visibility=" + block.Visibility);
         }
     }
 
