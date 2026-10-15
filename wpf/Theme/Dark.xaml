@@ -55,6 +55,40 @@
     <SolidColorBrush x:Key="WarnSoftBrush" Color="{StaticResource WarnSoftColor}" />
     <SolidColorBrush x:Key="ErrSoftBrush" Color="{StaticResource ErrSoftColor}" />
 
+    <!-- Tooltips. Implicit style (no x:Key) so it applies to every tooltip in
+         the app. Without this, WPF falls back to the system tooltip: a white
+         box on the dark UI, and because the tooltip text inherits the app's
+         white Foreground it rendered as a blank white bar on hover. -->
+    <Style TargetType="ToolTip">
+        <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+        <Setter Property="Background" Value="{StaticResource BgCardBrush}" />
+        <Setter Property="BorderBrush" Value="{StaticResource BorderBrush2}" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Padding" Value="10,6" />
+        <Setter Property="FontSize" Value="12" />
+        <Setter Property="MaxWidth" Value="460" />
+        <Setter Property="HasDropShadow" Value="False" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ToolTip">
+                    <Border Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            CornerRadius="8"
+                            Padding="{TemplateBinding Padding}">
+                        <ContentPresenter ContentSource="Content">
+                            <ContentPresenter.ContentTemplate>
+                                <DataTemplate>
+                                    <TextBlock TextWrapping="Wrap" Text="{Binding}" />
+                                </DataTemplate>
+                            </ContentPresenter.ContentTemplate>
+                        </ContentPresenter>
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <!-- Spoiler blocks in the strategy report: bind Visibility straight to the
          expand flag instead of writing converters at every use. -->
     <BooleanToVisibilityConverter x:Key="BoolToVis" />

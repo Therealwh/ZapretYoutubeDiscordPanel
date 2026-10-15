@@ -130,7 +130,18 @@ namespace Ydp.Zapret
             return null;
         }
 
-        public static ConnectResult Connect(string rootDir, Action<string> log, Action<Tester.StrategyRunResult, int, int> progress)
+        /// <summary>What to do when no remembered strategy passes its check.</summary>
+        public enum RememberedFailureAction
+        {
+            /// <summary>Give the remembered strategies another chance.</summary>
+            Retry,
+            /// <summary>Stop trying and run the full search.</summary>
+            Search,
+            /// <summary>Leave the bypass off and end the attempt.</summary>
+            Cancel,
+        }
+
+        public static ConnectResult Connect(string rootDir, Action<string> log, Action<Tester.StrategyRunResult, int, int> progress, Func<RememberedFailureAction> onRememberedFailure = null)
         {
             var result = new ConnectResult();
 
@@ -161,6 +172,27 @@ namespace Ydp.Zapret
             // and only fall through to the full search if it no longer works.
             var fast = TryRememberedFirst(rootDir, log);
             if (fast != null) return fast;
+
+            // Every remembered strategy failed its quick check. The old code
+            // dropped straight into the full search, which probes every config
+            // and can sit "off" for minutes with no way out. When a UI is there
+            // to ask, let the user decide: retry the memory, run the full
+            // search, or cancel and stay off. With no prompt (headless paths)
+            // this keeps the old behaviour and searches right away.
+            while (onRememberedFailure != null)
+            {
+                var action = onRememberedFailure();
+                if (action == RememberedFailureAction.Cancel)
+                    return new ConnectResult { ok = false, reason = "user_cancelled", candidatesTried = 0 };
+                if (action == RememberedFailureAction.Search)
+                    break; // fall through to the full search below
+
+                // Retry: hand the remembered strategies another chance. If one
+                // works now, the bypass is up and the search is skipped; if not,
+                // ask again so the user can switch to search or cancel.
+                var again = TryRememberedFirst(rootDir, log);
+                if (again != null) return again;
+            }
 
             // 3. Search, remembering what worked before.
             var known = KnownWorking();

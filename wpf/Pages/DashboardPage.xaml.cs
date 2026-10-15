@@ -473,7 +473,10 @@ if (string.IsNullOrEmpty(root))
                     {
                         PowerState.Text = msg;
                         BusyText.Text = msg;
-                    })), null));
+                    })), null,
+                    // Ask before spending minutes on a full search after the
+                    // remembered strategies fail: Повторить / Найти / Отменить.
+                    () => Dispatcher.Invoke(() => ShowRememberedFailurePrompt())));
                 PowerState.Text = DescribeResult(result);
             }
             catch (Exception ex)
@@ -489,6 +492,80 @@ if (string.IsNullOrEmpty(root))
             }
         }
 
+        /// <summary>
+        /// Shown when no remembered strategy passed its quick check. Returns the
+        /// user's choice: retry the memory, run the full search, or stay off.
+        /// Runs on the UI thread (the caller marshals it there).
+        /// </summary>
+        private Zapret.AutoConnect.RememberedFailureAction ShowRememberedFailurePrompt()
+        {
+            var textBrush = TryFindResource("TextBrush") as System.Windows.Media.Brush;
+
+            var title = new TextBlock
+            {
+                Text = "Запомненная стратегия не сработала",
+                FontWeight = FontWeights.SemiBold,
+                FontSize = 15,
+                Margin = new Thickness(0, 0, 0, 8),
+            };
+            var body = new TextBlock
+            {
+                Text = "Быстрая проверка запомненной стратегии не прошла — сеть изменилась или она больше не работает.",
+                TextWrapping = TextWrapping.Wrap,
+                Opacity = 0.8,
+                Margin = new Thickness(0, 0, 0, 16),
+            };
+            if (textBrush != null)
+            {
+                title.Foreground = textBrush;
+                body.Foreground = textBrush;
+            }
+
+            Zapret.AutoConnect.RememberedFailureAction choice = Zapret.AutoConnect.RememberedFailureAction.Search;
+            bool decided = false;
+
+            Window dlg = null;
+            var retryBtn = new Button { Content = "Повторить", Margin = new Thickness(0, 0, 8, 0), Padding = new Thickness(16, 6, 16, 6), MinWidth = 110, ToolTip = "Ещё раз проверить запомненные стратегии" };
+            if (TryFindResource("Btn") is Style normal) retryBtn.Style = normal;
+            var searchBtn = new Button { Content = "Запустить поиск", Margin = new Thickness(0, 0, 8, 0), Padding = new Thickness(16, 6, 16, 6), MinWidth = 150, ToolTip = "Перебрать все стратегии — это надолго" };
+            if (TryFindResource("BtnPrimary") is Style primary) searchBtn.Style = primary;
+            var cancelBtn = new Button { Content = "Отменить", Padding = new Thickness(16, 6, 16, 6), MinWidth = 100 };
+            if (TryFindResource("Btn") is Style normal2) cancelBtn.Style = normal2;
+
+            retryBtn.Click += (s, e2) => { choice = Zapret.AutoConnect.RememberedFailureAction.Retry; decided = true; dlg?.Close(); };
+            searchBtn.Click += (s, e2) => { choice = Zapret.AutoConnect.RememberedFailureAction.Search; decided = true; dlg?.Close(); };
+            cancelBtn.Click += (s, e2) => { choice = Zapret.AutoConnect.RememberedFailureAction.Cancel; decided = true; dlg?.Close(); };
+
+            var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
+            buttons.Children.Add(retryBtn);
+            buttons.Children.Add(searchBtn);
+            buttons.Children.Add(cancelBtn);
+
+            var panel = new StackPanel { Margin = new Thickness(18) };
+            panel.Children.Add(title);
+            panel.Children.Add(body);
+            panel.Children.Add(buttons);
+
+            dlg = new Window
+            {
+                Title = "Запомненная стратегия не сработала",
+                Content = panel,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                Owner = Window.GetWindow(this),
+                SizeToContent = SizeToContent.WidthAndHeight,
+                MinWidth = 460,
+                ResizeMode = ResizeMode.NoResize,
+                ShowInTaskbar = false,
+            };
+            if (TryFindResource("BgCardBrush") is System.Windows.Media.Brush cardBg) dlg.Background = cardBg;
+            if (textBrush != null) dlg.Foreground = textBrush;
+            dlg.ShowDialog();
+
+            // Closing via the title-bar X counts as cancel: never start a
+            // multi-minute search the user did not ask for.
+            return decided ? choice : Zapret.AutoConnect.RememberedFailureAction.Cancel;
+        }
+
         private static string DescribeResult(ConnectResult r)
         {
             if (r == null) return "Готово";
@@ -496,6 +573,8 @@ if (string.IsNullOrEmpty(root))
             if (r.ok && r.restored) return "Вернул прежний обход: " + r.strategy;
             if (r.ok && r.fallback) return "Подключил лучшую доступную: " + r.strategy;
             if (r.ok) return "Рабочий обход подключён: " + r.strategy;
+            // Cancelling the prompt is a choice, not a failure to report.
+            if (r.reason == "user_cancelled") return "Обход не включён — подбор отменён";
             return "Не удалось подключить: " + (r.reason ?? "ошибка");
         }
 

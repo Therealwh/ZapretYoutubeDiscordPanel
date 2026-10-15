@@ -771,7 +771,39 @@ var targets = OrderTargets(LoadTargets(rootDir));
         }
 
         /// <param name="onLine">Live console line from the script, for the status bar.</param>
-        public static SweepResult RunOriginalTester(string rootDir, Action<string> onLine, Action<StrategyRunResult, int, int> onProgress)
+        /// <summary>
+        /// Builds the keystrokes for the bundled tester's interactive menu.
+        ///
+        /// The script asks three questions: test type (1 = standard),
+        /// run mode (1 = all configs, 2 = selected configs) and, only for
+        /// "selected", the numbers (e.g. "1,3,5-7", '0' = all). This feeds
+        /// those answers non-interactively and ends with a throwaway line for
+        /// Wait-AnyKey/Read-Host.
+        ///
+        /// The selection is sanitized down to digits, commas, dashes and spaces
+        /// before it reaches the script's stdin: a stray character would make the
+        /// script's number regex reject the whole line and drop into its "try
+        /// again" loop, stalling the run.
+        /// </summary>
+        private static string BuildTestMenuInput(string selection)
+        {
+            var cleaned = new System.Text.StringBuilder();
+            if (!string.IsNullOrWhiteSpace(selection))
+                foreach (var c in selection)
+                    if (char.IsDigit(c) || c == ',' || c == '-' || c == ' ')
+                        cleaned.Append(c);
+
+            var picked = cleaned.ToString().Trim().Trim(',', '-', ' ');
+            // No usable numbers survived: fall back to "all configs" so a bad
+            // entry can never leave the tester waiting on its selection prompt.
+            if (string.IsNullOrEmpty(picked) || !picked.Any(char.IsDigit))
+                return "1\r\n1\r\nx\r\n";
+
+            // 1 = standard, 2 = selected configs, then the numbers.
+            return "1\r\n2\r\n" + picked + "\r\nx\r\n";
+        }
+
+        public static SweepResult RunOriginalTester(string rootDir, Action<string> onLine, Action<StrategyRunResult, int, int> onProgress, string selection = null)
         {
             // Not reset here on purpose: the UI clears the flag via ResetAbort()
             // before scheduling this task, and an Abort landing between scheduling
@@ -819,13 +851,14 @@ var targets = OrderTargets(LoadTargets(rootDir));
 
             using (proc)
             {
-                // Standard tests → All configs. The trailing line is consumed by
-                // Wait-AnyKey, which falls back to Read-Host when the console is
-                // not interactive. The stream stays open on purpose: closing it
-                // would turn every later Read-Host into an endless menu loop.
+                // Standard tests → (All configs | Selected configs → numbers). The
+                // trailing line is consumed by Wait-AnyKey, which falls back to
+                // Read-Host when the console is not interactive. The stream stays
+                // open on purpose: closing it would turn every later Read-Host into
+                // an endless menu loop.
                 try
                 {
-                    proc.StandardInput.Write("1\r\n1\r\nx\r\n");
+                    proc.StandardInput.Write(BuildTestMenuInput(selection));
                     proc.StandardInput.Flush();
                 }
                 catch { /* the script exited before asking anything */ }

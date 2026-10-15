@@ -17,6 +17,8 @@
                     Margin="0,0,10,0" Click="BtnStop_Click" />
             <Button x:Name="BtnTest" Content="Полный тест всех стратегий" Style="{StaticResource Btn}" Margin="0,0,10,0" Click="BtnTest_Click"
                 ToolTip="Каждая стратегия запускается с нуля и проверяется полностью, поэтому тест занимает продолжительное время." />
+            <Button x:Name="BtnTestSelected" Content="Тест выбранных" Style="{StaticResource Btn}" Margin="0,0,10,0" Click="BtnTestSelected_Click"
+                ToolTip="Проверить только указанные стратегии по их номерам в списке. Быстрее полного теста, когда часть рабочих стратегий уже известна." />
             <Button x:Name="BtnAbort" Content="Остановить проверку" Style="{StaticResource Btn}" Margin="0,0,10,0"
                     Visibility="Collapsed" Click="BtnAbort_Click" />
             <Button x:Name="BtnImport" Content="Добавить свою стратегию" Style="{StaticResource Btn}" Margin="0,0,10,0"
@@ -244,6 +246,7 @@
                       SelectionMode="Single" IsReadOnly="True" CanUserAddRows="False"
                       RowHeight="34" ColumnHeaderHeight="34">
                 <DataGrid.Columns>
+                    <DataGridTextColumn Header="#" Binding="{Binding No}" Width="46" />
                     <DataGridTextColumn Header="Стратегия" Binding="{Binding Name}" Width="2*" />
                     <DataGridTextColumn Header="Методы" Binding="{Binding Badges}" Width="3*" />
                     <DataGridTextColumn Header="Состояние" Binding="{Binding State}" Width="*" />

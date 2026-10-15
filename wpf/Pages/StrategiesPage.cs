@@ -32,6 +32,13 @@ namespace Ydp.Pages
 
     public sealed class StrategyRow : INotifyPropertyChanged
     {
+        /// <summary>
+        /// 1-based number shown in the list, matching the index the bundled
+        /// zapret tester prints for the very same .bat. Recomputed on every
+        /// Reload from the files actually present, so a zapret update that
+        /// adds or removes strategies can never desync the two.
+        /// </summary>
+        public string No { get; set; }
         public string Name { get; set; }
         public string File { get; set; }
         public string Badges { get; set; }
@@ -79,10 +86,12 @@ namespace Ydp.Pages
             var list = Strategy.ListStrategies(_root);
             var status = Status.GetStatus(_root);
             string active = status.serviceStrategy;
+            int no = 0;
             foreach (var s in list)
             {
                 Rows.Add(new StrategyRow
                 {
+                    No = (++no).ToString(),
                     Name = s.name,
                     File = s.file,
                     Badges = string.Join(" · ", s.badges),
@@ -100,6 +109,7 @@ private void SetBusy(bool busy, string note = null)
             BtnApply.IsEnabled = !busy;
             BtnStop.IsEnabled = !busy;
             BtnTest.IsEnabled = !busy;
+            BtnTestSelected.IsEnabled = !busy;
             // Stop only makes sense while a sweep is running.
             BtnAbort.Visibility = busy ? Visibility.Visible : Visibility.Collapsed;
             BtnAbort.IsEnabled = busy;
@@ -223,8 +233,146 @@ private void SetBusy(bool busy, string note = null)
 
 private async void BtnTest_Click(object sender, RoutedEventArgs e)
         {
+            await RunSweepAsync(null, "Полный тест стратегий…");
+        }
+
+        /// <summary>
+        /// "Тест выбранных": asks for strategy numbers, then runs the tester on
+        /// just those. Faster than the full sweep when a few configs are known
+        /// to work and the rest would only burn time in vain.
+        /// </summary>
+        private async void BtnTestSelected_Click(object sender, RoutedEventArgs e)
+        {
+            if (_busy) return;
             if (!RequireRoot()) return;
-            SetBusy(true, "Полный тест стратегий…");
+            if (Rows.Count == 0)
+            {
+                MessageBox.Show(Window.GetWindow(this), "Список стратегий пуст.", "Тест выбранных",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+            var selection = ShowSelectionDialog(Rows.Count);
+            if (string.IsNullOrEmpty(selection)) return;
+            await RunSweepAsync(selection, "Тест выбранных стратегий…");
+        }
+
+        /// <summary>
+        /// Validates and canonicalizes the number entry: digits and ranges only,
+        /// every value inside 1..total, de-duplicated and sorted. Returns null
+        /// for anything unparsable so the dialog can keep the user in place.
+        /// </summary>
+        private static string ParseSelection(string text, int total)
+        {
+            if (string.IsNullOrWhiteSpace(text)) return null;
+            var nums = new List<int>();
+            foreach (var raw in text.Split(new[] { ',', ' ', ';', '\t' }, StringSplitOptions.RemoveEmptyEntries))
+            {
+                var part = raw.Trim();
+                if (part.Length == 0) continue;
+                int a, b;
+                if (part.IndexOf('-') >= 0)
+                {
+                    var bounds = part.Split('-');
+                    if (bounds.Length != 2
+                        || !int.TryParse(bounds[0], out a)
+                        || !int.TryParse(bounds[1], out b))
+                        return null;
+                    if (a > b) { var t = a; a = b; b = t; }
+                    for (var i = a; i <= b; i++) nums.Add(i);
+                }
+                else
+                {
+                    if (!int.TryParse(part, out b)) return null;
+                    nums.Add(b);
+                }
+            }
+            if (nums.Count == 0) return null;
+            if (nums.Any(n => n < 1 || n > total)) return null;
+            return string.Join(",", nums.Distinct().OrderBy(n => n).Select(n => n.ToString()));
+        }
+
+        /// <summary>Dark modal asking which strategy numbers to test.</summary>
+        private string ShowSelectionDialog(int total)
+        {
+            var textBrush = TryFindResource("TextBrush") as System.Windows.Media.Brush;
+            var boxBg = TryFindResource("BgHoverBrush") as System.Windows.Media.Brush;
+
+            var input = new TextBox
+            {
+                Margin = new Thickness(0, 0, 0, 10),
+                Padding = new Thickness(10, 6, 10, 6),
+                FontSize = 14,
+                ToolTip = "Номера через запятую или диапазоном: 1,3 или 2-7",
+            };
+            if (textBrush != null) input.Foreground = textBrush;
+            if (boxBg != null) input.Background = boxBg;
+
+            var hint = new TextBlock
+            {
+                Text = "Номера через запятую, можно диапазоном: 1,3 или 2-7. Сейчас в списке стратегий: " + total + ".",
+                TextWrapping = TextWrapping.Wrap,
+                Opacity = 0.75,
+                Margin = new Thickness(0, 0, 0, 12),
+            };
+            if (textBrush != null) hint.Foreground = textBrush;
+
+            Window dlg = null;
+            var okBtn = new Button { Content = "Запустить тест", IsDefault = true, Margin = new Thickness(0, 0, 8, 0), Padding = new Thickness(16, 6, 16, 6), MinWidth = 140 };
+            if (TryFindResource("BtnPrimary") is Style primary) okBtn.Style = primary;
+            var cancelBtn = new Button { Content = "Отмена", IsCancel = true, Padding = new Thickness(16, 6, 16, 6), MinWidth = 100 };
+            if (TryFindResource("Btn") is Style normal) cancelBtn.Style = normal;
+            var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
+            buttons.Children.Add(okBtn);
+            buttons.Children.Add(cancelBtn);
+
+            var panel = new StackPanel { Margin = new Thickness(18) };
+            panel.Children.Add(new TextBlock { Text = "Тест выбранных стратегий", FontWeight = FontWeights.SemiBold, FontSize = 14, Margin = new Thickness(0, 0, 0, 10) });
+            panel.Children.Add(input);
+            panel.Children.Add(hint);
+            panel.Children.Add(buttons);
+
+            string result = null;
+            okBtn.Click += (s, e2) =>
+            {
+                var parsed = ParseSelection(input.Text, total);
+                if (parsed == null)
+                {
+                    MessageBox.Show(Window.GetWindow(this),
+                        "Не удалось разобрать номера. Введите их через запятую или диапазоном, например: 1,3 или 2-7.\nДопустимый диапазон: 1–" + total + ".",
+                        "Некорректный ввод", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+                result = parsed;
+                dlg?.Close();
+            };
+            dlg = new Window
+            {
+                Title = "Тест выбранных стратегий",
+                Content = panel,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                Owner = Window.GetWindow(this),
+                SizeToContent = SizeToContent.WidthAndHeight,
+                MinWidth = 460,
+                ResizeMode = ResizeMode.NoResize,
+                ShowInTaskbar = false,
+            };
+            if (TryFindResource("BgCardBrush") is System.Windows.Media.Brush cardBg) dlg.Background = cardBg;
+            if (textBrush != null) dlg.Foreground = textBrush;
+            dlg.Loaded += (s, e2) => { input.Focus(); Keyboard.Focus(input); };
+            dlg.ShowDialog();
+            return result;
+        }
+
+        /// <summary>
+        /// Runs the bundled zapret tester. <paramref name="selection"/> is null for
+        /// "all configs"; otherwise it is the raw number list (e.g. "1,3,5-7") the
+        /// tester maps to the same .bat indices printed in the list, so only the
+        /// chosen strategies get started and probed.
+        /// </summary>
+        private async System.Threading.Tasks.Task RunSweepAsync(string selection, string busyNote)
+        {
+            if (!RequireRoot()) return;
+            SetBusy(true, busyNote);
             // Start a fresh report: the list accumulates during the run.
             _runs.Clear();
             _tested = 0;
@@ -268,7 +416,8 @@ private async void BtnTest_Click(object sender, RoutedEventArgs e)
                     if (text.Length > 0 && !text.StartsWith("[OK]") && !text.StartsWith("[INFO]"))
                         StatusNote.Text = text.Length > 160 ? text.Substring(0, 160) : text;
                 })),
-                (run, i, total) => Dispatcher.BeginInvoke(new Action(() => ShowRun(run, i, total)))));
+                (run, i, total) => Dispatcher.BeginInvoke(new Action(() => ShowRun(run, i, total))),
+                selection));
 
             // Keep _sweepRunning true through the pending-connect and abort
             // handling: a "Подключить сейчас" click landing in this window used
