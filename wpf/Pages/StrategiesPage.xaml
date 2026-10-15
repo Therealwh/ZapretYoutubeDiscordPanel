@@ -19,6 +19,9 @@
                 ToolTip="Каждая стратегия запускается с нуля и проверяется полностью, поэтому тест занимает продолжительное время." />
             <Button x:Name="BtnAbort" Content="Остановить проверку" Style="{StaticResource Btn}" Margin="0,0,10,0"
                     Visibility="Collapsed" Click="BtnAbort_Click" />
+            <Button x:Name="BtnImport" Content="Добавить свою стратегию" Style="{StaticResource Btn}" Margin="0,0,10,0"
+                    Click="BtnImport_Click"
+                    ToolTip="Скопировать свой .bat (например general (ALT9).bat) в папку zapret — он появится в списке и попадёт в полный тест" />
             <ProgressBar x:Name="Progress" Width="120" Height="4" Margin="14,0,0,0"
                          VerticalAlignment="Center" Visibility="Collapsed" IsIndeterminate="True"
                          Foreground="{StaticResource AccentBrush}" Background="{StaticResource BgHoverBrush}" />

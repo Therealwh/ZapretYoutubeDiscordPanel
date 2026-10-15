@@ -407,7 +407,14 @@ namespace Ydp.Zapret
 
         public const string ImportPrefix = "user-";
 
-        public static string SafeStrategyName(string raw)
+        /// <summary>
+        /// Clean a strategy file name for safe use inside the zapret folder.
+        /// With prefix=true the name is tagged as user-supplied ("user-...");
+        /// with prefix=false the original name is kept (sanitised only), which is
+        /// what the import path uses so a custom "general (MY).bat" alt keeps its
+        /// name and is picked up by the zapret tester's "All configs" sweep.
+        /// </summary>
+        public static string SafeStrategyName(string raw, bool prefix = true)
         {
             string baseName = Path.GetFileName(raw ?? string.Empty);
             baseName = Regex.Replace(baseName, @"\.bat$", "", RegexOptions.IgnoreCase);
@@ -415,7 +422,7 @@ namespace Ydp.Zapret
             clean = Regex.Replace(clean, @"\s+", " ").Trim();
             if (clean.Length == 0) return null;
             if (clean.Length > 80) clean = clean.Substring(0, 80);
-            return ImportPrefix + clean;
+            return (prefix ? ImportPrefix : "") + clean;
         }
 
         public sealed class OperationResult
@@ -435,7 +442,11 @@ namespace Ydp.Zapret
             try { content = File.ReadAllText(srcFile); }
             catch { return new OperationResult { ok = false, reason = "read_failed" }; }
             if (!WinwsExe.IsMatch(content)) return new OperationResult { ok = false, reason = "no_winws" };
-            string name = SafeStrategyName(srcFile);
+            // Keep the original name (no "user-" tag): a custom "general (MY).bat"
+            // must look exactly like a built-in alt so the zapret tester's "All
+            // configs" sweep picks it up. The File.Exists guard below still
+            // refuses to overwrite an existing file.
+            string name = SafeStrategyName(srcFile, prefix: false);
             if (name == null) return new OperationResult { ok = false, reason = "bad_name" };
             string dest = Path.Combine(rootDir, name + ".bat");
             if (File.Exists(dest)) return new OperationResult { ok = false, reason = "exists", file = dest };

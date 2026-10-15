@@ -663,5 +663,45 @@ public void Execute(object parameter)
             PageScroll.ScrollToVerticalOffset(PageScroll.VerticalOffset - e.Delta);
             e.Handled = true;
         }
+
+        /// <summary>
+        /// Copy a user-supplied .bat into the zapret folder so it shows up in the
+        /// list and in the full test. The original file name is kept, so a custom
+        /// "general (ALT9).bat" behaves exactly like a built-in alt.
+        /// </summary>
+        private async void BtnImport_Click(object sender, RoutedEventArgs e)
+        {
+            if (!RequireRoot()) return;
+            var dialog = new Microsoft.Win32.OpenFileDialog
+            {
+                Title = "Выбери свою стратегию zapret (.bat)",
+                Filter = "Стратегии zapret (*.bat)|*.bat|Все файлы (*.*)|*.*",
+                CheckFileExists = true,
+            };
+            if (dialog.ShowDialog() != true) return;
+
+            var result = Strategy.ImportStrategy(_root, dialog.FileName);
+            switch (result.reason)
+            {
+                case "exists": StatusNote.Text = "Такая стратегия уже есть в папке zapret."; break;
+                case "no_winws": StatusNote.Text = "Это не стратегия zapret — в файле нет строки winws.exe."; break;
+                case "bad_name": StatusNote.Text = "Не удалось определить имя стратегии из файла."; break;
+                case null:
+                    if (result.ok)
+                    {
+                        StatusNote.Text = "Стратегия добавлена: " + (result.name ?? "") + " — появилась в списке и в полном тесте.";
+                        Logger.Info("Импорт стратегии: " + (result.name ?? "") + " -> " + (result.file ?? ""), "strategy");
+                        await System.Threading.Tasks.Task.Yield();
+                        Reload();
+                        return;
+                    }
+                    StatusNote.Text = "Не удалось добавить стратегию.";
+                    break;
+                default:
+                    StatusNote.Text = "Не удалось добавить стратегию: " + result.reason;
+                    break;
+            }
+            await System.Threading.Tasks.Task.Yield();
+        }
     }
 }
