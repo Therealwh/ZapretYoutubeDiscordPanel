@@ -908,10 +908,16 @@ var targets = OrderTargets(LoadTargets(rootDir));
                 }
 
                 // Drain the async readers: after HasExited goes true, buffered
-                // output lines can still arrive on the pool threads. Waiting for
-                // the process handle (no timeout) flushes them, so the final
-                // flush() below cannot race the OutputDataReceived handler.
-                try { proc.WaitForExit(); } catch { }
+                // output lines can still arrive on the pool threads. A BOUNDED
+                // wait — an unbounded one turned "stop" into a frozen UI when a
+                // stubborn child kept a pipe open. The tree kill above already
+                // did the real work; if the handle is still wedged, force it
+                // and move on.
+                try
+                {
+                    if (!proc.WaitForExit(15000)) KillProcessTree(proc);
+                }
+                catch { }
 
                 // Whatever the script printed last still needs its row.
                 flush();

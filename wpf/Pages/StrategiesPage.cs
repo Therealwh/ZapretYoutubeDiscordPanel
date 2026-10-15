@@ -118,6 +118,22 @@ private void SetBusy(bool busy, string note = null)
             Tester.Abort();
             BtnAbort.IsEnabled = false;
             StatusNote.Text = "Останавливаю проверку…";
+            // Safety net: if the sweep task wedges despite the process kill,
+            // unfreeze the UI after a grace period instead of leaving every
+            // button dead on "останавливаю проверку…" forever.
+            var watchdog = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(20) };
+            watchdog.Tick += (s, ev) =>
+            {
+                watchdog.Stop();
+                if (!_sweepRunning) return;
+                _sweepRunning = false;
+                _pendingConnectFile = null;
+                _pendingConnectName = null;
+                Logger.Warn("Остановка проверки превысила 20 с — разблокирую интерфейс принудительно", "tester");
+                SetBusy(false, "Проверка остановлена принудительно. Попробуйте запустить тест заново.");
+                BtnAbort.IsEnabled = true;
+            };
+            watchdog.Start();
         }
 
         private bool RequireRoot()
@@ -375,7 +391,9 @@ private async void BtnTest_Click(object sender, RoutedEventArgs e)
             if (string.IsNullOrEmpty(file)) return;
 
             StatusNote.Text = "Подключаю " + name + "…";
+            Logger.Info("Применяю стратегию службой: " + file, "apply");
             var result = await System.Threading.Tasks.Task.Run(() => ServiceOps.InstallStrategyAsService(_root, file));
+            Logger.Info("Применение " + name + ": " + (result.ok ? "успех" : "ошибка " + (result.reason ?? "?") + " " + (result.message ?? "")), "apply");
             if (!result.ok)
             {
                 _keepConnected = false;
