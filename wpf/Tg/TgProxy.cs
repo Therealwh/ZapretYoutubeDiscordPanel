@@ -166,14 +166,17 @@ private static volatile bool _cfEnabled = true;
             Stats.proxyUrl = ProxyLink();
         }
 
-        public static async Task<ProxyStatsView> StartAsync(string host, int port, byte[] secret, bool cfEnabled, Action<string, string> log)
+        // Synchronous by design: the listener setup is all non-blocking local
+        // work (bind + accept loop spawn), so an async signature would only
+        // promise what the body does not do.
+        public static Task<ProxyStatsView> StartAsync(string host, int port, byte[] secret, bool cfEnabled, Action<string, string> log)
         {
             SetLogger(log);
             if (cfEnabled) _cfEnabled = cfEnabled;
             LoadSecret(secret);
             lock (Gate)
             {
-                if (_listener != null) return Stats;
+                if (_listener != null) return Task.FromResult(Stats);
                 _host = string.IsNullOrWhiteSpace(host) ? DefaultHost : host;
                 _port = port > 0 ? port : DefaultPort;
                 _secret = _secret ?? TgCrypto.NewSecret();
@@ -196,14 +199,14 @@ _cts = new CancellationTokenSource();
                     _log(reason == "port_busy"
                         ? "Порт " + _port + " уже занят — вероятно, прокси уже запущен в другом экземпляре панели. Закройте старую панель и запустите заново."
                         : "Не удалось занять порт " + _port + ": " + ex.Message, "error");
-                    return new ProxyStatsView
+                    return Task.FromResult(new ProxyStatsView
                     {
                         running = false,
                         host = _host,
                         port = _port,
                         lastError = reason,
                         proxyUrl = ProxyLink(),
-                    };
+                    });
                 }
                 _listener = listener;
                 Stats = new ProxyStatsView
@@ -225,7 +228,7 @@ var token = _cts.Token;
                     "YoutubeDiscordPanel", "cf-domains.txt"));
                 Task.Run(() => RefreshCfDomainsAsync());
             }
-            return Stats;
+            return Task.FromResult(Stats);
         }
 
         public static void Stop()

@@ -153,28 +153,29 @@ namespace Ydp.Services
                     if (!string.IsNullOrEmpty(description) && description.IndexOf("Tunnel", StringComparison.OrdinalIgnoreCase) >= 0) continue;
                     if (!string.IsNullOrEmpty(description) && description.IndexOf("Virtual", StringComparison.OrdinalIgnoreCase) >= 0) continue;
 
-                    var addresses = new List<string>();
-                    bool dhcp = true;
+                    // DnsAddresses live on the adapter, not on the unicast address.
+                    var dnsServers = new List<string>();
                     try
                     {
-                        foreach (var ip in nic.GetIPProperties().UnicastAddresses)
+                        foreach (var d in nic.GetIPProperties().DnsAddresses)
                         {
-                            if (ip.Address.AddressFamily != System.Net.Sockets.AddressFamily.InterNetwork) continue;
-                            addresses.Add(ip.Address.ToString());
-                            // DnsAddresses live on the adapter, not on the unicast address.
-                            if (nic.GetIPProperties().DnsAddresses.Any(d => d.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork))
-                            {
-                                dhcp = false;
-                            }
+                            if (d.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
+                                dnsServers.Add(d.ToString());
                         }
                     }
-                    catch { /* adapter without an address set */ }
+                    catch { /* adapter without properties */ }
+
+                    // DHCP clients also receive resolver addresses (the router),
+                    // so "some DNS present" does not mean manual. The reliable
+                    // distinction lives in the registry: a statically configured
+                    // adapter has its NameServer value filled in.
+                    bool dhcp = !HasStaticDnsInRegistry(nic.Id);
 
                     result.Add(new DnsAdapter
                     {
                         Name = nic.Name,
                         Title = string.IsNullOrEmpty(description) ? nic.Name : nic.Name + " (" + description + ")",
-                        CurrentDns = addresses.Count > 0 ? string.Join(", ", addresses) : "DHCP",
+                        CurrentDns = dnsServers.Count > 0 ? string.Join(", ", dnsServers) : "не задан",
                         Dhcp = dhcp,
                     });
                 }
@@ -184,6 +185,29 @@ namespace Ydp.Services
                 Logger.Warn("Не удалось получить список сетевых адаптеров: " + ex.Message, "net");
             }
             return result;
+        }
+
+        /// <summary>
+        /// Does the adapter carry a statically configured resolver?
+        ///
+        /// Windows fills NameServer for manual DNS and leaves it empty when the
+        /// addresses come from DHCP, which is the only reliable way to tell the
+        /// two apart: the API-level DnsAddresses are populated in both cases.
+        /// </summary>
+        private static bool HasStaticDnsInRegistry(string adapterId)
+        {
+            if (string.IsNullOrEmpty(adapterId)) return false;
+            try
+            {
+                var path = "SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters\\Interfaces\\" + adapterId;
+                using (var key = Microsoft.Win32.Registry.LocalMachine.OpenSubKey(path))
+                {
+                    if (key == null) return false;
+                    var nameServer = (key.GetValue("NameServer") as string) ?? "";
+                    return nameServer.Trim().Length > 0;
+                }
+            }
+            catch { return false; }
         }
 
         /// <summary>
@@ -205,11 +229,15 @@ namespace Ydp.Services
             if (!first.ok) return first;
             if (!string.IsNullOrWhiteSpace(secondary))
             {
-                var second = RunNetsh("interface ip set dns name=\"" + adapter + "\" static " + secondary + " index=2");
+                // "set dns ... index=2" REPLACES the server at that index; the
+                // second resolver only appears with "add dns". Without this the
+                // panel silently leaves the user with a single DNS server.
+                var second = RunNetsh("interface ip add dns name=\"" + adapter + "\" address=" + secondary + " index=2");
                 if (!second.ok) return second;
             }
-            // Old cached entries keep the broken resolver alive.
-            RunNetsh("interface ip flushdns");
+            // Old cached entries keep the broken resolver alive. The reset lives
+            // in ipconfig: netsh has no flushdns verb.
+            FlushDnsCache();
             Logger.Info("DNS: " + adapter + " → " + primary
                 + (string.IsNullOrWhiteSpace(secondary) ? "" : ", " + secondary), "net");
             return new ServiceOps.OperationResult { ok = true };
@@ -221,15 +249,49 @@ namespace Ydp.Services
             if (string.IsNullOrWhiteSpace(adapter)) return new ServiceOps.OperationResult { ok = false, reason = "no_adapter" };
             var result = RunNetsh("interface ip set dns name=\"" + adapter + "\" dhcp");
             if (!result.ok) return result;
-            RunNetsh("interface ip flushdns");
+            FlushDnsCache();
             Logger.Info("DNS: " + adapter + " → DHCP (от провайдера)", "net");
             return new ServiceOps.OperationResult { ok = true };
+        }
+
+        /// <summary>
+        /// Drop the resolver cache. Lives in ipconfig, not netsh: netsh has no
+        /// flushdns verb and silently failed on it.
+        /// </summary>
+        private static void FlushDnsCache()
+        {
+            try
+            {
+                var startInfo = new ProcessStartInfo("ipconfig.exe", "/flushdns")
+                {
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                };
+                using (var p = Process.Start(startInfo))
+                {
+                    if (p == null) return;
+                    p.StandardOutput.ReadToEndAsync();
+                    p.StandardError.ReadToEndAsync();
+                    p.WaitForExit(15000);
+                }
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn("Не удалось сбросить кэш DNS: " + ex.Message, "net");
+            }
         }
 
         private static bool IsValidDns(string value)
         {
             System.Net.IPAddress parsed;
-            return System.Net.IPAddress.TryParse((value ?? "").Trim(), out parsed)
+            // TryParse alone accepts short forms like "8.8" and expands them to
+            // 8.0.0.8; the user almost certainly meant something else, so require
+            // the exact four-octet form.
+            var text = (value ?? "").Trim();
+            if (text.Split('.').Length != 4) return false;
+            return System.Net.IPAddress.TryParse(text, out parsed)
                 && parsed.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork;
         }
 
@@ -247,9 +309,20 @@ namespace Ydp.Services
                 using (var p = Process.Start(startInfo))
                 {
                     if (p == null) return new ServiceOps.OperationResult { ok = false, reason = "netsh_failed" };
-                    string output = p.StandardOutput.ReadToEnd() + p.StandardError.ReadToEnd();
-                    p.WaitForExit(15000);
-return p.ExitCode == 0
+                    // Both streams concurrently: reading them one after another
+                    // deadlocks when netsh fills the stderr buffer first. The
+                    // WaitForExit result also matters — on timeout ExitCode
+                    // throws and the netsh process would be left running.
+                    var outTask = p.StandardOutput.ReadToEndAsync();
+                    var errTask = p.StandardError.ReadToEndAsync();
+                    bool exited = p.WaitForExit(15000);
+                    if (!exited)
+                    {
+                        try { p.Kill(); } catch { }
+                        return new ServiceOps.OperationResult { ok = false, reason = "netsh_timeout", message = "netsh не ответил за 15 секунд" };
+                    }
+                    string output = (SafeResult(outTask) ?? "") + (SafeResult(errTask) ?? "");
+                    return p.ExitCode == 0
                         ? new ServiceOps.OperationResult { ok = true }
                         : new ServiceOps.OperationResult { ok = false, reason = "netsh_exit_" + p.ExitCode, message = output.Trim() };
                 }
@@ -258,6 +331,12 @@ return p.ExitCode == 0
             {
                 return new ServiceOps.OperationResult { ok = false, reason = "netsh_failed", message = ex.Message };
             }
+        }
+
+        private static string SafeResult(System.Threading.Tasks.Task<string> task)
+        {
+            try { return task.Result; }
+            catch { return null; }
         }
 
         /// <summary>Service state via ServiceController (was sc.exe + text parsing).</summary>

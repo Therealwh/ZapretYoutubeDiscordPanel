@@ -1,11 +1,12 @@
 <UserControl x:Class="Ydp.Pages.DashboardPage"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             Loaded="Page_Loaded">
+             Loaded="Page_Loaded"
+             Unloaded="Page_Unloaded">
     <StackPanel>
 
         <!-- Status strip: one line that answers "what is going on right now" -->
-        <Border Style="{StaticResource Card}" Margin="0,0,0,14" Padding="18,16">
+        <Border x:Name="BypassCard" Style="{StaticResource Card}" Margin="0,0,0,14" Padding="18,16">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
@@ -48,50 +49,50 @@
 
         <!-- Status tiles -->
         <UniformGrid Columns="4" Margin="0,0,0,14">
-            <Border Style="{StaticResource Card}" Margin="0,0,8,8" Padding="14,12">
+            <Border x:Name="TileStrategy" Style="{StaticResource TileIdle}" Margin="0,0,8,8" Padding="14,12">
                 <StackPanel>
                     <TextBlock Text="СТРАТЕГИЯ" Style="{StaticResource TileLabel}" />
                     <TextBlock x:Name="StatStrategy" Text="—" Style="{StaticResource TileValue}" ToolTip="" />
                 </StackPanel>
             </Border>
-            <Border Style="{StaticResource Card}" Margin="0,0,8,8" Padding="14,12">
+            <Border x:Name="TileMode" Style="{StaticResource TileIdle}" Margin="0,0,8,8" Padding="14,12">
                 <StackPanel>
                     <TextBlock Text="РЕЖИМ" Style="{StaticResource TileLabel}" />
                     <TextBlock x:Name="StatMode" Text="—" Style="{StaticResource TileValue}" />
                 </StackPanel>
             </Border>
-            <Border Style="{StaticResource Card}" Margin="0,0,8,8" Padding="14,12">
+            <Border x:Name="TileZapret" Style="{StaticResource TileIdle}" Margin="0,0,8,8" Padding="14,12">
                 <StackPanel>
                     <TextBlock Text="СЛУЖБА ZAPRET" Style="{StaticResource TileLabel}" />
                     <TextBlock x:Name="StatZapret" Text="—" Style="{StaticResource TileValue}" />
                 </StackPanel>
             </Border>
-            <Border Style="{StaticResource Card}" Margin="0,0,0,8" Padding="14,12">
+            <Border x:Name="TileWinDivert" Style="{StaticResource TileIdle}" Margin="0,0,0,8" Padding="14,12">
                 <StackPanel>
                     <TextBlock Text="WINDIVERT" Style="{StaticResource TileLabel}" />
                     <TextBlock x:Name="StatWinDivert" Text="—" Style="{StaticResource TileValue}" />
                 </StackPanel>
             </Border>
-            <Border Style="{StaticResource Card}" Margin="0,0,8,0" Padding="14,12">
+            <Border x:Name="TileWinws" Style="{StaticResource TileIdle}" Margin="0,0,8,0" Padding="14,12">
                 <StackPanel>
                     <TextBlock Text="ПРОЦЕСС WINWS" Style="{StaticResource TileLabel}" />
                     <TextBlock x:Name="StatWinws" Text="—" Style="{StaticResource TileValue}" />
-                    <TextBlock x:Name="StatWinwsPath" Text="" Style="{StaticResource Hint}" TextTrimming="CharacterEllipsis" />
+                    <TextBlock x:Name="StatWinwsPath" Text="" Style="{StaticResource Mono}" TextTrimming="CharacterEllipsis" />
                 </StackPanel>
             </Border>
-            <Border Style="{StaticResource Card}" Margin="0,0,8,0" Padding="14,12">
+            <Border x:Name="TileRoot" Style="{StaticResource TileIdle}" Margin="0,0,8,0" Padding="14,12">
                 <StackPanel>
                     <TextBlock Text="ПАПКА ZAPRET" Style="{StaticResource TileLabel}" />
                     <TextBlock x:Name="StatRoot" Text="—" Style="{StaticResource TileValue}" />
                 </StackPanel>
             </Border>
-            <Border Style="{StaticResource Card}" Margin="0,0,8,0" Padding="14,12">
+            <Border x:Name="TileRemembered" Style="{StaticResource TileIdle}" Margin="0,0,8,0" Padding="14,12">
                 <StackPanel>
                     <TextBlock Text="ЗАПОМНЕНО" Style="{StaticResource TileLabel}" />
                     <TextBlock x:Name="StatRemembered" Text="—" Style="{StaticResource TileValue}" />
                 </StackPanel>
             </Border>
-            <Border Style="{StaticResource Card}" Margin="0,0,0,0" Padding="14,12">
+            <Border x:Name="TileAutostart" Style="{StaticResource TileIdle}" Margin="0,0,0,0" Padding="14,12">
                 <StackPanel>
                     <TextBlock Text="АВТОЗАПУСК" Style="{StaticResource TileLabel}" />
                     <TextBlock x:Name="StatAutostart" Text="—" Style="{StaticResource TileValue}" />
@@ -124,7 +125,7 @@
                         <Button Content="Копировать ссылку" Style="{StaticResource Btn}" Margin="0,0,8,0" Click="BtnTgCopy_Click" />
                         <Button Content="Новый секрет" Style="{StaticResource Btn}" Click="BtnTgRegen_Click" />
                     </StackPanel>
-                    <TextBlock x:Name="TgLink" Text="" Style="{StaticResource Hint}" Margin="0,10,0,0"
+                    <TextBlock x:Name="TgLink" Text="" Style="{StaticResource Mono}" Margin="0,10,0,0"
                                TextTrimming="CharacterEllipsis" />
 
                     <!-- Веб-прокси: отдельный способ зайти в Telegram, когда локальный прокси не нужен -->

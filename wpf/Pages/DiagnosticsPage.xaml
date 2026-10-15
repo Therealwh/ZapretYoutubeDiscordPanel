@@ -6,7 +6,7 @@
     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,10,0">
     <StackPanel>
         <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
-            <TextBlock Text="Диагностика" FontSize="20" FontWeight="Bold" VerticalAlignment="Center" />
+            <TextBlock Text="Диагностика" Style="{StaticResource SectionTitle}" VerticalAlignment="Center" />
             <Button Content="Запустить проверку" Style="{StaticResource BtnPrimary}" Margin="16,0,0,0" Click="BtnRun_Click" />
         </StackPanel>
 
@@ -16,14 +16,50 @@
                     <DataTemplate>
                         <Grid Margin="14,10">
                             <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <StackPanel Grid.Column="0">
+                            <!-- State dot: the same green/red language as the
+                                 dashboard tiles, so a failing check needs no
+                                 reading at all. -->
+                            <Ellipse Grid.Column="0" Width="8" Height="8" VerticalAlignment="Center" Margin="0,0,12,0">
+                                <Ellipse.Style>
+                                    <Style TargetType="Ellipse">
+                                        <Setter Property="Fill" Value="{StaticResource ErrBrush}" />
+                                        <Setter Property="Effect" Value="{StaticResource GlowErr}" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding state}" Value="ok">
+                                                <Setter Property="Fill" Value="{StaticResource OkBrush}" />
+                                                <Setter Property="Effect" Value="{StaticResource GlowOk}" />
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding state}" Value="warn">
+                                                <Setter Property="Fill" Value="{StaticResource WarnBrush}" />
+                                                <Setter Property="Effect" Value="{StaticResource GlowWarn}" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Ellipse.Style>
+                            </Ellipse>
+                            <StackPanel Grid.Column="1">
                                 <TextBlock Text="{Binding name}" Foreground="{StaticResource TextBrush}" />
                                 <TextBlock Text="{Binding detail}" Style="{StaticResource Dim}" TextWrapping="Wrap" />
                             </StackPanel>
-                            <TextBlock Grid.Column="1" Text="{Binding verdict}" FontWeight="SemiBold" VerticalAlignment="Center" />
+                            <TextBlock Grid.Column="2" Text="{Binding verdict}" FontWeight="SemiBold" VerticalAlignment="Center">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Foreground" Value="{StaticResource ErrBrush}" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding state}" Value="ok">
+                                                <Setter Property="Foreground" Value="{StaticResource OkBrush}" />
+                                            </DataTrigger>
+                                            <DataTrigger Binding="{Binding state}" Value="warn">
+                                                <Setter Property="Foreground" Value="{StaticResource WarnBrush}" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
                         </Grid>
                     </DataTemplate>
                 </ItemsControl.ItemTemplate>

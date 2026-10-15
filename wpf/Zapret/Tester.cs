@@ -232,6 +232,20 @@ namespace Ydp.Zapret
 
         private static string RunProcess(string exe, string args, int timeoutMs, bool utf8 = false)
         {
+            string stderr;
+            return RunProcess(exe, args, timeoutMs, utf8, out stderr);
+        }
+
+        /// <summary>
+        /// Run a process and capture both streams.
+        ///
+        /// The two ReadToEndAsync calls run concurrently on purpose: reading
+        /// stdout to the end and only then stderr deadlocks whenever the child
+        /// fills the stderr pipe buffer while we are still blocked on stdout.
+        /// </summary>
+        private static string RunProcess(string exe, string args, int timeoutMs, bool utf8, out string stderr)
+        {
+            stderr = null;
             try
             {
                 var startInfo = new ProcessStartInfo(exe, args)
@@ -245,20 +259,28 @@ namespace Ydp.Zapret
                 using (var p = Process.Start(startInfo))
                 {
                     if (p == null) return string.Empty;
-                    var stdout = p.StandardOutput.ReadToEnd();
-                    p.StandardError.ReadToEnd();
+                    var outTask = p.StandardOutput.ReadToEndAsync();
+                    var errTask = p.StandardError.ReadToEndAsync();
                     if (!p.WaitForExit(timeoutMs))
                     {
                         try { p.Kill(); } catch { /* ignore */ }
-                        return stdout ?? string.Empty;
+                        stderr = SafeTaskResult(errTask);
+                        return SafeTaskResult(outTask) ?? string.Empty;
                     }
-                    return (stdout ?? string.Empty).Trim();
+                    stderr = SafeTaskResult(errTask);
+                    return (SafeTaskResult(outTask) ?? string.Empty).Trim();
                 }
             }
             catch
             {
                 return string.Empty;
             }
+        }
+
+        private static string SafeTaskResult(System.Threading.Tasks.Task<string> task)
+        {
+            try { return task.Result; }
+            catch { return null; }
         }
 
         /// <summary>
@@ -272,17 +294,31 @@ namespace Ydp.Zapret
             string args = string.Format(
                 "-I -s -m {0} --connect-timeout {1} -o NUL -w \"%{{http_code}} %{{remote_ip}}\" --show-error {2} \"{3}\"",
                 timeoutSec, Math.Min(3, timeoutSec), extraArgs, url);
-            string output = RunProcess("curl.exe", args, (timeoutSec + 2) * 1000);
-            if (string.IsNullOrEmpty(output)) return "ERR";
+            string stderr;
+            string output = RunProcess("curl.exe", args, (timeoutSec + 2) * 1000, false, out stderr);
+            if (string.IsNullOrEmpty(output)) return ClassifyCurlError(stderr);
 
-            // curl writes the -w line first; --show-error appends any message.
+            // curl prints the -w line first; --show-error appends the reason.
             var firstLine = output.Split('\n')[0].Trim();
             var parts = firstLine.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
             string code = parts.Length > 0 ? parts[0] : "";
             if (parts.Length > 1 && parts[1] != "0.0.0.0") remoteIp = parts[1];
 
-            if (code.Length >= 3 && code.Substring(0, 3).All(char.IsDigit)) return "OK";
-            string lower = output.ToLowerInvariant();
+            // 000 means no HTTP response arrived at all: connection refused,
+            // timeout, TLS handshake killed by the DPI. Counting it as OK is how
+            // a fully blocked target used to pass as reachable, so any code that
+            // is not a real HTTP status is classified from the error text.
+            if (code.Length == 3 && code != "000" && code.All(char.IsDigit)) return "OK";
+            return ClassifyCurlError((stderr ?? "") + " " + output);
+        }
+
+        /// <summary>
+        /// Map curl's error text to the same labels the bundled zapret tester
+        /// prints: DNS, SSL, UNSUP, TIMEOUT, REFUSED, ERR.
+        /// </summary>
+        private static string ClassifyCurlError(string errorText)
+        {
+            string lower = (errorText ?? "").ToLowerInvariant();
             if (lower.Contains("could not resolve host")) return "DNS";
             if (lower.Contains("certificate") || lower.Contains("ssl")) return "SSL";
             if (lower.Contains("unsupported") || lower.Contains("not supported") || lower.Contains("unrecognized") || lower.Contains("schannel")) return "UNSUP";
@@ -448,6 +484,29 @@ public Groups baseline { get; set; }
         private static volatile bool _aborted;
 
         public static void Abort() { _aborted = true; }
+
+        /// <summary>
+        /// Clear the abort flag at the moment the UI starts scheduling a sweep.
+        ///
+        /// Clearing it inside the sweep method has a hole: the UI enables the
+        /// stop button before the Task.Run actually gets scheduled, so an Abort
+        /// landing in that window was wiped by the reset and the sweep ran to
+        /// the end. Resetting on the UI thread up front removes the window.
+        /// </summary>
+        public static void ResetAbort() { _aborted = false; }
+
+        /// <summary>
+        /// Kill a process and its children.
+        ///
+        /// Process.Kill only takes down the process itself: the tester's cmd
+        /// wrapper and any curl it spawned survive and keep running. taskkill /T
+        /// walks the tree, which .NET Framework's Process API cannot do.
+        /// </summary>
+        private static void KillProcessTree(System.Diagnostics.Process proc)
+        {
+            try { RunProcess("taskkill.exe", "/PID " + proc.Id + " /T /F", 10000); }
+            catch { try { proc.Kill(); } catch { } }
+        }
 
         /// <summary>
         /// Run strategies in order and connect the first one where Discord AND
@@ -683,7 +742,9 @@ var targets = OrderTargets(LoadTargets(rootDir));
         /// <param name="onLine">Live console line from the script, for the status bar.</param>
         public static SweepResult RunOriginalTester(string rootDir, Action<string> onLine, Action<StrategyRunResult, int, int> onProgress)
         {
-            _aborted = false;
+            // Not reset here on purpose: the UI clears the flag via ResetAbort()
+            // before scheduling this task, and an Abort landing between scheduling
+            // and entering the method must survive.
             var result = new SweepResult();
 
             string script = Path.Combine(rootDir, "utils", "test zapret.ps1");
@@ -777,6 +838,10 @@ var targets = OrderTargets(LoadTargets(rootDir));
                         name = currentName,
                         file = currentName,
                         targets = new List<TargetResult>(currentTargets),
+                        // An abort in the middle of the probes leaves this config
+                        // with fewer rows than the rest; marking it partial keeps
+                        // the UI from offering a connect on a truncated run.
+                        partial = _aborted,
                     };
                     run.groups = GroupStats(run.targets);
                     run.score = ScoreResults(run.targets);
@@ -802,8 +867,10 @@ var targets = OrderTargets(LoadTargets(rootDir));
                     if (m.Success)
                     {
                         flush();
-                        index = int.Parse(m.Groups[1].Value) - 1;
-                        total = int.Parse(m.Groups[2].Value);
+                        // Bounded parse: a garbage line with a huge number must
+                        // not throw OverflowException inside the reader callback.
+                        index = int.TryParse(m.Groups[1].Value, out var idx) ? idx - 1 : 0;
+                        total = int.TryParse(m.Groups[2].Value, out var tot) ? tot : 0;
                         currentName = m.Groups[3].Value.Trim();
                         return;
                     }
@@ -824,7 +891,7 @@ var targets = OrderTargets(LoadTargets(rootDir));
                 {
                     if (_aborted)
                     {
-                        try { proc.Kill(); } catch { }
+                        KillProcessTree(proc);
                         ServiceOps.KillWinws();
                         result.aborted = true;
                         onLine?.Invoke("[ПАНЕЛЬ] Проверка остановлена пользователем");
@@ -832,13 +899,19 @@ var targets = OrderTargets(LoadTargets(rootDir));
                     }
                     if (DateTime.Now > deadline)
                     {
-                        try { proc.Kill(); } catch { }
+                        KillProcessTree(proc);
                         ServiceOps.KillWinws();
                         onLine?.Invoke("[ПАНЕЛЬ] Тестер не уложился в 45 минут и был остановлен");
                         break;
                     }
                     Thread.Sleep(400);
                 }
+
+                // Drain the async readers: after HasExited goes true, buffered
+                // output lines can still arrive on the pool threads. Waiting for
+                // the process handle (no timeout) flushes them, so the final
+                // flush() below cannot race the OutputDataReceived handler.
+                try { proc.WaitForExit(); } catch { }
 
                 // Whatever the script printed last still needs its row.
                 flush();

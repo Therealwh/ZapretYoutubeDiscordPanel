@@ -30,15 +30,15 @@
         <Style x:Key="NavItem" TargetType="RadioButton">
             <Setter Property="Foreground" Value="{StaticResource TextDimBrush}" />
             <Setter Property="Cursor" Value="Hand" />
-            <Setter Property="Margin" Value="10,1" />
-            <Setter Property="Height" Value="38" />
+            <Setter Property="Margin" Value="10,2" />
+            <Setter Property="Height" Value="40" />
             <Setter Property="Template">
                 <Setter.Value>
                     <ControlTemplate TargetType="RadioButton">
                         <Grid>
-                            <Border x:Name="rail" Width="3" Height="18" CornerRadius="2"
+                            <Border x:Name="rail" Width="3" Height="20" CornerRadius="2"
                                     HorizontalAlignment="Left" Background="Transparent" />
-                            <Border x:Name="bg" CornerRadius="8" Padding="12,0">
+                            <Border x:Name="bg" CornerRadius="10" Padding="14,0">
                                 <ContentPresenter VerticalAlignment="Center" />
                             </Border>
                         </Grid>
@@ -48,7 +48,7 @@
                                 <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
                             </Trigger>
                             <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="bg" Property="Background" Value="{StaticResource BgCardBrush}" />
+                                <Setter TargetName="bg" Property="Background" Value="{StaticResource AccentTileBrush}" />
                                 <Setter TargetName="rail" Property="Background" Value="{StaticResource AccentBrush}" />
                                 <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
                                 <Setter Property="FontWeight" Value="SemiBold" />
@@ -125,6 +125,7 @@
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="34" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
@@ -160,7 +161,31 @@
             </Grid>
         </Border>
 
-        <Grid Grid.Row="1">
+        <!-- Update banner. Hidden until the startup check finds a newer
+             release; lives above the content on every page so the offer is
+             impossible to miss but never blocks navigation. -->
+        <Border x:Name="UpdateBanner" Grid.Row="1" Margin="24,12,24,0" Padding="14,10"
+                Background="{StaticResource AccentTileBrush}" BorderBrush="{StaticResource AccentBrush}"
+                BorderThickness="1" CornerRadius="10" Visibility="Collapsed">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" VerticalAlignment="Center">
+                    <TextBlock x:Name="UpdateTitle" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" />
+                    <TextBlock x:Name="UpdateDetails" Style="{StaticResource Dim}" TextWrapping="Wrap" />
+                </StackPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <Button x:Name="BtnUpdateNow" Content="Обновить" Style="{StaticResource BtnPrimary}"
+                            Margin="0,0,8,0" Click="BtnUpdateNow_Click" />
+                    <Button Content="Что нового" Style="{StaticResource Btn}" Margin="0,0,8,0" Click="BtnWhatsNew_Click" />
+                    <Button Content="✕" Style="{StaticResource Btn}" Padding="10,8" Click="BtnBannerClose_Click" />
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <Grid Grid.Row="2">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="230" />
             <ColumnDefinition Width="*" />
@@ -175,11 +200,18 @@
                     <RowDefinition Height="Auto" />
                 </Grid.RowDefinitions>
                 <!-- Sidebar header -->
-                <StackPanel Grid.Row="0" Margin="18,20,12,18">
-                    <TextBlock Text="Zapret" FontWeight="Bold" FontSize="15"
-                               Foreground="{StaticResource TextBrush}" />
-                    <TextBlock Text="обход DPI для Discord и YouTube" FontSize="11.5"
-                               Style="{StaticResource Dim}" Margin="0,3,0,0" />
+                <StackPanel Grid.Row="0" Margin="18,22,12,20">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="Zapret" FontWeight="Bold" FontFamily="Segoe UI Variable Display, Segoe UI"
+                                   FontSize="17" Foreground="{StaticResource TextBrush}" />
+                        <Border Background="{StaticResource AccentTileBrush}" CornerRadius="6" Padding="7,2"
+                                Margin="8,0,0,0" VerticalAlignment="Center">
+                            <TextBlock x:Name="VersionBadge" Text="2.x" FontSize="10.5"
+                                       Foreground="{StaticResource AccentBrush}" FontWeight="SemiBold" />
+                        </Border>
+                    </StackPanel>
+                    <TextBlock Text="обход DPI для Discord и YouTube" FontSize="11"
+                               Style="{StaticResource Dim}" Margin="0,4,0,0" />
                 </StackPanel>
                 <StackPanel Grid.Row="1" VerticalAlignment="Top">
                     <RadioButton x:Name="NavDashboard" Style="{StaticResource NavItem}" GroupName="nav" IsChecked="True"
@@ -224,6 +256,10 @@
                             <TextBlock Style="{StaticResource NavText}" Text="Диагностика" />
                         </StackPanel>
                     </RadioButton>
+                    <!-- Secondary section below a divider: supporting pages read
+                         as a separate group from the working ones. -->
+                    <Border Height="1" Background="{StaticResource BorderBrush2}" Opacity="0.5"
+                            Margin="16,10,16,8" />
                     <RadioButton x:Name="NavLogs" Style="{StaticResource NavItem}" GroupName="nav"
                                  Tag="logs" Checked="Nav_Checked">
                         <StackPanel Orientation="Horizontal">

@@ -88,8 +88,34 @@ namespace Ydp.Zapret
         /// The zapret root: the configured one when valid, otherwise the first
         /// known-good location (C:\Zapret first — the layout zapret's own
         /// scripts expect).
+        ///
+        /// Memoized for a few seconds: when the folder is NOT configured this
+        /// probes several drives, and the dashboard calls it every second —
+        /// on the UI thread that used to be a periodic stutter.
         /// </summary>
+        private static readonly object RootGate = new object();
+        private static string _cacheKey;
+        private static string _cacheValue;
+        private static DateTime _cacheUntil;
+
         public static string ResolveRoot(string configured)
+        {
+            var key = configured ?? "";
+            lock (RootGate)
+            {
+                if (_cacheUntil > DateTime.UtcNow && _cacheKey == key) return _cacheValue;
+            }
+            var value = ResolveRootSlow(configured);
+            lock (RootGate)
+            {
+                _cacheKey = key;
+                _cacheValue = value;
+                _cacheUntil = DateTime.UtcNow.AddSeconds(3);
+            }
+            return value;
+        }
+
+        private static string ResolveRootSlow(string configured)
         {
             if (!string.IsNullOrWhiteSpace(configured) && LooksLikeZapretRoot(configured)) return configured;
             foreach (var candidate in CandidateRoots())

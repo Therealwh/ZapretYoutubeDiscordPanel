@@ -2,7 +2,6 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.IO;
-using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using Microsoft.Win32;
@@ -47,12 +46,33 @@ namespace Ydp.Pages
 
         private void CfProxyBox_TextChanged(object sender, TextChangedEventArgs e) => UpdateRelayHints();
 
-private void Page_Loaded(object sender, RoutedEventArgs e)
+        /// <summary>
+        /// Runs an action on the UI thread, quietly skipping it when the app is
+        /// already shutting down: a background continuation must not throw after
+        /// the window is gone.
+        /// </summary>
+        private void OnUi(Action action)
+        {
+            try
+            {
+                if (Dispatcher.HasShutdownStarted) return;
+                Dispatcher.Invoke(action);
+            }
+            catch { /* dispatcher gone between the check and the invoke */ }
+        }
+
+        private void Page_Loaded(object sender, RoutedEventArgs e)
         {
             Load();
-            // Listing adapters touches the network stack, so keep it off the UI thread.
+            // Listing adapters touches the network stack, so keep it off the UI
+            // thread — and hand the result over instead of letting
+            // LoadDnsAdapters poll the network again on the UI thread.
             System.Threading.Tasks.Task.Run(() => Win.ListDnsAdapters())
-                .ContinueWith(t => Dispatcher.Invoke(() => LoadDnsAdapters()));
+                .ContinueWith(t =>
+                {
+                    var adapters = t.Status == System.Threading.Tasks.TaskStatus.RanToCompletion ? t.Result : new List<Win.DnsAdapter>();
+                    OnUi(() => LoadDnsAdapters(adapters));
+                });
         }
 
         private void Load()
@@ -234,6 +254,13 @@ private void Page_Loaded(object sender, RoutedEventArgs e)
                 if (dialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
                 {
                     Config.Set("zapretRoot", dialog.SelectedPath);
+                    // Someone installing the panel without the bundled engine
+                    // points at their own zapret here. The panel's Telegram
+                    // domains must follow the folder the moment it is picked,
+                    // not on the next restart.
+                    int added = Zapret.FirstRun.EnsureTelegramDomains(dialog.SelectedPath);
+                    Logger.Info("Выбрана папка zapret: " + dialog.SelectedPath
+                        + (added > 0 ? " (дописано доменов: " + added + ")" : ""), "lists");
                 }
             }
             Load();
@@ -242,8 +269,17 @@ private void Page_Loaded(object sender, RoutedEventArgs e)
         private void BtnAutoRoot_Click(object sender, RoutedEventArgs e)
         {
             var found = Status.ResolveRoot(null);
-            if (!string.IsNullOrEmpty(found)) Config.Set("zapretRoot", found);
-            AutoNote.Text = string.IsNullOrEmpty(found) ? "Автоматически не нашёл." : "Найдено: " + found;
+            if (!string.IsNullOrEmpty(found))
+            {
+                Config.Set("zapretRoot", found);
+                int added = Zapret.FirstRun.EnsureTelegramDomains(found);
+                AutoNote.Text = "Найдено: " + found
+                    + (added > 0 ? " · домены Telegram дописаны: " + added : "");
+            }
+            else
+            {
+                AutoNote.Text = "Автоматически не нашёл.";
+            }
             Load();
         }
 
@@ -254,9 +290,26 @@ private void Page_Loaded(object sender, RoutedEventArgs e)
         /// right answer, so the user picks rather than us guessing and silently
         /// reconfiguring the wrong interface.
         /// </summary>
-        private void LoadDnsAdapters()
+        /// <summary>
+        /// Re-lists the adapters in the background after an apply/reset and
+        /// rebinds the fresh list.
+        /// </summary>
+        private void RefreshDnsAdaptersAsync()
         {
-            var adapters = Win.ListDnsAdapters();
+            System.Threading.Tasks.Task.Run(() => Win.ListDnsAdapters())
+                .ContinueWith(t =>
+                {
+                    var adapters = t.Status == System.Threading.Tasks.TaskStatus.RanToCompletion ? t.Result : new List<Win.DnsAdapter>();
+                    OnUi(() => LoadDnsAdapters(adapters));
+                });
+        }
+
+        /// <summary>
+        /// Binds a pre-fetched adapter list. The network poll itself happens in
+        /// the background: doing it here again would freeze the UI thread.
+        /// </summary>
+        private void LoadDnsAdapters(List<Win.DnsAdapter> adapters)
+        {
             DnsAdapterBox.ItemsSource = adapters;
             if (adapters.Count > 0) DnsAdapterBox.SelectedIndex = 0;
             if (adapters.Count == 0)
@@ -317,7 +370,7 @@ private void Page_Loaded(object sender, RoutedEventArgs e)
                 {
                     SetDnsNote("Готово: DNS " + primary + (string.IsNullOrEmpty(secondary) ? "" : " / " + secondary)
                         + ". Если браузер уже открыт — перезапусти его, иначе он продолжит резолвить по старому резолверу.", false);
-                    LoadDnsAdapters();
+                    RefreshDnsAdaptersAsync();
                     return;
                 }
                 if (result.reason == "bad_dns")
@@ -351,7 +404,7 @@ private void Page_Loaded(object sender, RoutedEventArgs e)
                 if (result.ok)
                 {
                     SetDnsNote("Готово: DNS снова от провайдера (DHCP).", false);
-                    LoadDnsAdapters();
+                    RefreshDnsAdaptersAsync();
                     return;
                 }
                 SetDnsNote("Не удалось вернуть DNS провайдера. Возможно, нет прав администратора."

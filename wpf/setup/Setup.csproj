@@ -18,8 +18,8 @@
     <RootNamespace>Ydp.Setup</RootNamespace>
     <ApplicationIcon>..\Resources\app.ico</ApplicationIcon>
     <Product>YoutubeDiscordPanel</Product>
-    <Version>2.1.3</Version>
-    <FileVersion>2.1.3.0</FileVersion>
+    <Version>2.1.4</Version>
+    <FileVersion>2.1.4.0</FileVersion>
     <DebugType>none</DebugType>
     <!-- We define Main ourselves; the SDK also generates one for WinExe. -->
     <StartupObject>Ydp.Setup.Program</StartupObject>

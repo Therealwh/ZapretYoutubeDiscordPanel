@@ -18,7 +18,11 @@ namespace Ydp.Pages
         public string name { get; set; }
         public string detail { get; set; }
         public string verdict { get; set; }
-        public bool ok { get; set; }
+
+        /// <summary>"ok" / "warn" / "err" — drives the dot and verdict colour in
+        /// the template. Derived from the verdict text in Add().</summary>
+        public string state { get; set; }
+        public bool ok { get { return state == "ok"; } }
     }
 
     public partial class DiagnosticsPage : UserControl
@@ -108,7 +112,12 @@ namespace Ydp.Pages
 
         private static void Add(ObservableCollection<DiagnosticItem> items, string name, string detail, string verdict)
         {
-            items.Add(new DiagnosticItem { name = name, detail = detail, verdict = verdict });
+            // Verdict text is the single source of truth; the visual state is
+            // derived so the dot and the word can never disagree.
+            string state = verdict == "Ок" ? "ok"
+                : (verdict == "Внимание" || verdict == "Остановлена") ? "warn"
+                : "err";
+            items.Add(new DiagnosticItem { name = name, detail = detail, verdict = verdict, state = state });
         }
 
         private static string RunCapture(string exe, string args)

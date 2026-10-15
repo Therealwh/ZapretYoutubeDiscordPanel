@@ -33,8 +33,17 @@ namespace Ydp.Pages
                 : "Папка: " + _root + Environment.NewLine
                   + "Установленная версия движка: " + (installed ?? "неизвестна (ставилась вручную)") + Environment.NewLine
                   + "Встроенный архив: " + (size > 0 ? (size / 1024.0 / 1024.0).ToString("0.0") + " МБ" : "не найден");
+            SetState(EngineState, string.IsNullOrEmpty(_root) ? "err" : "dim");
             BtnInstallBundled.IsEnabled = size > 0 && !string.IsNullOrEmpty(_root);
             BtnUpdateEngine.IsEnabled = false;
+        }
+
+        /// <summary>Colour a state line: green ok, amber warning, red error.</summary>
+        private void SetState(System.Windows.Controls.TextBlock target, string kind)
+        {
+            var key = kind == "ok" ? "OkBrush" : kind == "warn" ? "WarnBrush"
+                : kind == "err" ? "ErrBrush" : "TextDimBrush";
+            target.Foreground = (System.Windows.Media.Brush)FindResource(key);
         }
 
         private async void BtnInstallBundled_Click(object sender, RoutedEventArgs e)
@@ -42,10 +51,12 @@ namespace Ydp.Pages
             if (_root == null) return;
             if (!Confirm("Будут заменены файлы движка в папке " + _root + ". Обход будет остановлен. Продолжить?")) return;
             EngineState.Text = "Устанавливаю…";
+            SetState(EngineState, "warn");
             var result = await Task.Run(() => Engine.Install(_root, Engine.BundledZipPath));
             EngineState.Text = result.ok
                 ? "Готово: обновлено файлов — " + result.copied.Length + RememberIfUnfound()
                 : "Ошибка: " + (result.reason ?? "?") + " " + result.message;
+            SetState(EngineState, result.ok ? "ok" : "err");
         }
 
         /// <summary>
@@ -76,10 +87,12 @@ namespace Ydp.Pages
             if (dialog.ShowDialog() != true) return;
             if (!Confirm("Файлы в папке " + _root + " будут заменены. Продолжить?")) return;
             EngineState.Text = "Устанавливаю…";
+            SetState(EngineState, "warn");
             var result = await Task.Run(() => Engine.Install(_root, dialog.FileName));
             EngineState.Text = result.ok
                 ? "Готово: обновлено файлов — " + result.copied.Length
                 : "Ошибка: " + (result.reason ?? "?") + " " + result.message;
+            SetState(EngineState, result.ok ? "ok" : "err");
         }
 
         private async void BtnReleases_Click(object sender, RoutedEventArgs e)

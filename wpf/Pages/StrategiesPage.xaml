@@ -5,7 +5,7 @@
     <!-- Форма выше окна: без скролла нижние поля недоступны. -->
     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,10,0">
     <StackPanel Margin="0,0,0,12">
-        <TextBlock Text="Стратегии" FontSize="20" FontWeight="Bold" />
+        <TextBlock Text="Стратегии" Style="{StaticResource SectionTitle}" />
         <TextBlock x:Name="Hint" Style="{StaticResource Dim}" Margin="0,4,0,12" Text="Загрузка…" />
 
         <StackPanel Orientation="Horizontal" Margin="0,0,0,12">
@@ -113,7 +113,7 @@
                                                                     <Setter Property="FontFamily" Value="Consolas" />
                                                                     <Setter Property="FontSize" Value="12" />
                                                                     <Setter Property="Text" Value="{Binding probes}" />
-                                                                    <Setter Property="Foreground" Value="{StaticResource Dim}" />
+                                                                    <Setter Property="Foreground" Value="{StaticResource TextDimBrush}" />
                                                                     <Style.Triggers>
                                                                         <DataTrigger Binding="{Binding state}" Value="bad">
                                                                             <Setter Property="Foreground" Value="{StaticResource ErrBrush}" />

@@ -31,6 +31,13 @@ _timer.Start();
             LoadWebProxy();
         }
 
+        private void Page_Unloaded(object sender, RoutedEventArgs e)
+        {
+            // Without this the timer keeps firing after leaving the page and
+            // pins the page instance in memory.
+            _timer.Stop();
+        }
+
         // ---- Telegram proxy -------------------------------------------------
 
         private static int TgPort()
@@ -247,19 +254,83 @@ private void BtnTgOpen_Click(object sender, RoutedEventArgs e)
             }
         }
 
-private void Refresh()
+        /// <summary>Everything the dashboard shows, collected off the UI thread.
+        /// SCM/WMI service queries cost tens of milliseconds each; doing them in
+        /// the tick handler is what used to make the page stutter every second.
+        /// </summary>
+        private sealed class DashSnapshot
         {
+            public string Root;
+            public StatusSnapshot Status;
+            public System.Collections.Generic.List<string> Remembered;
+            public bool AutoOn;
+            public bool AutoApply;
+        }
+
+        private bool _refreshing;
+
+        private void Refresh()
+        {
+            // Skip if the previous snapshot has not landed yet: the timer must
+            // never queue a second blocking read while one is in flight.
+            if (_refreshing) return;
+            _refreshing = true;
             string configured = Config.Get("zapretRoot", null);
-            string root = Status.ResolveRoot(configured);
-            var st = Status.GetStatus(root);
+
+            System.Threading.Tasks.Task.Run(() =>
+            {
+                var root = Status.ResolveRoot(configured);
+                return new DashSnapshot
+                {
+                    Root = root,
+                    Status = Status.GetStatus(root),
+                    Remembered = AutoConnect.KnownWorking(),
+                    AutoOn = AutoStart.IsEnabled(),
+                    AutoApply = AutoStart.AutoApplyEnabled(),
+                };
+            }).ContinueWith(t =>
+            {
+                _refreshing = false;
+                if (t.Status != System.Threading.Tasks.TaskStatus.RanToCompletion) return;
+                var snap = t.Result;
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    try { ApplySnapshot(snap); }
+                    catch (Exception ex)
+                    {
+                        // One bad frame must never freeze the whole page silently.
+                        Logger.Warn("Refresh не выполнен: " + ex.Message, "panel");
+                    }
+                }));
+            });
+        }
+
+        private void ApplySnapshot(DashSnapshot snap)
+        {
+            string root = snap.Root;
+            var st = snap.Status;
 
             bool on = st.activeMode != "off";
             PowerState.Text = on
                 ? "Включён · " + (st.serviceStrategy ?? "текущая стратегия")
                 : "Выключен — обход не активен";
+            PowerState.Foreground = on
+                ? (System.Windows.Media.Brush)FindResource("OkBrush")
+                : (System.Windows.Media.Brush)FindResource("ErrBrush");
+            // The whole card carries the state: green border + glow when the
+            // bypass is up, red when it is down. You do not need to read
+            // anything to know whether it works.
+            BypassCard.BorderBrush = on
+                ? (System.Windows.Media.Brush)FindResource("OkBrush")
+                : (System.Windows.Media.Brush)FindResource("ErrBrush");
+            BypassCard.Effect = (System.Windows.Media.Effects.Effect)FindResource(on ? "GlowOk" : "GlowErr");
             SwitchTrack.Background = on
-                ? (System.Windows.Media.Brush)FindResource("AccentBrush")
-                : (System.Windows.Media.Brush)FindResource("BorderBrush2");
+                ? (System.Windows.Media.Brush)FindResource("OkBrush")
+                : (System.Windows.Media.Brush)FindResource("BgHoverBrush");
+            // FindResource(null) throws — and this Refresh dies mid-way, leaving
+            // every tile frozen on the values from before the switch. "Off"
+            // simply has no glow.
+            SwitchTrack.Effect = on ? (System.Windows.Media.Effects.Effect)FindResource("GlowOk") : null;
             Knob.HorizontalAlignment = on ? HorizontalAlignment.Right : HorizontalAlignment.Left;
             Knob.Margin = on ? new Thickness(4, 0, 4, 0) : new Thickness(4, 0, 0, 0);
             Knob.Fill = on
@@ -267,25 +338,39 @@ private void Refresh()
                 : (System.Windows.Media.Brush)FindResource("TextDimBrush");
 
             StatStrategy.Text = string.IsNullOrEmpty(st.serviceStrategy) ? "—" : st.serviceStrategy;
+            SetTile(TileStrategy, string.IsNullOrEmpty(st.serviceStrategy) ? "idle" : "ok");
             StatMode.Text = st.activeMode == "service" ? "Служба Windows"
                 : st.activeMode == "process" ? "Процесс" : "—";
+            SetTile(TileMode, st.activeMode == "service" ? "ok" : st.activeMode == "process" ? "warn" : "idle");
+
             StatZapret.Text = Describe(st.service);
+            SetTile(TileZapret, ServiceTileState(st.service));
+
             StatWinDivert.Text = st.winDivert == null ? "Нет службы" : Describe(st.winDivert);
+            SetTile(TileWinDivert, st.winDivert == null ? "err" : ServiceTileState(st.winDivert));
+
             StatWinws.Text = st.winwsProcess ? "Запущен" : "Не запущен";
+            SetTile(TileWinws, st.winwsProcess ? "ok" : "err");
             StatWinwsPath.Text = st.winwsProcessPath ?? "";
             StatRoot.Text = string.IsNullOrEmpty(root) ? "не найдена" : root;
+            SetTile(TileRoot, string.IsNullOrEmpty(root) ? "err" : "ok");
 
-            var remembered = AutoConnect.KnownWorking();
+            var remembered = snap.Remembered;
             StatRemembered.Text = remembered.Count == 0
                 ? "не запомнено"
                 : System.IO.Path.GetFileName(remembered[0]);
+            SetTile(TileRemembered, remembered.Count == 0 ? "idle" : "ok");
 
-            StatAutostart.Text = AutoStart.IsEnabled()
-                ? (AutoStart.AutoApplyEnabled() ? "включён" : "только панель")
+            StatAutostart.Text = snap.AutoOn
+                ? (snap.AutoApply ? "включён" : "только панель")
                 : "выключен";
+            SetTile(TileAutostart, snap.AutoOn ? (snap.AutoApply ? "ok" : "warn") : "idle");
 
             
             TgState.Text = TgProxy.Running ? "Включён" : "Выключен";
+            TgState.Foreground = TgProxy.Running
+                ? (System.Windows.Media.Brush)FindResource("OkBrush")
+                : (System.Windows.Media.Brush)FindResource("TextDimBrush");
             // The toggle must show what the next click will DO. A button that
             // keeps saying "Запустить" while the proxy is running looks broken.
             BtnTgToggle.Content = TgProxy.Running ? "Остановить" : "Запустить";
@@ -296,6 +381,23 @@ private void Refresh()
                   + " · вниз: " + Human(TgProxy.Stats.bytesDown)
                 : string.Empty;
             TgLink.Text = TgProxy.ProxyLink();
+        }
+
+        /// <summary>
+        /// Apply a status tile style: ok/warn/err carry border + tint + glow,
+        /// idle is the plain card. One line per tile keeps the state story
+        /// readable in code as well as on screen.
+        /// </summary>
+        private void SetTile(System.Windows.Controls.Border tile, string state)
+        {
+            var name = "Tile" + char.ToUpperInvariant(state[0]) + state.Substring(1);
+            if (TryFindResource(name) is Style style) tile.Style = style;
+        }
+
+        private static string ServiceTileState(ServiceInfoView service)
+        {
+            if (service == null || !service.exists) return "err";
+            return service.running ? "ok" : "warn";
         }
 
         private static string Describe(ServiceInfoView service)
@@ -339,12 +441,17 @@ if (string.IsNullOrEmpty(root))
         PowerState.Text = "zapret установлен, подключаю обход…";
     }
                 var result = await System.Threading.Tasks.Task.Run(() => AutoConnect.Connect(root,
-                    msg => Dispatcher.Invoke(() =>
+                    msg => Dispatcher.BeginInvoke(new Action(() =>
                     {
                         PowerState.Text = msg;
                         BusyText.Text = msg;
-                    }), null));
+                    })), null));
                 PowerState.Text = DescribeResult(result);
+            }
+            catch (Exception ex)
+            {
+                // async void: an unhandled exception here crashes the whole app.
+                PowerState.Text = "Ошибка подбора: " + ex.Message;
             }
             finally
             {
@@ -394,6 +501,10 @@ if (string.IsNullOrEmpty(root))
                     Services.ServiceOps.StartService();
                 });
             }
+            catch (Exception ex)
+            {
+                PowerState.Text = "Ошибка перезапуска: " + ex.Message;
+            }
             finally
             {
                 SetBusy(false);
@@ -413,6 +524,10 @@ if (string.IsNullOrEmpty(root))
                     Services.ServiceOps.StopService();
                 });
             }
+            catch (Exception ex)
+            {
+                PowerState.Text = "Ошибка остановки: " + ex.Message;
+            }
             finally
             {
                 SetBusy(false);
@@ -420,10 +535,11 @@ if (string.IsNullOrEmpty(root))
             }
         }
 
-        /// <summary>Thread-safe step text update for the busy panel.</summary>
+        /// <summary>Thread-safe step text update for the busy panel. BeginInvoke:
+        /// the producer (a background job) must never wait for the UI frame.</summary>
         private void SetBusyText(string text)
         {
-            Dispatcher.Invoke(() => BusyText.Text = text);
+            Dispatcher.BeginInvoke(new Action(() => BusyText.Text = text));
         }
 
         /// <summary>Jump to a section from the quick-actions card.</summary>
@@ -465,6 +581,7 @@ if (string.IsNullOrEmpty(root))
 
         private async void BtnVerify_Click(object sender, RoutedEventArgs e)
         {
+            if (_busy) return;
             QuickNote.Text = "Проверяю текущий обход…";
             string root = Status.ResolveRoot(Config.Get("zapretRoot", null));
             if (string.IsNullOrEmpty(root))
@@ -472,10 +589,25 @@ if (string.IsNullOrEmpty(root))
                 QuickNote.Text = "Не найдена папка zapret.";
                 return;
             }
-            var verify = await System.Threading.Tasks.Task.Run(() => Tester.VerifyStrategy(root, attempts: 1));
-            QuickNote.Text = verify.ok
-                ? "Обход работает: Discord и YouTube отвечают."
-                : "Обход не отвечает (проверена одна попытка).";
+            // A verify run touches the same service the connect/restart buttons
+            // manage, so it has to respect the same busy lock.
+            SetBusy(true, "Проверяю текущий обход…");
+            try
+            {
+                var verify = await System.Threading.Tasks.Task.Run(() => Tester.VerifyStrategy(root, attempts: 1));
+                QuickNote.Text = verify.ok
+                    ? "Обход работает: Discord и YouTube отвечают."
+                    : "Обход не отвечает (проверена одна попытка).";
+            }
+            catch (Exception ex)
+            {
+                QuickNote.Text = "Ошибка проверки: " + ex.Message;
+            }
+            finally
+            {
+                SetBusy(false);
+                Refresh();
+            }
         }
     }
 }

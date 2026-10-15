@@ -4,7 +4,7 @@
              Loaded="Page_Loaded">
     <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,10,0">
     <StackPanel>
-        <TextBlock Text="Поддержать проект" FontSize="20" FontWeight="Bold" />
+        <TextBlock Text="Поддержать проект" Style="{StaticResource SectionTitle}" />
         <TextBlock Style="{StaticResource Dim}" Margin="0,4,0,14" TextWrapping="Wrap"
                    Text="Панель бесплатная и без рекламы. Если она оказалась полезной — можно отправить помощь на любой кошелёк ниже. Каждый адрес копируется кнопкой." />
 

@@ -34,6 +34,9 @@ namespace Ydp.Services
                 ContextMenuStrip = menu,
             };
             _icon.DoubleClick += (s, e) => Show();
+            // A click on an update balloon should bring the panel up: that is
+            // where the "Обновить" button lives.
+            _icon.BalloonTipClicked += (s, e) => Show();
         }
 
         private static Icon LoadIcon()

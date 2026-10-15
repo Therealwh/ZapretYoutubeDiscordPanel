@@ -128,18 +128,29 @@ namespace Ydp.Services
             var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
             do
             {
-                using (var controller = OpenController(name))
+                // The entry can vanish mid-wait (deleted between polls): Refresh
+                // then throws InvalidOperationException, which must not escape
+                // into an async void caller and crash the app. A vanished entry
+                // is treated as STOPPED.
+                ServiceControllerStatus current;
+                try
                 {
-                    // A missing service counts as STOPPED.
-                    if (controller == null) return target == ServiceControllerStatus.Stopped;
-                    controller.Refresh();
-                    if (controller.Status == target) return true;
-                    // It fell back to STOPPED while we were waiting for it to come
-                    // up: it died, so stop polling instead of burning the timeout.
-                    if (target == ServiceControllerStatus.Running && controller.Status == ServiceControllerStatus.Stopped)
+                    using (var controller = OpenController(name))
                     {
-                        return false;
+                        if (controller == null) return target == ServiceControllerStatus.Stopped;
+                        controller.Refresh();
+                        current = controller.Status;
                     }
+                }
+                catch (InvalidOperationException) { return target == ServiceControllerStatus.Stopped; }
+                catch { current = ServiceControllerStatus.Stopped; }
+
+                if (current == target) return true;
+                // It fell back to STOPPED while we were waiting for it to come
+                // up: it died, so stop polling instead of burning the timeout.
+                if (target == ServiceControllerStatus.Running && current == ServiceControllerStatus.Stopped)
+                {
+                    return false;
                 }
                 if (DateTime.UtcNow > deadline) return false;
                 Thread.Sleep(300);
@@ -152,13 +163,27 @@ namespace Ydp.Services
             catch { return null; }
         }
 
-        /// <summary>Poll until the service can no longer be opened (deleted for good).</summary>
+        /// <summary>
+        /// Poll until the SCM entry is really gone.
+        ///
+        /// new ServiceController(name) never fails for a missing service — it
+        /// only throws when you touch it — so the old "OpenController == null"
+        /// check returned instantly and the wait never waited.
+        /// </summary>
         private static bool WaitServiceGone(string name, int timeoutMs)
         {
             var deadline = DateTime.UtcNow.AddMilliseconds(timeoutMs);
             do
             {
-                if (OpenController(name) == null) return true;
+                try
+                {
+                    using (var sc = new ServiceController(name))
+                    {
+                        _ = sc.Status; // throws InvalidOperationException when gone
+                    }
+                }
+                catch (InvalidOperationException) { return true; }
+                catch { /* transient SCM error: treat as still present */ }
                 if (DateTime.UtcNow > deadline) return false;
                 Thread.Sleep(300);
             } while (true);
@@ -196,8 +221,11 @@ namespace Ydp.Services
         /// </summary>
         public static bool IsWinwsRunning()
         {
-            try { return System.Diagnostics.Process.GetProcessesByName("winws").Length > 0; }
+            Process[] list = null;
+            try { list = System.Diagnostics.Process.GetProcessesByName("winws"); }
             catch { return false; }
+            finally { if (list != null) foreach (var p in list) p.Dispose(); }
+            return list != null && list.Length > 0;
         }
 
         public static bool WaitWinws(bool absent, int timeoutMs = 10000)
@@ -212,7 +240,7 @@ namespace Ydp.Services
             } while (true);
         }
 
-        /// <summary>Kill every winws.exe (was taskkill /IM winws.exe /F).</summary>
+        /// <summary>Kill every winws.exe and its children (was taskkill /IM winws.exe /F).</summary>
         public static bool KillWinws()
         {
             bool any = false;
@@ -222,8 +250,28 @@ namespace Ydp.Services
                 try { procs = Process.GetProcessesByName(name); } catch { continue; }
                 foreach (var p in procs)
                 {
-                    try { p.Kill(); any = true; } catch { /* already gone */ }
-                    finally { p.Dispose(); }
+                    // A bare Kill leaves the process tree alive; anything the
+                    // winws spawned would keep holding WinDivert open and make
+                    // the next service start die with exit code 1.
+                    try
+                    {
+                        var psi = new ProcessStartInfo("taskkill.exe", "/PID " + p.Id + " /T /F")
+                        {
+                            UseShellExecute = false,
+                            CreateNoWindow = true,
+                        };
+                        using (var tk = Process.Start(psi))
+                        {
+                            tk?.WaitForExit(5000);
+                        }
+                    }
+                    catch { /* fall back below */ }
+                    try { p.Kill(); } catch { /* already gone */ }
+                    finally
+                    {
+                        any = true;
+                        p.Dispose();
+                    }
                 }
             }
             return any;
@@ -436,6 +484,11 @@ namespace Ydp.Services
                     WindowStyle = ProcessWindowStyle.Hidden,
                 };
                 if (!elevated) startInfo.Verb = "runas";
+                // The non-elevated runas path may flash a brief console frame:
+                // CreateNoWindow is ignored under ShellExecute, and a console
+                // app re-elevated through UAC gets a fresh console of its own.
+                // With an elevated panel (the normal case) the
+                // UseShellExecute=false path above hides it completely.
                 Process process = Process.Start(startInfo);
                 if (process == null) return new OperationResult { ok = false, reason = "launch_failed" };
                 process.Dispose();

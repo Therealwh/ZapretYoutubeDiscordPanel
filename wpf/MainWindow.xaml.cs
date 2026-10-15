@@ -24,6 +24,7 @@ namespace Ydp
         public MainWindow()
         {
             InitializeComponent();
+            VersionBadge.Text = "v" + System.Reflection.Assembly.GetExecutingAssembly().GetName().Version.ToString(3);
             // `--page=strategies` opens straight into a section (used by autostart
             // flows and when the user wants to jump back to a specific screen).
             string start = null;
@@ -31,8 +32,10 @@ namespace Ydp
             {
                 if (arg.StartsWith("--page=", StringComparison.OrdinalIgnoreCase)) start = arg.Substring(7);
             }
-Navigate(start ?? "dashboard");
+            Navigate(start ?? "dashboard");
             UpdateFooter();
+            StartUpdateCheck();
+            EnsureTelegramDomains();
 
             // Minimizing goes to the tray instead of the taskbar: the panel is a
             // background tool that stays resident while the bypass runs, and the
@@ -63,6 +66,15 @@ Navigate(start ?? "dashboard");
         {
             try
             {
+                // Keep the sidebar in sync: --page=diagnostics (and Nav_Click from
+                // the quick-actions card) used to swap the page while the radio
+                // stayed on the previous section.
+                var nav = FindName("Nav" + char.ToUpperInvariant(tag[0]) + tag.Substring(1)) as System.Windows.Controls.RadioButton;
+                if (nav != null && !nav.IsChecked.Value)
+                {
+                    nav.IsChecked = true;
+                    return; // Nav_Checked re-enters Navigate
+                }
                 switch (tag)
                 {
                     case "strategies":
@@ -166,6 +178,83 @@ case "settings":
             if (item == null || !item.IsChecked.Value) return;
             Navigate(item.Tag as string ?? "dashboard");
             UpdateFooter();
+        }
+
+        // ---- update offer -----------------------------------------------------
+
+        /// <summary>
+        /// The panel's Telegram domains belong in the user hostlist at all times,
+        /// not only right after an engine install: an update or a fresh
+        /// *-user.txt can drop them, and Telegram quietly stops working. The
+        /// call is idempotent and writes only when something is missing.
+        /// </summary>
+        private void EnsureTelegramDomains()
+        {
+            System.Threading.Tasks.Task.Run(() =>
+            {
+                var root = Status.ResolveRoot(Config.Get("zapretRoot", null));
+                if (string.IsNullOrEmpty(root)) return;
+                int added = Zapret.FirstRun.EnsureTelegramDomains(root);
+                if (added > 0) Logger.Info("Дописано доменов Telegram в список: " + added, "lists");
+            });
+        }
+
+        /// <summary>
+        /// Check GitHub for a newer release in the background and, if there is
+        /// one, offer the update twice: a tray balloon (visible even when the
+        /// panel is folded away) and a banner at the top of the window.
+        /// </summary>
+        private void StartUpdateCheck()
+        {
+            System.Threading.Tasks.Task.Run(() => PanelUpdater.Check())
+                .ContinueWith(t =>
+                {
+                    if (t.Status != System.Threading.Tasks.TaskStatus.RanToCompletion) return;
+                    var info = PanelUpdater.State;
+                    if (!info.available) return;
+                    Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        UpdateTitle.Text = "Доступна новая версия панели — v" + info.latest;
+                        UpdateDetails.Text = "У вас v" + info.current + ". Обновление заменит файл панели и перезапустит её автоматически.";
+                        UpdateBanner.Visibility = Visibility.Visible;
+                        App.Tray?.Notify("Доступно обновление панели v" + info.latest,
+                            "Сейчас у вас v" + info.current + ". Откройте панель и нажмите «Обновить».");
+                        Logger.Info("Найдено обновление панели: v" + info.current + " → v" + info.latest, "updater");
+                    }));
+                });
+        }
+
+        private async void BtnUpdateNow_Click(object sender, RoutedEventArgs e)
+        {
+            BtnUpdateNow.IsEnabled = false;
+            UpdateTitle.Text = "Скачиваю обновление…";
+            UpdateDetails.Text = "Панель перезапустится автоматически после установки.";
+            var result = await System.Threading.Tasks.Task.Run(() => PanelUpdater.Install());
+            if (result.ok)
+            {
+                App.Tray?.Notify("Обновление установлено", "Панель сейчас перезапустится на v" + result.message + ".");
+                Logger.Info("Обновление применено, перезапуск", "updater");
+                System.Threading.Thread.Sleep(800);
+                Application.Current.Shutdown();
+                return;
+            }
+            UpdateTitle.Text = "Не удалось обновить";
+            UpdateDetails.Text = result.reason == "no_update"
+                ? "Обновление не найдено — попробуйте позже или скачайте с GitHub вручную."
+                : "Ошибка: " + (result.message ?? result.reason ?? "?") + ". Скачайте вручную: " + PanelUpdater.State.url;
+            BtnUpdateNow.IsEnabled = true;
+        }
+
+        private void BtnWhatsNew_Click(object sender, RoutedEventArgs e)
+        {
+            var url = PanelUpdater.State.url;
+            if (!string.IsNullOrEmpty(url))
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true });
+        }
+
+        private void BtnBannerClose_Click(object sender, RoutedEventArgs e)
+        {
+            UpdateBanner.Visibility = Visibility.Collapsed;
         }
     }
 }

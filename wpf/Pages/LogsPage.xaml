@@ -36,7 +36,36 @@
                       HorizontalGridLinesBrush="Transparent" VerticalGridLinesBrush="Transparent">
                 <DataGrid.Columns>
                     <DataGridTextColumn Header="Время" Width="80" Binding="{Binding ts}" />
-                    <DataGridTextColumn Header="Уровень" Width="80" Binding="{Binding level}" />
+                    <DataGridTextColumn Header="Уровень" Width="80" Binding="{Binding level}">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="FontWeight" Value="SemiBold" />
+                                <Setter Property="Foreground" Value="{StaticResource TextDimBrush}" />
+                                <Style.Triggers>
+                                    <!-- Logger writes lowercase; match both cases so a
+                                         future upper-case writer is covered too. -->
+                                    <DataTrigger Binding="{Binding level}" Value="info">
+                                        <Setter Property="Foreground" Value="{StaticResource OkBrush}" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding level}" Value="INFO">
+                                        <Setter Property="Foreground" Value="{StaticResource OkBrush}" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding level}" Value="warn">
+                                        <Setter Property="Foreground" Value="{StaticResource WarnBrush}" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding level}" Value="WARN">
+                                        <Setter Property="Foreground" Value="{StaticResource WarnBrush}" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding level}" Value="error">
+                                        <Setter Property="Foreground" Value="{StaticResource ErrBrush}" />
+                                    </DataTrigger>
+                                    <DataTrigger Binding="{Binding level}" Value="ERROR">
+                                        <Setter Property="Foreground" Value="{StaticResource ErrBrush}" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
                     <DataGridTextColumn Header="Источник" Width="120" Binding="{Binding source}" />
                     <DataGridTextColumn Header="Сообщение" Width="*" Binding="{Binding msg}" />
                 </DataGrid.Columns>

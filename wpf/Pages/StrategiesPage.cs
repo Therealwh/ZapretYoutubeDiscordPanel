@@ -205,8 +205,18 @@ private async void BtnTest_Click(object sender, RoutedEventArgs e)
             // Start a fresh report: the list accumulates during the run.
             _runs.Clear();
             _tested = 0;
+            // A "keep connected" flag left over from the previous sweep makes the
+            // next abort keep a half-verified bypass running and shows a stale
+            // status. Every sweep starts from a clean slate.
+            _keepConnected = false;
+            _pendingConnectFile = null;
+            _pendingConnectName = null;
             ProbeList.ItemsSource = _runs;
             var known = AutoConnect.KnownWorking();
+            // Clear the abort flag here, on the UI thread, before the sweep task
+            // is scheduled: the stop button becomes live with SetBusy above, and
+            // a click landing before the method body ran used to be wiped.
+            Tester.ResetAbort();
             // Which targets answer with no bypass at all: a green dot next to one
             // of those proves nothing, and the report has to say so instead of
             // letting it look like the strategy did the work.
@@ -227,27 +237,36 @@ private async void BtnTest_Click(object sender, RoutedEventArgs e)
             // bypass state and made every config look identical.
             _sweepRunning = true;
             var sweep = await System.Threading.Tasks.Task.Run(() => Tester.RunOriginalTester(_root,
-                line => Dispatcher.Invoke(() =>
+                // BeginInvoke: the tester prints hundreds of lines; a blocking
+                // Invoke per line would stall the sweep on every UI frame.
+                line => Dispatcher.BeginInvoke(new Action(() =>
                 {
                     var text = line == null ? "" : line.Trim();
                     if (text.Length > 0 && !text.StartsWith("[OK]") && !text.StartsWith("[INFO]"))
                         StatusNote.Text = text.Length > 160 ? text.Substring(0, 160) : text;
-                }),
-                (run, i, total) => Dispatcher.Invoke(() => ShowRun(run, i, total))));
-            _sweepRunning = false;
+                })),
+                (run, i, total) => Dispatcher.BeginInvoke(new Action(() => ShowRun(run, i, total)))));
 
-            // The report file is written at the very end, so the rows appear
-            // once, together — same as reading the tester's own console output.
-
-            // The sweep is over and nothing of it will touch the bypass again, so
-            // now it is safe to install what the user asked for.
+            // Keep _sweepRunning true through the pending-connect and abort
+            // handling: a "Подключить сейчас" click landing in this window used
+            // to take the else branch and install its service in parallel with
+            // the abort cleanup's ResetBypass, which could delete what it just
+            // installed.
+            var pendingHandled = false;
             if (!string.IsNullOrEmpty(_pendingConnectFile))
             {
                 await ConnectPending();
                 await System.Threading.Tasks.Task.Yield();
                 Reload();
-                return;
+                pendingHandled = true;
             }
+            _sweepRunning = false;
+            if (pendingHandled) return;
+
+            // The report file is written at the very end, so the rows appear
+            // once, together — same as reading the tester's own console output.
+
+            // Nothing of the sweep will touch the bypass again from here on.
 
             if (sweep.aborted)
             {
@@ -322,9 +341,6 @@ private async void BtnTest_Click(object sender, RoutedEventArgs e)
 
         private readonly ObservableCollection<RunRow> _runs = new ObservableCollection<RunRow>();
         private int _tested;
-        
-        /// <summary>What the targets answered with no bypass, shown in the header.</summary>
-        private string sweepNote;
 
         /// <summary>Set when the user connected a strategy, so abort must not stop it.</summary>
         private bool _keepConnected;
@@ -360,9 +376,6 @@ private async void BtnTest_Click(object sender, RoutedEventArgs e)
             SetBusy(false, "Подключено: " + name + " (служба Windows, автозапуск)");
         }
 
-        /// <summary>Targets that answered before the sweep, i.e. prove nothing.</summary>
-        private readonly HashSet<string> _baselineOk = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-
         /// <summary>
         /// "Подключить сейчас" on a strategy that passed: stop the sweep and make
         /// this one the live bypass. The sweep would otherwise keep testing and
@@ -392,6 +405,10 @@ private async void BtnTest_Click(object sender, RoutedEventArgs e)
 
             _pendingConnectFile = file;
             _pendingConnectName = name;
+            // No sweep is running, so this installs immediately. Without the busy
+            // lock a second click on Apply/Auto/Connect during the install would
+            // run a parallel install against the same service name.
+            SetBusy(true, "Подключаю " + name + "…");
             await ConnectPending();
         }
 
