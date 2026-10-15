@@ -491,12 +491,13 @@ private async void BtnTest_Click(object sender, RoutedEventArgs e)
                 Name = run.name,
                 Ok = ok,
                 DotState = dotState,
-                Expanded = true,
+                // Collapsed by default — during the test and after it. The
+                // header (dot, name, verdict, connect button) is always visible;
+                // the per-target table opens on click. Live per-line output is
+                // still visible in the status bar while the config runs.
+                Expanded = false,
                 Verdict = verdict,
             };
-            // The one being tested stays open; the rest fold away so the report
-            // stays readable while it grows.
-            foreach (var previous in _runs) previous.Expanded = false;
             row.Toggle = () => row.Expanded = !row.Expanded;
             // Only a fully measured strategy can be connected: the partial run of an
             // aborted sweep is a truncated score, not evidence that it works.
