@@ -72,6 +72,64 @@ namespace Ydp.Zapret
             return !string.Equals(value, "false", StringComparison.OrdinalIgnoreCase);
         }
 
+        /// <summary>
+        /// Bring the bypass up from a remembered strategy instead of re-running
+        /// the whole search.
+        ///
+        /// The power switch on the dashboard used to call the full sweep on every
+        /// ON, so a user with a perfectly good remembered strategy still watched
+        /// the toggle stay off for minutes while all 22 configs were probed.
+        /// This installs the remembered strategy (last winner first, then the
+        /// other known-good files), confirms it with ONE quick probe, and returns
+        /// as soon as it works. If nothing remembered works any more the bypass
+        /// is torn down and null is returned, so the caller falls back to the
+        /// full search.
+        /// </summary>
+        private static ConnectResult TryRememberedFirst(string rootDir, Action<string> log)
+        {
+            var candidates = new List<string>();
+            var last = LastWinner();
+            if (last != null) candidates.Add(last);
+            foreach (var f in KnownWorking())
+                if (!candidates.Contains(f, StringComparer.OrdinalIgnoreCase)) candidates.Add(f);
+            if (candidates.Count == 0) return null;
+
+            foreach (var file in candidates)
+            {
+                string label = Path.GetFileNameWithoutExtension(file);
+                log?.Invoke("Пробую запомненную стратегию: " + label);
+                var applied = PreferService()
+                    ? ServiceOps.InstallStrategyAsService(rootDir, file)
+                    : ServiceOps.LaunchStrategyProcess(rootDir, file);
+                if (!applied.ok) continue;
+
+                // Installed means winws came up, not that it actually bypasses;
+                // one short probe is the difference between "on" and "on but
+                // still blocked".
+                var verify = Tester.VerifyStrategy(rootDir, attempts: 1, timeoutSec: 5);
+                if (verify.ok)
+                {
+                    Config.Set(KeyLastWinner, file);
+                    Config.Set("processStrategyName", Path.GetFileName(file));
+                    RememberWorking(file);
+                    return new ConnectResult
+                    {
+                        ok = true,
+                        strategy = label,
+                        mode = applied.mode,
+                        candidatesTried = 1,
+                    };
+                }
+
+                // This one no longer works on this network: drop it and keep
+                // going, so a stale memory never leaves the bypass half-up.
+                ServiceOps.KillWinws();
+                ServiceOps.StopService();
+                log?.Invoke(label + " больше не подходит — ищу лучше");
+            }
+            return null;
+        }
+
         public static ConnectResult Connect(string rootDir, Action<string> log, Action<Tester.StrategyRunResult, int, int> progress)
         {
             var result = new ConnectResult();
@@ -95,7 +153,16 @@ namespace Ydp.Zapret
                 ServiceOps.StopService();
             }
 
-            // 2. Search, remembering what worked before.
+            // 2. Try the remembered strategy FIRST, without running the sweep.
+            // The power switch used to re-search every strategy on every ON,
+            // even when a good one was already remembered - the switch sat
+            // "off" for minutes while it probed all 22 configs. Apply the
+            // remembered one directly, confirm it with a single quick probe,
+            // and only fall through to the full search if it no longer works.
+            var fast = TryRememberedFirst(rootDir, log);
+            if (fast != null) return fast;
+
+            // 3. Search, remembering what worked before.
             var known = KnownWorking();
             var sweep = Tester.RunStrategyTests(rootDir, known, stopOnFirst: true, onProgress: progress);
 
