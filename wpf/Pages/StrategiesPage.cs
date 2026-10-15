@@ -320,6 +320,18 @@ private async void BtnTest_Click(object sender, RoutedEventArgs e)
             Reload();
         }
 
+        /// <summary>И ICommand, потому что Command биндится только к нему —
+        /// Action в этом свойстве молча не срабатывал, и карточки не раскрывались.</summary>
+        public sealed class DelegateCommand : System.Windows.Input.ICommand
+        {
+            private readonly Action _execute;
+            // CanExecuteChanged is never raised: the command is always enabled.
+            public event EventHandler CanExecuteChanged { add { } remove { } }
+            public DelegateCommand(Action execute) { _execute = execute; }
+            public bool CanExecute(object parameter) { return true; }
+            public void Execute(object parameter) { _execute?.Invoke(); }
+        }
+
         /// <summary>
         /// One tested strategy in the running report.
         /// </summary>
@@ -344,7 +356,7 @@ private async void BtnTest_Click(object sender, RoutedEventArgs e)
             private bool _expanded;
 
             /// <summary>Header is a toggle, so a finished strategy folds away.</summary>
-            public Action Toggle { get; set; }
+            public System.Windows.Input.ICommand ToggleCmd { get; set; }
 
             public ObservableCollection<ProbeRow> Targets { get; set; } = new ObservableCollection<ProbeRow>();
 
@@ -498,7 +510,7 @@ private async void BtnTest_Click(object sender, RoutedEventArgs e)
                 Expanded = false,
                 Verdict = verdict,
             };
-            row.Toggle = () => row.Expanded = !row.Expanded;
+            row.ToggleCmd = new DelegateCommand(() => row.Expanded = !row.Expanded);
             // Only a fully measured strategy can be connected: the partial run of an
             // aborted sweep is a truncated score, not evidence that it works.
             row.Connect = row.Ok ? (Action)(() => ConnectNow(run.file, run.name)) : null;

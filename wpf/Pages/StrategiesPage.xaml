@@ -112,9 +112,9 @@
                         <DataTemplate>
                             <StackPanel Margin="0,0,0,12">
                                 <!-- Header doubles as the spoiler toggle: click a finished strategy to fold it. -->
-                                <ToggleButton Style="{StaticResource SpoilerHeader}" Cursor="Hand"
-                                              IsChecked="{Binding Expanded, Mode=OneWay}"
-                                              Command="{Binding Toggle}">
+                                    <ToggleButton Style="{StaticResource SpoilerHeader}" Cursor="Hand"
+                                                  IsChecked="{Binding Expanded, Mode=OneWay}"
+                                                  Command="{Binding ToggleCmd}">
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="Auto" />
@@ -141,8 +141,24 @@
                                         <StackPanel Grid.Column="2" Orientation="Horizontal"
                                                     VerticalAlignment="Center" Margin="8,0,0,0">
                                             <TextBlock Text="{Binding Verdict}" Style="{StaticResource Dim}" VerticalAlignment="Center" />
+                                            <!-- Open/close the per-target table for THIS row:
+                                                 explicit button, because header clicks are easy to miss. -->
+                                            <Button Margin="10,0,0,0" Padding="10,4" FontSize="12"
+                                                    Command="{Binding ToggleCmd}"
+                                                    ToolTip="Показать или скрыть пробы по каждой цели">
+                                                <Button.Style>
+                                                    <Style TargetType="Button" BasedOn="{StaticResource Btn}">
+                                                        <Setter Property="Content" Value="Открыть" />
+                                                        <Style.Triggers>
+                                                            <DataTrigger Binding="{Binding Expanded}" Value="True">
+                                                                <Setter Property="Content" Value="Скрыть" />
+                                                            </DataTrigger>
+                                                        </Style.Triggers>
+                                                    </Style>
+                                                </Button.Style>
+                                            </Button>
                                             <Button Content="Подключить сейчас" Style="{StaticResource BtnPrimary}"
-                                                    Margin="10,0,0,0" Padding="10,4" FontSize="12"
+                                                    Margin="8,0,0,0" Padding="10,4" FontSize="12"
                                                     Command="{Binding Connect}"
                                                     Visibility="{Binding CanConnect, Converter={StaticResource BoolToVis}}"
                                                     ToolTip="Остановить проверку и включить обход этой стратегией" />
