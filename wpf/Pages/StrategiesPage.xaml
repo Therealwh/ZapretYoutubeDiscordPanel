@@ -28,10 +28,81 @@
         <TextBlock Style="{StaticResource Dim}" Margin="0,0,0,10" TextWrapping="Wrap"
                    Text="Внимание: проверка может занять продолжительное время. Каждая стратегия запускается с нуля — сначала полностью останавливается текущая, затем запускается проверяемая, — поэтому результат честный и не наследуется от предыдущей стратегии. Способ запуска такой же, как у zapret: как при двойном клике по general*.bat. Рабочая стратегия потом ставится в автозапуск как служба отдельной кнопкой. Проверку можно прервать кнопкой «Остановить проверку»." />
 
+        <!-- Итоговая таблица: компактный список всех конфигураций после теста.
+             Детальные карточки ниже остаются раскрытыми/свёрнутыми как есть. -->
+        <Border x:Name="SummaryPanel" Style="{StaticResource Card}" Padding="14,12" Margin="0,0,0,12"
+                Visibility="Collapsed">
+            <StackPanel>
+                <TextBlock Style="{StaticResource H1}" Text="Итоговая таблица" />
+                <ItemsControl x:Name="SummaryList" Margin="0,8,0,0">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Margin="0,3">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="2*" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Ellipse Grid.Column="0" Width="7" Height="7" VerticalAlignment="Center" Margin="0,0,8,0">
+                                    <Ellipse.Style>
+                                        <Style TargetType="Ellipse">
+                                            <Setter Property="Fill" Value="{StaticResource ErrBrush}" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding State}" Value="ok">
+                                                    <Setter Property="Fill" Value="{StaticResource OkBrush}" />
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding State}" Value="warn">
+                                                    <Setter Property="Fill" Value="{StaticResource WarnBrush}" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Ellipse.Style>
+                                </Ellipse>
+                                <TextBlock Grid.Column="1" Text="{Binding Name}" Foreground="{StaticResource TextBrush}"
+                                           TextTrimming="CharacterEllipsis" />
+                                <TextBlock Grid.Column="2" Text="{Binding Counts}" FontFamily="Cascadia Code, Consolas" FontSize="11.5"
+                                           Foreground="{StaticResource TextDimBrush}" Margin="10,0,10,0" VerticalAlignment="Center" />
+                                <TextBlock Grid.Column="3" Text="{Binding Verdict}" VerticalAlignment="Center">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Foreground" Value="{StaticResource ErrBrush}" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding State}" Value="ok">
+                                                    <Setter Property="Foreground" Value="{StaticResource OkBrush}" />
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding State}" Value="warn">
+                                                    <Setter Property="Foreground" Value="{StaticResource WarnBrush}" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                                <TextBlock Grid.Column="4" HorizontalAlignment="Right" VerticalAlignment="Center"
+                                           Foreground="{StaticResource AccentBrush}" FontWeight="SemiBold" FontSize="12">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Text" Value="" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsWinner}" Value="True">
+                                                    <Setter Property="Text" Value="★ лучший по тестеру" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </Border>
+
         <!-- Cumulative results of the full sweep: one block per strategy, kept for
-             all of them. It used to be REPLACED on every step, so the panel
-             only ever showed the strategy being tested at that moment and the
-             finished ones vanished - which looked like the test had stuck. -->
+     all of them. It used to be REPLACED on every step, so the panel
+     only ever showed the strategy being tested at that moment and the
+     finished ones vanished - which looked like the test had stuck. -->
         <Border x:Name="ProbePanel" Style="{StaticResource Card}" Padding="14,12" Margin="0,0,0,12"
                 Visibility="Collapsed">
             <StackPanel>

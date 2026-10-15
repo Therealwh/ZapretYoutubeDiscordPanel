@@ -273,6 +273,12 @@ namespace Ydp.Zapret
             if (string.IsNullOrEmpty(exe)) return false;
             string subKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
             string current = Win.ReadRegistryString("HKCU", subKey, "YoutubeDiscordPanel");
+            // Respect the user's opt-out: the installer DELETES this value when
+            // autostart was declined at setup. Repairing a missing value here
+            // resurrected the entry on every start, which is exactly how
+            // "I unchecked autostart" turned into autostart being enabled.
+            // Only an EXISTING entry pointing elsewhere gets repaired.
+            if (string.IsNullOrEmpty(current)) return false;
             string wanted = "\"" + exe + "\" --autoconnect";
             if (string.Equals(current, wanted, StringComparison.OrdinalIgnoreCase)) return false;
 

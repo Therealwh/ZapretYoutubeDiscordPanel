@@ -432,7 +432,7 @@
     "C:\\Users\\LZT\\.nuget\\packages\\": {}
   },
   "project": {
-    "version": "2.0.0",
+    "version": "2.1.4",
     "restore": {
       "projectUniqueName": "C:\\Zapret_panel\\YoutubeDiscordPanel\\wpf\\setup\\Setup.csproj",
       "projectName": "YoutubeDiscordPanel-Setup",

@@ -273,7 +273,7 @@ private void BtnTgOpen_Click(object sender, RoutedEventArgs e)
         {
             // Skip if the previous snapshot has not landed yet: the timer must
             // never queue a second blocking read while one is in flight.
-            if (_refreshing) return;
+            if (_refreshing || _busy) return;
             _refreshing = true;
             string configured = Config.Get("zapretRoot", null);
 
@@ -421,6 +421,13 @@ private void BtnTgOpen_Click(object sender, RoutedEventArgs e)
             SetBusy(true, "Подбираю рабочую стратегию…");
             BtnStop.IsEnabled = false;
             PowerState.Text = "Подбираю рабочую стратегию…";
+            PowerState.Foreground = (System.Windows.Media.Brush)FindResource("WarnBrush");
+            // Pending look: amber track while the picker runs, so the switch
+            // reflects the operation instead of sitting grey for minutes.
+            SwitchTrack.Background = (System.Windows.Media.Brush)FindResource("WarnBrush");
+            SwitchTrack.Effect = (System.Windows.Media.Effects.Effect)FindResource("GlowWarn");
+            BypassCard.BorderBrush = (System.Windows.Media.Brush)FindResource("WarnSoftBrush");
+            BypassCard.Effect = (System.Windows.Media.Effects.Effect)FindResource("GlowWarn");
             string root = Status.ResolveRoot(Config.Get("zapretRoot", null));
             try
             {

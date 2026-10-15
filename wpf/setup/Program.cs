@@ -198,11 +198,30 @@ StopRunning();
             // The engine archive travels with the panel so a first install works
             // with no network at all. Prefer the copy embedded in this
             // installer; fall back to one sitting next to it.
-            string bundled = ExtractPayload("Setup.Payload.zapret.zip", "zapret-bundled.zip");
-            if (bundled == null) bundled = Path.Combine(sourceDir, "zapret-bundled.zip");
-            if (File.Exists(bundled))
+            //
+            // Extracted ONLY when the user actually wants zapret: unpacking
+            // ydp-setup*-bundle.zip into %TEMP% for a "zapret skipped" install
+            // is exactly what antiviruses flag, and it is pure waste otherwise.
+            string bundled = null;
+            if (installEngine)
             {
-                File.Copy(bundled, Path.Combine(InstallDir, "zapret-bundled.zip"), true);
+                bundled = ExtractPayload("Setup.Payload.zapret.zip", "zapret-bundled.zip");
+                if (bundled == null) bundled = Path.Combine(sourceDir, "zapret-bundled.zip");
+                if (File.Exists(bundled))
+                {
+                    File.Copy(bundled, Path.Combine(InstallDir, "zapret-bundled.zip"), true);
+                }
+            }
+            else
+            {
+                // Declined: keep the archive next to the panel only if it was a
+                // real file there — "Установить встроенный zapret" on the
+                // Updates page uses it later, no re-download needed.
+                var near = Path.Combine(sourceDir, "zapret-bundled.zip");
+                if (File.Exists(near))
+                {
+                    File.Copy(near, Path.Combine(InstallDir, "zapret-bundled.zip"), true);
+                }
             }
             // The offline zapret package is large; copying it is optional and only
             // done when it actually sits next to the installer.
@@ -231,8 +250,9 @@ string bigZip = Path.Combine(sourceDir, "zapret-discord-youtube.zip");
 
             if (!silent)
             {
-                MessageBox.Show("Готово.\r\n\r\nПанель установлена и добавлена в автозагрузку: "
-                    + "при входе в Windows она сама применит запомненную рабочую стратегию.",
+                MessageBox.Show(addAutoStart
+                    ? "Готово.\r\n\r\nПанель установлена и добавлена в автозагрузку: при входе в Windows она сама применит запомненную рабочую стратегию."
+                    : "Готово.\r\n\r\nПанель установлена. Автозапуск отключён (как вы выбрали) — включить можно позже на странице «Настройки».",
                     ProductName, MessageBoxButtons.OK, MessageBoxIcon.Information);
             }
             try { Process.Start(Path.Combine(InstallDir, ProductName + ".exe")); } catch { /* not critical */ }

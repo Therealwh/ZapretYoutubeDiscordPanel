@@ -336,10 +336,21 @@ private async void BtnTest_Click(object sender, RoutedEventArgs e)
             public Action Connect { get; set; }
             public bool CanConnect { get { return Ok && Connect != null; } }
 
-            public event System.ComponentModel.PropertyChangedEventHandler PropertyChanged;
+        public event System.ComponentModel.PropertyChangedEventHandler PropertyChanged;
         }
 
         private readonly ObservableCollection<RunRow> _runs = new ObservableCollection<RunRow>();
+
+        public sealed class SummaryRow
+        {
+            public string Name { get; set; }
+            public string Counts { get; set; }
+            public string Verdict { get; set; }
+            public string State { get; set; }
+            public bool IsWinner { get; set; }
+        }
+
+        public ObservableCollection<SummaryRow> SummaryRows { get; } = new ObservableCollection<SummaryRow>();
         private int _tested;
 
         /// <summary>Set when the user connected a strategy, so abort must not stop it.</summary>

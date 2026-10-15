@@ -125,6 +125,68 @@ namespace Ydp.Zapret
             return null;
         }
 
+        /// <summary>
+        /// Exhaustive search across every ready drive, used by the explicit
+        /// "Найти автоматически" button. The fast path (ResolveRoot) only knows
+        /// standard locations; users install zapret wherever they like, so this
+        /// walk hunts for bin\winws.exe anywhere below each drive root.
+        ///
+        /// Pruned aggressively: system/service directories can never contain a
+        /// real zapret copy and would dominate the scan time.
+        /// </summary>
+        public static string FindRootDeep(Action<string> progress)
+        {
+            // net48 has no EnumerationOptions: walk manually, skipping
+            // inaccessible/system directories along the way.
+            string[] prune = { "Windows", "$Recycle.Bin", "System Volume Information", "AppData", "ProgramData" };
+
+            foreach (var drive in DriveInfo.GetDrives())
+            {
+                string root;
+                try { if (!drive.IsReady) continue; root = drive.RootDirectory.FullName; }
+                catch { continue; }
+
+                progress?.Invoke("Просматриваю " + root);
+                foreach (var candidate in WalkForZapret(root, prune, 0, progress))
+                {
+                    return candidate;
+                }
+            }
+            return null;
+        }
+
+        private static IEnumerable<string> WalkForZapret(string dir, string[] prune, int depth, Action<string> progress)
+        {
+            if (depth > 7) yield break;
+            string name;
+            try { name = Path.GetFileName(dir.TrimEnd('\\')); } catch { yield break; }
+            foreach (var p in prune)
+            {
+                if (string.Equals(name, p, StringComparison.OrdinalIgnoreCase)) yield break;
+            }
+
+            // winws.exe directly here? Validate the parent as a zapret root.
+            bool isRoot = false;
+            try { isRoot = File.Exists(Path.Combine(dir, "bin", "winws.exe")) && LooksLikeZapretRoot(dir); }
+            catch { }
+
+            if (isRoot)
+            {
+                progress?.Invoke("Найден: " + dir);
+                yield return dir;
+                yield break;
+            }
+
+            string[] subDirs = null;
+            try { subDirs = Directory.GetDirectories(dir); }
+            catch { yield break; }
+
+            foreach (var sub in subDirs)
+            {
+                foreach (var hit in WalkForZapret(sub, prune, depth + 1, progress)) yield return hit;
+            }
+        }
+
         public static bool LooksLikeZapretRoot(string dir)
         {
             try
@@ -173,6 +235,18 @@ yield return @"C:\Zapret";
     yield return Path.Combine(appDir, "Zapret");
     string parent = System.IO.Path.GetDirectoryName(appDir.TrimEnd('\\'));
     if (!string.IsNullOrEmpty(parent)) yield return Path.Combine(parent, "Zapret");
+
+    // Users install the panel INSIDE their own zapret folder (zapret\panel\
+    // YoutubeDiscordPanel.exe) — then the root is an ancestor of the exe
+    // directory, not a "Zapret" sibling. Walk a few levels up; ResolveRoot
+    // only accepts candidates that really contain bin\winws.exe + lists.
+    string walk = appDir.TrimEnd('\\');
+    for (int i = 0; i < 3; i++)
+    {
+      walk = System.IO.Path.GetDirectoryName(walk);
+      if (string.IsNullOrEmpty(walk)) break;
+      yield return walk;
+    }
   }
 
   var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);

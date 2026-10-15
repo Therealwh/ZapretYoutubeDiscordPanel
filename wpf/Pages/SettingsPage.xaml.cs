@@ -266,9 +266,28 @@ namespace Ydp.Pages
             Load();
         }
 
-        private void BtnAutoRoot_Click(object sender, RoutedEventArgs e)
+        private async void BtnAutoRoot_Click(object sender, RoutedEventArgs e)
         {
+            // Fast pass first: standard locations (one cache tick, instant).
             var found = Status.ResolveRoot(null);
+            if (string.IsNullOrEmpty(found))
+            {
+                // Nothing standard: sweep every drive for bin\winws.exe. This
+                // covers "panel installed as a subfolder of my own zapret"
+                // and any non-standard location the known list never knew.
+                AutoNote.Text = "Ищу zapret по всем дискам… это может занять минуту.";
+                BtnAutoRoot.IsEnabled = false;
+                try
+                {
+                    found = await System.Threading.Tasks.Task.Run(() =>
+                        Status.FindRootDeep(msg => Dispatcher.BeginInvoke(new Action(() => AutoNote.Text = msg))));
+                }
+                finally
+                {
+                    BtnAutoRoot.IsEnabled = true;
+                }
+            }
+
             if (!string.IsNullOrEmpty(found))
             {
                 Config.Set("zapretRoot", found);
@@ -278,7 +297,7 @@ namespace Ydp.Pages
             }
             else
             {
-                AutoNote.Text = "Автоматически не нашёл.";
+                AutoNote.Text = "Не нашёл. Укажите папку zapret вручную кнопкой «Выбрать папку…».";
             }
             Load();
         }

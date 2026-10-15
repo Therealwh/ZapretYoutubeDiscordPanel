@@ -29,10 +29,11 @@
               dark headers, cells and a readable selection colour in the theme.
             -->
             <DataGrid x:Name="LogList" AutoGenerateColumns="False" IsReadOnly="True"
-                      Background="Transparent" BorderThickness="0" RowHeight="26"
+                      Background="Transparent" BorderThickness="0"
                       HeadersVisibility="Column" CanUserAddRows="False"
                       CanUserResizeRows="False" EnableRowVirtualization="True"
                       GridLinesVisibility="None" SelectionMode="Extended"
+                      FontFamily="Segoe UI"
                       HorizontalGridLinesBrush="Transparent" VerticalGridLinesBrush="Transparent">
                 <DataGrid.Columns>
                     <DataGridTextColumn Header="Время" Width="80" Binding="{Binding ts}" />
@@ -67,7 +68,16 @@
                         </DataGridTextColumn.ElementStyle>
                     </DataGridTextColumn>
                     <DataGridTextColumn Header="Источник" Width="120" Binding="{Binding source}" />
-                    <DataGridTextColumn Header="Сообщение" Width="*" Binding="{Binding msg}" />
+                    <DataGridTextColumn Header="Сообщение" Width="*" Binding="{Binding msg}">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <!-- Trim instead of clip: the full line stays
+                                     readable via the cell tooltip. -->
+                                <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+                                <Setter Property="ToolTip" Value="{Binding msg}" />
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
                 </DataGrid.Columns>
             </DataGrid>
         </Border>
