@@ -95,6 +95,27 @@ _timer.Start();
             await System.Threading.Tasks.Task.Yield();
         }
 
+        private async void BtnTgFree_Click(object sender, RoutedEventArgs e)
+        {
+            BtnTgFree.IsEnabled = false;
+            try
+            {
+                int port = TgPort();
+                // netstat + kill: blocking, keep it off the UI thread.
+                string msg = await System.Threading.Tasks.Task.Run(() => TgProxy.FreePort(port));
+                TgHint.Text = msg;
+                Logger.Info(msg, "tg-proxy");
+            }
+            catch (Exception ex)
+            {
+                TgHint.Text = "Ошибка при освобождении порта: " + ex.Message;
+            }
+            finally
+            {
+                BtnTgFree.IsEnabled = true;
+            }
+        }
+
         private async void BtnTgToggle_Click(object sender, RoutedEventArgs e)
         {
             BtnTgToggle.IsEnabled = false;

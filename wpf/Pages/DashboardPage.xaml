@@ -122,6 +122,8 @@
                         <Button x:Name="BtnTgToggle" Content="Запустить" Style="{StaticResource BtnPrimary}"
                                 Margin="0,0,8,0" Click="BtnTgToggle_Click" />
                         <Button Content="Открыть в Telegram" Style="{StaticResource Btn}" Margin="0,0,8,0" Click="BtnTgOpen_Click" />
+                        <Button x:Name="BtnTgFree" Content="Освободить порт" Style="{StaticResource Btn}" Margin="0,0,8,0" Click="BtnTgFree_Click"
+                                ToolTip="Найти и закрыть процесс, который держит порт прокси (старый экземпляр панели, winws и т.п.)" />
                         <Button Content="Копировать ссылку" Style="{StaticResource Btn}" Margin="0,0,8,0" Click="BtnTgCopy_Click" />
                         <Button Content="Новый секрет" Style="{StaticResource Btn}" Click="BtnTgRegen_Click" />
                     </StackPanel>

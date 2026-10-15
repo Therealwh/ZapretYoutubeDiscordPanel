@@ -166,6 +166,77 @@ private static volatile bool _cfEnabled = true;
             Stats.proxyUrl = ProxyLink();
         }
 
+        /// <summary>
+        /// Find whatever process is holding the local proxy port and kill it.
+        ///
+        /// The "порт занят" error assumed the holder was another panel instance,
+        /// but it can equally be a stale winws or an unrelated app; Telegram then
+        /// keeps retrying a dead port. Being able to reclaim the port from the UI
+        /// is the practical fix, so the owner is looked up (netstat -ano) and
+        /// closed. Killing the current panel is refused: if our own proxy holds
+        /// the port, "Стоп" is the right control.
+        /// </summary>
+        public static string FreePort(int port)
+        {
+            if (port <= 0) port = DefaultPort;
+            try
+            {
+                var psi = new System.Diagnostics.ProcessStartInfo("netstat.exe", "-ano -p tcp")
+                {
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    StandardOutputEncoding = Encoding.UTF8,
+                };
+                var sb = new StringBuilder();
+                using (var p = System.Diagnostics.Process.Start(psi))
+                {
+                    if (p == null) return "Не удалось прочитать список занятых портов.";
+                    sb.Append(p.StandardOutput.ReadToEnd());
+                    p.WaitForExit(5000);
+                }
+
+                int owner = 0;
+                foreach (var line in sb.ToString().Split('\n'))
+                {
+                    var cols = line.Split(new[] { ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+                    // TCP  Local  Foreign  State  PID
+                    if (cols.Length < 5) continue;
+                    if (!cols[3].Equals("LISTENING", StringComparison.OrdinalIgnoreCase)) continue;
+                    var local = cols[1];
+                    int colon = local.LastIndexOf(':');
+                    if (colon < 0) continue;
+                    if (!int.TryParse(local.Substring(colon + 1), out int lp) || lp != port) continue;
+                    if (int.TryParse(cols[4], out int pid) && pid != 0) { owner = pid; break; }
+                }
+
+                if (owner == 0) return "Порт " + port + " свободен.";
+                if (owner == System.Diagnostics.Process.GetCurrentProcess().Id)
+                    return "Порт " + port + " держит текущая панель — останови прокси кнопкой «Стоп».";
+
+                string name;
+                try
+                {
+                    using (var proc = System.Diagnostics.Process.GetProcessById(owner))
+                    {
+                        name = proc.ProcessName;
+                        proc.Kill();
+                        proc.WaitForExit(3000);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    return "Не удалось освободить порт (PID " + owner + "): " + ex.Message;
+                }
+                return "Порт " + port + " освобождён — закрыт процесс " + name + " (PID " + owner + ").";
+            }
+            catch (Exception ex)
+            {
+                return "Ошибка при освобождении порта: " + ex.Message;
+            }
+        }
+
         // Synchronous by design: the listener setup is all non-blocking local
         // work (bind + accept loop spawn), so an async signature would only
         // promise what the body does not do.
