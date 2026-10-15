@@ -242,6 +242,71 @@ namespace Ydp.Pages
             Load();
         }
 
+        /// <summary>
+        /// Manually pick the strategy to remember, so the dashboard power switch
+        /// (which now prefers a remembered strategy over re-searching) brings up
+        /// exactly this one. Replaces the old workflow of "run the whole test,
+        /// then hope it picks the one I wanted".
+        /// </summary>
+        private void BtnRememberStrategy_Click(object sender, RoutedEventArgs e)
+        {
+            string root = Status.ResolveRoot(Config.Get("zapretRoot", null));
+            if (string.IsNullOrEmpty(root)) { AutoNote.Text = "Не найдена папка zapret."; return; }
+
+            var strategies = Strategy.ListStrategies(root);
+            if (strategies.Count == 0) { AutoNote.Text = "В папке zapret нет стратегий."; return; }
+
+            var list = new ListBox
+            {
+                DisplayMemberPath = "name",
+                Height = 280,
+                Margin = new Thickness(0, 0, 0, 12),
+            };
+            foreach (var s in strategies) list.Items.Add(s);
+            list.SelectedIndex = 0;
+
+            Window dlg = null;
+            var okBtn = new Button { Content = "Запомнить", IsDefault = true, Margin = new Thickness(0, 0, 8, 0), Padding = new Thickness(16, 6, 16, 6), MinWidth = 120 };
+            if (TryFindResource("BtnPrimary") is Style primary) okBtn.Style = primary;
+            var cancelBtn = new Button { Content = "Отмена", IsCancel = true, Padding = new Thickness(16, 6, 16, 6), MinWidth = 100 };
+            if (TryFindResource("Btn") is Style normal) cancelBtn.Style = normal;
+
+            var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
+            buttons.Children.Add(okBtn);
+            buttons.Children.Add(cancelBtn);
+
+            var panel = new StackPanel { Margin = new Thickness(18) };
+            panel.Children.Add(new TextBlock { Text = "Какую стратегию запомнить?", FontWeight = FontWeights.SemiBold, FontSize = 14, Margin = new Thickness(0, 0, 0, 10) });
+            panel.Children.Add(list);
+            panel.Children.Add(buttons);
+
+            bool confirmed = false;
+            okBtn.Click += (s, e2) => { confirmed = true; dlg?.Close(); };
+
+            dlg = new Window
+            {
+                Title = "Запомнить стратегию",
+                Content = panel,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                Owner = Window.GetWindow(this),
+                SizeToContent = SizeToContent.WidthAndHeight,
+                MinWidth = 440,
+                ResizeMode = ResizeMode.NoResize,
+                ShowInTaskbar = false,
+            };
+            if (TryFindResource("BgCardBrush") is System.Windows.Media.Brush cardBg) dlg.Background = cardBg;
+            dlg.ShowDialog();
+            if (!confirmed) return;
+
+            var picked = list.SelectedItem as Ydp.Zapret.StrategyInfo;
+            if (picked == null) return;
+            AutoConnect.RememberWorking(picked.file);
+            Config.Set(AutoConnect.KeyLastWinner, picked.file);
+            AutoNote.Text = "Запомнена стратегия: " + picked.name + " — тумблер в «Обход» будет включать её.";
+            Logger.Info("Стратегия запомнена вручную: " + picked.file, "settings");
+            Load();
+        }
+
         private void BtnChooseRoot_Click(object sender, RoutedEventArgs e)
         {
             // net48 has no OpenFolderDialog; FolderBrowserDialog is the classic

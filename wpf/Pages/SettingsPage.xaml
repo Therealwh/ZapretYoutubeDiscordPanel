@@ -33,6 +33,8 @@
                 <TextBlock x:Name="RememberedList" Style="{StaticResource Dim}" TextWrapping="Wrap" Margin="0,0,0,8" />
                 <StackPanel Orientation="Horizontal">
                     <Button Content="Применить сейчас" Style="{StaticResource Btn}" Margin="0,0,10,0" Click="BtnApplyRemembered_Click" />
+                    <Button x:Name="BtnRememberStrategy" Content="Запомнить стратегию…" Style="{StaticResource Btn}" Margin="0,0,10,0" Click="BtnRememberStrategy_Click"
+                            ToolTip="Выбрать стратегию и запомнить её — тумблер в «Обход» будет включать именно её, без поиска" />
                     <Button Content="Забыть" Style="{StaticResource Btn}" Click="BtnForget_Click" />
                 </StackPanel>
             </StackPanel>
