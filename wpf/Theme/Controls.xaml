@@ -295,7 +295,7 @@
         <Setter Property="Template">
             <Setter.Value>
                 <ControlTemplate TargetType="DataGridCell">
-                    <Border Background="Transparent" Padding="{TemplateBinding Padding}">
+                    <Border Background="{TemplateBinding Background}" Padding="{TemplateBinding Padding}">
                         <ContentPresenter />
                     </Border>
                 </ControlTemplate>
@@ -303,6 +303,7 @@
         </Setter>
         <Style.Triggers>
             <Trigger Property="IsSelected" Value="True">
+                <Setter Property="Background" Value="{StaticResource AccentBrush}" />
                 <Setter Property="Foreground" Value="#FFFFFF" />
             </Trigger>
         </Style.Triggers>
