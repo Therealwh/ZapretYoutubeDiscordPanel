@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Input;
+using System.Windows.Threading;
 using Ydp.Services;
 using System.Windows.Controls;
 using Ydp.Pages;
@@ -160,6 +161,12 @@ namespace Ydp
             Navigate(start ?? "dashboard");
             UpdateFooter();
             StartUpdateCheck();
+            // A panel that sits in the tray for days would otherwise only ever
+            // see updates that were out when it started. Re-check every 30 min so
+            // a new release raises a tray notification on its own.
+            _updateTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(30) };
+            _updateTimer.Tick += (s, e) => StartUpdateCheck();
+            _updateTimer.Start();
             EnsureTelegramDomains();
 
             // Minimizing goes to the tray instead of the taskbar: the panel is a
@@ -337,6 +344,9 @@ case "support":
         /// one, offer the update twice: a tray balloon (visible even when the
         /// panel is folded away) and a banner at the top of the window.
         /// </summary>
+        private string _lastNotifiedVersion;
+        private readonly DispatcherTimer _updateTimer;
+
         private void StartUpdateCheck()
         {
             System.Threading.Tasks.Task.Run(() => PanelUpdater.Check())
@@ -345,6 +355,11 @@ case "support":
                     if (t.Status != System.Threading.Tasks.TaskStatus.RanToCompletion) return;
                     var info = PanelUpdater.State;
                     if (!info.available) return;
+                    // Notify once per released version. A panel that has been
+                    // running for days re-checks every 30 minutes and must not
+                    // repeat the same "new version" balloon.
+                    if (info.latest == _lastNotifiedVersion) return;
+                    _lastNotifiedVersion = info.latest;
                     Dispatcher.BeginInvoke(new Action(() =>
                     {
                         UpdateTitle.Text = "Доступна новая версия панели — v" + info.latest;

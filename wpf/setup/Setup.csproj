@@ -19,8 +19,8 @@
     <ApplicationIcon>..\Resources\app.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <Product>YoutubeDiscordPanel</Product>
-    <Version>2.1.14</Version>
-    <FileVersion>2.1.14.0</FileVersion>
+    <Version>2.1.15</Version>
+    <FileVersion>2.1.15.0</FileVersion>
     <DebugType>none</DebugType>
     <!-- We define Main ourselves; the SDK also generates one for WinExe. -->
     <StartupObject>Ydp.Setup.Program</StartupObject>
@@ -51,6 +51,7 @@
   </ItemGroup>
 
 </Project>
+
 
 
 
