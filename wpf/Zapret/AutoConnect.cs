@@ -113,6 +113,37 @@ namespace Ydp.Zapret
             return when.Value.ToString("d MMM");
         }
 
+        // ---- pinned strategies ------------------------------------------------
+        // A pinned strategy is one the user wants tried first whenever the
+        // bypass is brought up — their own go-to config, regardless of what the
+        // sweep happened to pick last. Stored as .bat names.
+
+        public const string KeyPinned = "pinnedStrategies";
+
+        public static List<string> Pinned()
+        {
+            string raw = Config.Get(KeyPinned, string.Empty);
+            return raw.Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(p => p.Trim()).Where(p => p.Length > 0).ToList();
+        }
+
+        public static bool IsPinned(string strategyName)
+        {
+            if (string.IsNullOrWhiteSpace(strategyName)) return false;
+            return Pinned().Any(p => string.Equals(p, strategyName, StringComparison.OrdinalIgnoreCase));
+        }
+
+        public static void TogglePin(string strategyName)
+        {
+            if (string.IsNullOrWhiteSpace(strategyName)) return;
+            var list = Pinned();
+            if (list.Any(p => string.Equals(p, strategyName, StringComparison.OrdinalIgnoreCase)))
+                list.RemoveAll(p => string.Equals(p, strategyName, StringComparison.OrdinalIgnoreCase));
+            else
+                list.Add(strategyName);
+            Config.Set(KeyPinned, string.Join("|", list));
+        }
+
         private static string NormalizeStrategyName(string fileOrName)
         {
             if (string.IsNullOrWhiteSpace(fileOrName)) return null;
@@ -149,8 +180,19 @@ namespace Ydp.Zapret
         private static ConnectResult TryRememberedFirst(string rootDir, Action<string> log)
         {
             var candidates = new List<string>();
+            // Pinned strategies go first: the user marked them as the ones to
+            // try before anything else, ahead of the last winner.
+            var pinned = Pinned();
+            if (pinned.Count > 0)
+            {
+                foreach (var s in Strategy.ListStrategies(rootDir))
+                {
+                    if (pinned.Any(p => string.Equals(p, s.name, StringComparison.OrdinalIgnoreCase)))
+                        candidates.Add(s.file);
+                }
+            }
             var last = LastWinner();
-            if (last != null) candidates.Add(last);
+            if (last != null && !candidates.Contains(last, StringComparer.OrdinalIgnoreCase)) candidates.Add(last);
             foreach (var f in KnownWorking())
                 if (!candidates.Contains(f, StringComparer.OrdinalIgnoreCase)) candidates.Add(f);
             if (candidates.Count == 0) return null;

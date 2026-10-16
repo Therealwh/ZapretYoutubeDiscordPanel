@@ -31,11 +31,15 @@
             <StackPanel Orientation="Horizontal">
                 <TextBlock Text="Готовый список доменов:" Style="{StaticResource Dim}" VerticalAlignment="Center" Margin="0,0,10,0" />
                 <Button Content="Discord" Style="{StaticResource Btn}" Margin="0,0,8,0" Click="BtnPresetDiscord_Click"
-                        ToolTip="Заполнить основной список доменами Discord" />
+                        ToolTip="Заполнить категорию «Discord» в основном списке" />
                 <Button Content="YouTube" Style="{StaticResource Btn}" Margin="0,0,8,0" Click="BtnPresetYoutube_Click"
-                        ToolTip="Заполнить основной список доменами YouTube" />
+                        ToolTip="Заполнить категорию «YouTube» в основном списке" />
+                <Button Content="Telegram" Style="{StaticResource Btn}" Margin="0,0,8,0" Click="BtnPresetTelegram_Click"
+                        ToolTip="Домены, нужные встроенному прокси Telegram" />
+                <Button Content="Разложить по категориям" Style="{StaticResource Btn}" Margin="0,0,8,0" Click="BtnOrganize_Click"
+                        ToolTip="Разложить текущий список по секциям Discord / YouTube / Telegram / Другое, ничего не удаляя" />
                 <Button Content="Очистить список" Style="{StaticResource Btn}" Click="BtnPresetClear_Click"
-                        ToolTip="Очистить основной список" />
+                        ToolTip="Убрать все домены (домены Telegram панель вернёт сама)" />
             </StackPanel>
         </StackPanel>
 

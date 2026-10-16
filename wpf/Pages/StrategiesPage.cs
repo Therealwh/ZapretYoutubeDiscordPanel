@@ -48,6 +48,12 @@ namespace Ydp.Pages
         /// <summary>When this strategy last passed a check ("вчера", "3 дн. назад").</summary>
         public string LastGood { get; set; }
 
+        /// <summary>Pinned strategies are tried first when the bypass comes up.</summary>
+        public bool IsPinned { get; set; }
+
+        /// <summary>Pin / unpin this strategy.</summary>
+        public System.Windows.Input.ICommand PinCmd { get; set; }
+
         /// <summary>
         /// "Подключить" straight from the list, without running a test first.
         /// Goes through the same ConnectNow path as the report rows: install,
@@ -70,6 +76,31 @@ namespace Ydp.Pages
     public partial class StrategiesPage : UserControl
     {
         public ObservableCollection<StrategyRow> Rows { get; } = new ObservableCollection<StrategyRow>();
+
+        /// <summary>What the grid shows: Rows, narrowed by the search box.</summary>
+        public ObservableCollection<StrategyRow> VisibleRows { get; } = new ObservableCollection<StrategyRow>();
+
+        private string _search = string.Empty;
+        /// <summary>Filter the list by name; bound to the search box.</summary>
+        public string SearchText
+        {
+            get { return _search; }
+            set { if (_search == value) return; _search = value ?? string.Empty; ApplyFilter(); }
+        }
+
+        /// <summary>Rebuild the visible list from Rows according to the search text.</summary>
+        private void ApplyFilter()
+        {
+            VisibleRows.Clear();
+            var q = _search.Trim();
+            foreach (var r in Rows)
+            {
+                if (q.Length > 0 && r.Name != null && r.Name.IndexOf(q, StringComparison.OrdinalIgnoreCase) < 0)
+                    continue;
+                VisibleRows.Add(r);
+            }
+        }
+
         private bool _busy;
         private string _root;
 
@@ -94,28 +125,41 @@ namespace Ydp.Pages
                 return;
             }
             Hint.Text = "Папка: " + _root;
-            var list = Strategy.ListStrategies(_root);
+            var all = Strategy.ListStrategies(_root);
+            // "#" is the tester's own index (file order) so the numbers always
+            // match what test zapret.ps1 prints, independent of display order.
+            var testerNo = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            int n = 0;
+            foreach (var s in all) testerNo[s.name] = (++n).ToString();
+            // Pinned strategies float to the top; everything else keeps file order.
+            var list = all.OrderByDescending(s => AutoConnect.IsPinned(s.name)).ToList();
             var status = Status.GetStatus(_root);
             string active = status.serviceStrategy;
-            int no = 0;
             foreach (var s in list)
             {
                 var row = new StrategyRow
                 {
-                    No = (++no).ToString(),
+                    No = testerNo.TryGetValue(s.name, out var num) ? num : "?",
                     Name = s.name,
                     File = s.file,
                     Badges = string.Join(" · ", s.badges),
                     Active = string.Equals(s.name, active, StringComparison.OrdinalIgnoreCase) ? "активная" : string.Empty,
                     State = string.IsNullOrEmpty(active) && status.activeMode == "off" ? string.Empty : (string.Equals(s.name, active, StringComparison.OrdinalIgnoreCase) ? "подключена" : string.Empty),
                     LastGood = AutoConnect.LastGoodLabel(s.name),
+                    IsPinned = AutoConnect.IsPinned(s.name),
                 };
                 // Per-row "Подключить": same install + verify + remember path as
                 // the tested rows, so an untested strategy can still be applied
                 // straight from the list.
                 row.ConnectCmd = new DelegateCommand(() => ConnectNow(row.File, row.Name));
+                row.PinCmd = new DelegateCommand(() =>
+                {
+                    AutoConnect.TogglePin(s.name);
+                    Reload();
+                });
                 Rows.Add(row);
             }
+            ApplyFilter();
             await System.Threading.Tasks.Task.Yield();
         }
 

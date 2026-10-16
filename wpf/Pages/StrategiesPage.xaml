@@ -235,8 +235,17 @@
             </StackPanel>
         </Border>
 
+        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+            <TextBlock Text="Поиск:" Style="{StaticResource Dim}" VerticalAlignment="Center" Margin="0,0,8,0" />
+            <TextBox x:Name="SearchBox" Width="260" Padding="8,5" FontSize="12"
+                     Text="{Binding SearchText, UpdateSourceTrigger=PropertyChanged, Mode=TwoWay}"
+                     Foreground="{StaticResource TextBrush}" Background="{StaticResource BgHoverBrush}"
+                     BorderBrush="{StaticResource BorderBrush2}"
+                     ToolTip="Фильтр по названию стратегии" />
+        </StackPanel>
+
         <Border Style="{StaticResource Card}" Padding="0">
-            <DataGrid x:Name="StrategyList" ItemsSource="{Binding Rows}" AutoGenerateColumns="False"
+            <DataGrid x:Name="StrategyList" ItemsSource="{Binding VisibleRows}" AutoGenerateColumns="False"
                       HeadersVisibility="Column" GridLinesVisibility="None" BorderThickness="0"
                       SelectionChanged="StrategyList_SelectionChanged"
                       PreviewMouseWheel="StrategyList_PreviewMouseWheel"
@@ -246,11 +255,93 @@
                       SelectionMode="Single" IsReadOnly="True" CanUserAddRows="False"
                       RowHeight="34" ColumnHeaderHeight="34">
                 <DataGrid.Columns>
-                    <DataGridTextColumn Header="#" Binding="{Binding No}" Width="46" />
-                    <DataGridTextColumn Header="Стратегия" Binding="{Binding Name}" Width="2*" />
-                    <DataGridTextColumn Header="Методы" Binding="{Binding Badges}" Width="3*" />
-                    <DataGridTextColumn Header="Состояние" Binding="{Binding State}" Width="*" />
-                    <DataGridTextColumn Header="Работала" Binding="{Binding LastGood}" Width="Auto" />
+                    <DataGridTemplateColumn Header="" Width="42">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <Button Command="{Binding PinCmd}" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                        ToolTip="Закрепить: пробовать этой стратегией первой при подключении">
+                                    <Button.Style>
+                                        <Style TargetType="Button">
+                                            <Setter Property="Background" Value="Transparent" />
+                                            <Setter Property="BorderThickness" Value="0" />
+                                            <Setter Property="FontSize" Value="16" />
+                                            <Setter Property="Cursor" Value="Hand" />
+                                            <Setter Property="Content" Value="☆" />
+                                            <Setter Property="Foreground" Value="#64748B" />
+                                            <Setter Property="FontFamily" Value="Segoe UI Symbol" />
+                                            <!-- Own template: the default Button chrome
+                                                 paints a light-blue box on hover and
+                                                 forces a white glyph, which hid the
+                                                 gold and looked out of place. -->
+                                            <Setter Property="Template">
+                                                <Setter.Value>
+                                                    <ControlTemplate TargetType="Button">
+                                                        <Border x:Name="Bg" Background="{TemplateBinding Background}"
+                                                                CornerRadius="6" Padding="3,0">
+                                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                        </Border>
+                                                        <ControlTemplate.Triggers>
+                                                            <Trigger Property="IsMouseOver" Value="True">
+                                                                <Setter TargetName="Bg" Property="Background" Value="#1E293B" />
+                                                            </Trigger>
+                                                        </ControlTemplate.Triggers>
+                                                    </ControlTemplate>
+                                                </Setter.Value>
+                                            </Setter>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding IsPinned}" Value="True">
+                                                    <Setter Property="Content" Value="★" />
+                                                    <Setter Property="Foreground" Value="#FFD426" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Button.Style>
+                                </Button>
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
+                    <DataGridTextColumn Header="#" Binding="{Binding No}" Width="46">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Foreground" Value="#64748B" />
+                                <Setter Property="FontFamily" Value="Segoe UI Variable Text, Segoe UI" />
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+                    <DataGridTextColumn Header="Стратегия" Binding="{Binding Name}" Width="2*">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Foreground" Value="#F8FAFC" />
+                                <Setter Property="FontWeight" Value="SemiBold" />
+                                <Setter Property="FontFamily" Value="Segoe UI Variable Display, Segoe UI" />
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+                    <DataGridTextColumn Header="Методы" Binding="{Binding Badges}" Width="3*">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Foreground" Value="#A5B4FC" />
+                                <Setter Property="FontFamily" Value="Segoe UI Variable Text, Consolas" />
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+                    <DataGridTextColumn Header="Состояние" Binding="{Binding State}" Width="*">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Foreground" Value="#2ED573" />
+                                <Setter Property="FontWeight" Value="SemiBold" />
+                                <Setter Property="FontFamily" Value="Segoe UI Variable Text, Segoe UI" />
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
+                    <DataGridTextColumn Header="Работала" Binding="{Binding LastGood}" Width="Auto">
+                        <DataGridTextColumn.ElementStyle>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Foreground" Value="#FFB020" />
+                                <Setter Property="FontFamily" Value="Segoe UI Variable Text, Segoe UI" />
+                            </Style>
+                        </DataGridTextColumn.ElementStyle>
+                    </DataGridTextColumn>
                     <DataGridTemplateColumn Header="" Width="Auto">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>

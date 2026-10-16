@@ -1,5 +1,7 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using Ydp.Services;
@@ -115,11 +117,18 @@ namespace Ydp.Pages
             "jnn-pa.googleapis.com",
         };
 
-        private void ApplyPreset(string[] domains)
+        private void ApplyPreset(string category, string[] domains)
         {
-            if (Lists.Write(_root, "general", string.Join(Environment.NewLine, domains)))
+            // Fill this category's section and leave every other line alone. The
+            // panel also keeps the Telegram-proxy domains in this same file, so a
+            // preset must never replace the list — only add to its own section.
+            var existing = Lists.Read(_root, "general") ?? string.Empty;
+            var updated = CategorizedDomains.Ensure(existing, category, domains);
+            if (Lists.Write(_root, "general", updated))
             {
-                Logger.Info("Применён готовый список доменов (" + domains.Length + ")", "lists");
+                // Defensive: guarantee the proxy domains are present.
+                Zapret.FirstRun.EnsureTelegramDomains(_root);
+                Logger.Info("Готовый список: категория «" + category + "» обновлена", "lists");
                 TabGeneral.IsChecked = true;
                 _key = "general";
                 Load();
@@ -130,18 +139,58 @@ namespace Ydp.Pages
             }
         }
 
-        private void BtnPresetDiscord_Click(object sender, RoutedEventArgs e) => ApplyPreset(DiscordPreset);
+        /// <summary>Lay the file out into the four sections, sorting every domain into the right one.</summary>
+        private void BtnOrganize_Click(object sender, RoutedEventArgs e)
+        {
+            var existing = Lists.Read(_root, "general") ?? string.Empty;
+            var organized = CategorizedDomains.Organize(
+                existing, DiscordPreset, YouTubePreset, Zapret.FirstRun.TelegramDomains());
+            if (Lists.Write(_root, "general", organized))
+            {
+                Logger.Info("Список разложен по категориям", "lists");
+                TabGeneral.IsChecked = true;
+                _key = "general";
+                Load();
+            }
+            else
+            {
+                Stats.Text = "Не удалось разложить по категориям (нет прав на запись?).";
+            }
+        }
 
-        private void BtnPresetYoutube_Click(object sender, RoutedEventArgs e) => ApplyPreset(YouTubePreset);
+        private void BtnPresetDiscord_Click(object sender, RoutedEventArgs e)
+            => ApplyPreset(CategorizedDomains.SectionDiscord, DiscordPreset);
+
+        private void BtnPresetYoutube_Click(object sender, RoutedEventArgs e)
+            => ApplyPreset(CategorizedDomains.SectionYouTube, YouTubePreset);
+
+        private void BtnPresetTelegram_Click(object sender, RoutedEventArgs e)
+        {
+            int added = Zapret.FirstRun.EnsureTelegramDomains(_root);
+            Logger.Info("Категория «Telegram»: " + (added > 0 ? "добавлено доменов " + added : "домены уже на месте"), "lists");
+            TabGeneral.IsChecked = true;
+            _key = "general";
+            Load();
+        }
 
         private void BtnPresetClear_Click(object sender, RoutedEventArgs e)
         {
             if (MessageBox.Show(Window.GetWindow(this),
-                    "Очистить основной список доменов?",
+                    "Очистить основной список доменов?\n\nДомены Telegram-прокси при этом останутся — панель вернёт их автоматически.",
                     "Очистить список", MessageBoxButton.YesNo, MessageBoxImage.Question)
                 == MessageBoxResult.Yes)
             {
-                ApplyPreset(new string[0]);
+                if (Lists.Write(_root, "general", string.Empty))
+                {
+                    Zapret.FirstRun.EnsureTelegramDomains(_root);
+                    TabGeneral.IsChecked = true;
+                    _key = "general";
+                    Load();
+                }
+                else
+                {
+                    Stats.Text = "Не удалось очистить список (нет прав на запись?).";
+                }
             }
         }
     }

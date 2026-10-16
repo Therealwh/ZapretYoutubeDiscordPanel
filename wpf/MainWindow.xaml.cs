@@ -232,10 +232,10 @@ case "settings":
                         if (_settings == null) _settings = new SettingsPage();
                         PageHost.Content = _settings;
                         break;
-                    case "support":
-                        if (_support == null) _support = new SupportPage();
-                        PageHost.Content = _support;
-                        break;
+case "support":
+                            if (_support == null) _support = new SupportPage();
+                            PageHost.Content = _support;
+                            break;
                     default:
                         if (_dashboard == null) _dashboard = new DashboardPage();
                         PageHost.Content = _dashboard;

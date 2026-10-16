@@ -21,11 +21,16 @@
                 <CheckBox x:Name="ChkAutoApply" Content="Применять запомненную стратегию автоматически"
                           Foreground="{StaticResource TextBrush}" IsEnabled="{Binding ElementName=ChkAutostart, Path=IsChecked}"
                           Checked="ChkAutoApply_Changed" Unchecked="ChkAutoApply_Changed" />
-                <CheckBox x:Name="ChkWatchdog" Content="Автовосстановление обхода (следить и переподключать)"
+                <CheckBox x:Name="ChkWatchdog" Content="Автовосстановление обхода (переподключать самому)"
                           Foreground="{StaticResource TextBrush}" Margin="0,10,0,0"
                           Checked="ChkWatchdog_Changed" Unchecked="ChkWatchdog_Changed" />
                 <TextBlock x:Name="WatchdogNote" Style="{StaticResource Dim}" Margin="0,6,0,0"
-                           Text="Пока панель открыта: если обход включён, но Discord или YouTube перестали отвечать, панель сама переподключится — сначала запомненной стратегией, а если не выйдет — поиском новой." />
+                           Text="Пока панель открыта: если обход включён, но Discord или YouTube перестали отвечать (в том числе после смены сети), панель сама переподключится — сначала запомненной стратегией, а если не выйдет — поиском новой." />
+                <CheckBox x:Name="ChkNotify" Content="Уведомлять, если обход включён, но не работает"
+                          Foreground="{StaticResource TextBrush}" Margin="0,10,0,0"
+                          Checked="ChkNotify_Changed" Unchecked="ChkNotify_Changed" />
+                <TextBlock Style="{StaticResource Dim}" Margin="0,6,0,0"
+                           Text="Показывает уведомление в трее, когда сайты не отвечают, — чтобы не гадать, почему Discord не грузится. Ничего не переключает само." />
                 <CheckBox x:Name="ChkHotkey" Content="Глобальная горячая клавиша (Ctrl+Alt+B)"
                           Foreground="{StaticResource TextBrush}" Margin="0,10,0,0"
                           Checked="ChkHotkey_Changed" Unchecked="ChkHotkey_Changed" />

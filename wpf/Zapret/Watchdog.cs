@@ -1,21 +1,28 @@
 using System;
+using System.Net.NetworkInformation;
 using System.Threading;
 using Ydp.Services;
 
 namespace Ydp.Zapret
 {
     /// <summary>
-    /// Bypass watchdog: quietly checks, while the bypass is supposed to be on,
-    /// that Discord/YouTube actually answer. If they stop answering for a few
-    /// consecutive checks it re-connects on its own — remembered strategy
-    /// first, and only then the full search — and writes what it did to the log.
+    /// Bypass health monitor: quietly checks, while the bypass is supposed to be
+    /// on, that Discord/YouTube actually answer.
     ///
-    /// Off by default: re-connecting on its own changes running state, so the
-    /// user opts in from Settings.
+    /// Two independent behaviours:
+    ///  - Notify (on by default): a tray balloon when the bypass is up but the
+    ///    sites stopped answering, so the user is not left guessing why Discord
+    ///    will not load.
+    ///  - Recover (opt-in, off by default): automatically re-connect — remembered
+    ///    strategy first, then a full search.
+    ///
+    /// Also re-checks immediately when Windows reports the network changed
+    /// (switching Wi-Fi/ethernet can leave a working strategy stopped).
     /// </summary>
     public static class BypassWatchdog
     {
-        public const string KeyEnabled = "watchdogEnabled";
+        public const string KeyEnabled = "watchdogEnabled";        // auto-recover
+        public const string KeyNotify = "watchdogNotify";          // tray notification
         private const int IntervalMs = 45000;
         private const int RequiredFails = 2;
 
@@ -23,11 +30,20 @@ namespace Ydp.Zapret
         private static volatile bool _stop;
         private static int _recovering;
         private static int _fails;
+        private static int _notified;                             // one balloon per outage
 
+        /// <summary>Auto-reconnect when the bypass stops working (off by default).</summary>
         public static bool Enabled
         {
             get { return string.Equals(Config.Get(KeyEnabled, "off"), "on", StringComparison.OrdinalIgnoreCase); }
             set { Config.Set(KeyEnabled, value ? "on" : "off"); }
+        }
+
+        /// <summary>Show a tray notification when the bypass is up but not working (on by default).</summary>
+        public static bool Notify
+        {
+            get { return !string.Equals(Config.Get(KeyNotify, "on"), "off", StringComparison.OrdinalIgnoreCase); }
+            set { Config.Set(KeyNotify, value ? "on" : "off"); }
         }
 
         public static void Start()
@@ -36,11 +52,29 @@ namespace Ydp.Zapret
             _stop = false;
             _thread = new Thread(Loop) { IsBackground = true, Name = "BypassWatchdog" };
             _thread.Start();
+            // A new network (different Wi-Fi/ethernet) can leave a working strategy
+            // stopped — check as soon as Windows says the network changed.
+            NetworkChange.NetworkAddressChanged += (s, e) =>
+            {
+                Logger.Info("Сеть изменилась — проверяю обход", "watchdog");
+                // Let the new network settle before probing.
+                var t = new Thread(() => { Thread.Sleep(6000); CheckNow("смена сети"); })
+                { IsBackground = true, Name = "BypassWatchdogNet" };
+                t.Start();
+            };
         }
 
         public static void Stop()
         {
             _stop = true;
+        }
+
+        /// <summary>Run a health check right now, off the calling thread.</summary>
+        public static void CheckNow(string reason)
+        {
+            var t = new Thread(() => { try { Tick(reason); } catch { } })
+            { IsBackground = true, Name = "BypassWatchdogNow" };
+            t.Start();
         }
 
         private static void Loop()
@@ -49,15 +83,16 @@ namespace Ydp.Zapret
             {
                 try { Thread.Sleep(IntervalMs); } catch { return; }
                 if (_stop) break;
-                try { Tick(); }
+                try { Tick("периодическая проверка"); }
                 catch (Exception ex) { Logger.Warn("Watchdog: ошибка проверки: " + ex.Message, "watchdog"); }
             }
         }
 
-        private static void Tick()
+        private static void Tick(string reason)
         {
-            if (!Enabled) return;
-            // One recovery at a time; the recovery itself can take minutes.
+            // Both behaviours off: nothing to do, don't even probe.
+            if (!Notify && !Enabled) return;
+            // One action at a time; a recovery can take minutes.
             if (Interlocked.CompareExchange(ref _recovering, 1, 0) != 0) return;
             try
             {
@@ -66,29 +101,47 @@ namespace Ydp.Zapret
 
                 var st = Status.GetStatus(root);
                 // Nothing to protect while the bypass is off.
-                if (st.activeMode == "off") { Interlocked.Exchange(ref _fails, 0); return; }
+                if (st.activeMode == "off") { Reset(); return; }
 
                 // Stay out of the way while a test or a connect is in progress:
                 // their transient reachability is not a dead bypass.
-                if (Tester.SweepActive || AutoConnect.IsConnecting) { Interlocked.Exchange(ref _fails, 0); return; }
+                if (Tester.SweepActive || AutoConnect.IsConnecting) { Reset(); return; }
 
                 var check = Tester.CheckReachability(root, 4);
-                if (Tester.IsWorking(check.groups)) { Interlocked.Exchange(ref _fails, 0); return; }
+                if (Tester.IsWorking(check.groups)) { Reset(); return; }
 
-                if (Interlocked.Increment(ref _fails) < RequiredFails)
+                int fails = Interlocked.Increment(ref _fails);
+                if (fails < RequiredFails)
                 {
-                    Logger.Info("Watchdog: обход включён, но цели не отвечают (" + Interlocked.CompareExchange(ref _fails, 0, 0) + "/" + RequiredFails + ")", "watchdog");
+                    Logger.Info("Обход включён, но цели не отвечают (" + fails + "/" + RequiredFails + ", " + reason + ")", "watchdog");
                     return;
                 }
 
+                // Broken. Tell the user once…
+                if (Notify && Interlocked.CompareExchange(ref _notified, 1, 0) == 0)
+                {
+                    Logger.Warn("Обход включён, но Discord/YouTube не отвечают", "watchdog");
+                    App.Tray?.Notify("Обход не работает",
+                        "Discord или YouTube не отвечают, хотя обход включён. Проверьте сеть или переподключите обход.");
+                }
+
+                // …and, if the user opted in, actually recover.
                 Interlocked.Exchange(ref _fails, 0);
-                Logger.Warn("Watchdog: обход включён, но Discord/YouTube не отвечают — переподключаю", "watchdog");
-                var res = AutoConnect.Connect(root, m => Logger.Info("Watchdog: " + m, "watchdog"), null, null);
+                if (!Enabled) return;
+                Logger.Warn("Автовосстановление: переподключаю (" + reason + ")", "watchdog");
+                var res = AutoConnect.Connect(root, m => Logger.Info("Автовосстановление: " + m, "watchdog"), null, null);
                 Logger.Info(res.ok
-                    ? "Watchdog: переподключился на " + res.strategy
-                    : "Watchdog: переподключение не удалось (" + (res.reason ?? "ошибка") + ")", "watchdog");
+                    ? "Автовосстановление: переподключился на " + res.strategy
+                    : "Автовосстановление: не удалось (" + (res.reason ?? "ошибка") + ")", "watchdog");
+                Reset();
             }
             finally { Interlocked.Exchange(ref _recovering, 0); }
+        }
+
+        private static void Reset()
+        {
+            Interlocked.Exchange(ref _fails, 0);
+            Interlocked.Exchange(ref _notified, 0);
         }
     }
 }

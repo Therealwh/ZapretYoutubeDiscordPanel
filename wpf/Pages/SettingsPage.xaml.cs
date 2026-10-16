@@ -83,6 +83,7 @@ namespace Ydp.Pages
                 ChkAutostart.IsChecked = AutoStart.IsEnabled();
                 ChkAutoApply.IsChecked = AutoStart.AutoApplyEnabled();
                 ChkWatchdog.IsChecked = BypassWatchdog.Enabled;
+                ChkNotify.IsChecked = BypassWatchdog.Notify;
                 ChkHotkey.IsChecked = MainWindow.HotkeyEnabled;
                 ChkServiceMode.IsChecked = !string.Equals(Config.Get(AutoConnect.KeyPreferService, "true"), "false", StringComparison.OrdinalIgnoreCase);
 // Ship pre-filled: a fresh install works immediately, and anyone with their
@@ -148,6 +149,12 @@ namespace Ydp.Pages
             if (_loading) return;
             BypassWatchdog.Enabled = ChkWatchdog.IsChecked == true;
             Logger.Info("Автовосстановление обхода " + (BypassWatchdog.Enabled ? "включено" : "выключено"), "watchdog");
+        }
+
+        private void ChkNotify_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_loading) return;
+            BypassWatchdog.Notify = ChkNotify.IsChecked == true;
         }
 
         private void ChkHotkey_Changed(object sender, RoutedEventArgs e)

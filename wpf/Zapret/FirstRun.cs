@@ -242,41 +242,50 @@ namespace Ydp.Zapret
         /// without these lines Telegram stays blocked after an install.
         /// Returns how many lines were added.
         /// </summary>
-        public static int EnsureTelegramDomains(string root)
+                /// <summary>
+        /// The domain list the built-in Telegram proxy needs. Exposed so the
+        /// Lists page can file these into the "Telegram" category when it
+        /// reorganises the domain list.
+        /// </summary>
+        public static List<string> TelegramDomains()
         {
-            if (string.IsNullOrEmpty(root)) return 0;
+            var wanted = new List<string>();
             string domain = Config.Get("tgCfProxyDomain", null);
             if (string.IsNullOrWhiteSpace(domain)) domain = Tg.TgProxy.CustomCfDomain;
             if (string.IsNullOrWhiteSpace(domain)) domain = "wtfprivet.online";
             domain = domain.Trim().TrimStart('.').ToLowerInvariant();
-            if (domain.Length == 0) return 0;
-
-            var wanted = new List<string>();
+            if (domain.Length == 0) return wanted;
             for (int dc = 1; dc <= 6; dc++) wanted.Add("kws" + dc + "." + domain);
             // Cloudflare fronts Telegram too, otherwise the web/worker routes
             // keep being cut by the same DPI.
             wanted.Add("cloudflare.com");
             wanted.Add("cloudflare.dev");
             wanted.Add("workers.dev");
+            return wanted;
+        }
+
+        public static int EnsureTelegramDomains(string root)
+        {
+            if (string.IsNullOrEmpty(root)) return 0;
+            var wanted = TelegramDomains();
+            if (wanted.Count == 0) return 0;
 
             string path = Path.Combine(root, "lists", "list-general-user.txt");
             try
             {
-                var existing = File.Exists(path) ? File.ReadAllLines(path) : new string[0];
-                var merged = new List<string>();
-                foreach (var line in existing)
-                {
-                    string value = line.Trim();
-                    if (value.Length > 0 && !value.StartsWith("#")) merged.Add(line);
-                }
+                var existing = File.Exists(path) ? File.ReadAllText(path) : string.Empty;
                 int added = 0;
                 foreach (var entry in wanted)
                 {
-                    if (merged.Any(l => string.Equals(l.Trim(), entry, StringComparison.OrdinalIgnoreCase))) continue;
-                    merged.Add(entry);
+                    if (existing.Split('\n').Any(l => string.Equals(l.Trim(), entry, StringComparison.OrdinalIgnoreCase)))
+                        continue;
                     added++;
                 }
-                if (added > 0) File.WriteAllLines(path, merged);
+                // Store the proxy domains under their own "# === Telegram ==="
+                // section so the file stays organised and nothing else is
+                // disturbed.
+                var updated = CategorizedDomains.Ensure(existing, CategorizedDomains.SectionTelegram, wanted);
+                if (updated != existing) File.WriteAllText(path, updated);
                 return added;
             }
             catch (Exception ex)
