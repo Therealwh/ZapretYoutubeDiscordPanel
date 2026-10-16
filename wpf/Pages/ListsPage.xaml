@@ -18,12 +18,25 @@
                          Foreground="{StaticResource TextBrush}" Checked="Tab_Changed" />
         </StackPanel>
 
-        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,10">
-            <Button Content="Сохранить" Style="{StaticResource BtnPrimary}" Margin="0,0,10,0" Click="BtnSave_Click" />
-            <Button Content="Убрать дубликаты" Style="{StaticResource Btn}" Margin="0,0,10,0" Click="BtnDedupe_Click" />
-            <Button Content="Отсортировать" Style="{StaticResource Btn}" Margin="0,0,10,0" Click="BtnSort_Click" />
-            <Button Content="Очистить комментарии и пустые" Style="{StaticResource Btn}" Margin="0,0,10,0" Click="BtnCleanup_Click" />
-            <TextBlock x:Name="Stats" Style="{StaticResource Dim}" VerticalAlignment="Center" />
+        <StackPanel Grid.Row="1" Margin="0,0,0,10">
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                <Button Content="Сохранить" Style="{StaticResource BtnPrimary}" Margin="0,0,10,0" Click="BtnSave_Click" />
+                <Button Content="Убрать дубликаты" Style="{StaticResource Btn}" Margin="0,0,10,0" Click="BtnDedupe_Click" />
+                <Button Content="Отсортировать" Style="{StaticResource Btn}" Margin="0,0,10,0" Click="BtnSort_Click" />
+                <Button Content="Очистить комментарии и пустые" Style="{StaticResource Btn}" Margin="0,0,10,0" Click="BtnCleanup_Click" />
+                <TextBlock x:Name="Stats" Style="{StaticResource Dim}" VerticalAlignment="Center" Margin="10,0,0,0" />
+            </StackPanel>
+            <!-- Presets: a ready-made domain list instead of assembling it by hand.
+                 They write into the "general" list. -->
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="Готовый список доменов:" Style="{StaticResource Dim}" VerticalAlignment="Center" Margin="0,0,10,0" />
+                <Button Content="Discord" Style="{StaticResource Btn}" Margin="0,0,8,0" Click="BtnPresetDiscord_Click"
+                        ToolTip="Заполнить основной список доменами Discord" />
+                <Button Content="YouTube" Style="{StaticResource Btn}" Margin="0,0,8,0" Click="BtnPresetYoutube_Click"
+                        ToolTip="Заполнить основной список доменами YouTube" />
+                <Button Content="Очистить список" Style="{StaticResource Btn}" Click="BtnPresetClear_Click"
+                        ToolTip="Очистить основной список" />
+            </StackPanel>
         </StackPanel>
 
         <Border Grid.Row="2" Style="{StaticResource Card}" Padding="0">

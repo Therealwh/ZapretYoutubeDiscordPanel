@@ -51,8 +51,9 @@
         <UniformGrid Columns="4" Margin="0,0,0,14">
             <Border x:Name="TileStrategy" Style="{StaticResource TileIdle}" Margin="0,0,8,8" Padding="14,12">
                 <StackPanel>
-                    <TextBlock Text="СТРАТЕГИЯ" Style="{StaticResource TileLabel}" />
-                    <TextBlock x:Name="StatStrategy" Text="—" Style="{StaticResource TileValue}" ToolTip="" />
+                    <TextBlock Text="ТЕКУЩАЯ СТРАТЕГИЯ" Style="{StaticResource TileLabel}" />
+                    <TextBlock x:Name="StatStrategy" Text="—" Style="{StaticResource TileValue}" />
+                    <TextBlock x:Name="StatStrategySub" Text="" Style="{StaticResource Mono}" TextWrapping="Wrap" />
                 </StackPanel>
             </Border>
             <Border x:Name="TileMode" Style="{StaticResource TileIdle}" Margin="0,0,8,8" Padding="14,12">
@@ -84,12 +85,6 @@
                 <StackPanel>
                     <TextBlock Text="ПАПКА ZAPRET" Style="{StaticResource TileLabel}" />
                     <TextBlock x:Name="StatRoot" Text="—" Style="{StaticResource TileValue}" />
-                </StackPanel>
-            </Border>
-            <Border x:Name="TileRemembered" Style="{StaticResource TileIdle}" Margin="0,0,8,0" Padding="14,12">
-                <StackPanel>
-                    <TextBlock Text="ЗАПОМНЕНО" Style="{StaticResource TileLabel}" />
-                    <TextBlock x:Name="StatRemembered" Text="—" Style="{StaticResource TileValue}" />
                 </StackPanel>
             </Border>
             <Border x:Name="TileAutostart" Style="{StaticResource TileIdle}" Margin="0,0,0,0" Padding="14,12">

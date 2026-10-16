@@ -358,8 +358,6 @@ private void BtnTgOpen_Click(object sender, RoutedEventArgs e)
                 ? (System.Windows.Media.Brush)FindResource("TextBrush")
                 : (System.Windows.Media.Brush)FindResource("TextDimBrush");
 
-            StatStrategy.Text = string.IsNullOrEmpty(st.serviceStrategy) ? "—" : st.serviceStrategy;
-            SetTile(TileStrategy, string.IsNullOrEmpty(st.serviceStrategy) ? "idle" : "ok");
             StatMode.Text = st.activeMode == "service" ? "Служба Windows"
                 : st.activeMode == "process" ? "Процесс" : "—";
             SetTile(TileMode, st.activeMode == "service" ? "ok" : st.activeMode == "process" ? "warn" : "idle");
@@ -377,10 +375,31 @@ private void BtnTgOpen_Click(object sender, RoutedEventArgs e)
             SetTile(TileRoot, string.IsNullOrEmpty(root) ? "err" : "ok");
 
             var remembered = snap.Remembered;
-            StatRemembered.Text = remembered.Count == 0
-                ? "не запомнено"
-                : System.IO.Path.GetFileName(remembered[0]);
-            SetTile(TileRemembered, remembered.Count == 0 ? "idle" : "ok");
+            // One clear "current strategy" instead of two side-by-side numbers
+            // (running vs remembered) that used to contradict each other and
+            // read as a bug. When the bypass is on, show what is really running;
+            // when it is off, show what will be used next, labelled as such.
+            string running = st.serviceStrategy;
+            if (string.IsNullOrEmpty(running))
+                running = Config.Get("processStrategyName", null);
+            string rememberedFirst = remembered.Count == 0
+                ? null
+                : System.IO.Path.GetFileNameWithoutExtension(remembered[0]);
+            if (on)
+            {
+                StatStrategy.Text = string.IsNullOrEmpty(running) ? "текущая" : running;
+                StatStrategySub.Text = remembered.Count > 1
+                    ? "в запасе ещё " + (remembered.Count - 1)
+                    : string.Empty;
+            }
+            else
+            {
+                StatStrategy.Text = string.IsNullOrEmpty(rememberedFirst) ? "выключена" : rememberedFirst;
+                StatStrategySub.Text = string.IsNullOrEmpty(rememberedFirst)
+                    ? "обход выключен, ничего не запомнено"
+                    : "включится по умолчанию";
+            }
+            SetTile(TileStrategy, on ? "ok" : "idle");
 
             StatAutostart.Text = snap.AutoOn
                 ? (snap.AutoApply ? "включён" : "только панель")

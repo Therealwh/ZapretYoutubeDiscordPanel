@@ -483,6 +483,14 @@ public Groups baseline { get; set; }
         private static readonly object AbortGate = new object();
         private static volatile bool _aborted;
 
+        /// <summary>
+        /// True while a full/selected sweep is running. The bypass watchdog uses
+        /// it to stay quiet during a test: the sweep deliberately cycles through
+        /// every config, so reachability is chaotic and must not be read as "the
+        /// bypass died".
+        /// </summary>
+        public static volatile bool SweepActive;
+
         public static void Abort() { _aborted = true; }
 
         /// <summary>

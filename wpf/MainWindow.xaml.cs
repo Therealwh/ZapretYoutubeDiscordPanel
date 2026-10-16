@@ -1,5 +1,8 @@
 using System;
+using System.Runtime.InteropServices;
 using System.Windows;
+using System.Windows.Interop;
+using System.Windows.Input;
 using Ydp.Services;
 using System.Windows.Controls;
 using Ydp.Pages;
@@ -9,6 +12,127 @@ namespace Ydp
 {
     public partial class MainWindow : Window
     {
+        // ---- global hotkey: toggle the bypass without opening the panel -------
+        // The panel lives in the tray, so a system-wide combo is the fastest way
+        // to flip the bypass on/off. Default Ctrl+Alt+B; the combo is a single
+        // WPF KeyGesture parsed from a settings string so it is changeable
+        // without touching the code. WM_HOTKEY is delivered to a hook on this
+        // window's HwndSource.
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern bool RegisterHotKey(IntPtr hwnd, int id, uint modifiers, uint virtualKey);
+        [DllImport("user32.dll", SetLastError = true)]
+        private static extern bool UnregisterHotKey(IntPtr hwnd, int id);
+
+        private const int WM_HOTKEY = 0x0312;
+        private const int HotkeyId = 0xB921;
+        public const string KeyHotkeyEnabled = "hotkeyEnabled";
+        private HwndSource _hotkeySource;
+        private bool _hotkeyRegistered;
+
+        public static bool HotkeyEnabled
+        {
+            get { return !string.Equals(Config.Get(KeyHotkeyEnabled, "on"), "off", StringComparison.OrdinalIgnoreCase); }
+            set { Config.Set(KeyHotkeyEnabled, value ? "on" : "off"); }
+        }
+
+        private void SetupHotkey()
+        {
+            var helper = new WindowInteropHelper(this);
+            IntPtr hwnd = helper.EnsureHandle();
+            _hotkeySource = HwndSource.FromHwnd(hwnd);
+            _hotkeySource.AddHook(HotkeyHook);
+            ApplyHotkeySetting(HotkeyEnabled);
+        }
+
+        /// <summary>Register or release the global combo at runtime (Settings toggle).</summary>
+        public void ApplyHotkeySetting(bool enabled)
+        {
+            if (!enabled)
+            {
+                if (_hotkeyRegistered)
+                {
+                    var h = new WindowInteropHelper(this);
+                    UnregisterHotKey(h.Handle, HotkeyId);
+                    _hotkeyRegistered = false;
+                    Logger.Info("Горячая клавиша отключена", "hotkey");
+                }
+                return;
+            }
+            if (_hotkeyRegistered) return;
+            string combo = Config.Get("hotkeyToggle", "Ctrl+Alt+B");
+            KeyGesture gesture;
+            if (!TryParseGesture(combo, out gesture)) gesture = new KeyGesture(Key.B, ModifierKeys.Control | ModifierKeys.Alt);
+            uint mods = 0;
+            var m = gesture.Modifiers;
+            if ((m & ModifierKeys.Control) != 0) mods |= 0x0002;
+            if ((m & ModifierKeys.Alt) != 0) mods |= 0x0001;
+            if ((m & ModifierKeys.Shift) != 0) mods |= 0x0004;
+            if ((m & ModifierKeys.Windows) != 0) mods |= 0x0008;
+            Key key = gesture.Key == Key.System ? System.Windows.Input.Key.ImeProcessed : gesture.Key;
+            uint vk = (uint)KeyInterop.VirtualKeyFromKey(key);
+            var helper = new WindowInteropHelper(this);
+            _hotkeyRegistered = mods != 0 && RegisterHotKey(helper.Handle, HotkeyId, mods, vk);
+            Logger.Info(_hotkeyRegistered
+                ? "Горячая клавиша включена: " + combo
+                : "Горячую клавишу " + combo + " занять не удалось (занята другой программой)", "hotkey");
+        }
+        private IntPtr HotkeyHook(IntPtr hwnd, int msg, IntPtr wParam, IntPtr lParam, ref bool handled)
+        {
+            if (msg == WM_HOTKEY && wParam.ToInt32() == HotkeyId)
+            {
+                handled = true;
+                ToggleBypassFromHotkey();
+            }
+            return IntPtr.Zero;
+        }
+
+        private void UnregisterHotkey()
+        {
+            if (!_hotkeyRegistered) return;
+            var helper = new WindowInteropHelper(this);
+            UnregisterHotKey(helper.Handle, HotkeyId);
+            _hotkeyRegistered = false;
+        }
+
+        private void ToggleBypassFromHotkey()
+        {
+            var root = Zapret.Status.ResolveRoot(Config.Get("zapretRoot", null));
+            if (string.IsNullOrEmpty(root)) return;
+            try
+            {
+                var st = Zapret.Status.GetStatus(root);
+                if (st.activeMode != "off")
+                {
+                    ServiceOps.StopServiceAndWinws();
+                    Logger.Info("Горячая клавиша: обход выключен", "hotkey");
+                    App.Tray?.Notify("YoutubeDiscordPanel", "Обход выключен.");
+                }
+                else
+                {
+                    App.Tray?.Notify("YoutubeDiscordPanel", "Включаю обход…");
+                    System.Threading.Tasks.Task.Run(() =>
+                        Zapret.AutoConnect.Connect(root, m => Logger.Info("Горячая клавиша: " + m, "hotkey"), null, null))
+                        .ContinueWith(t => Logger.Info(t.IsFaulted
+                            ? "Горячая клавиша: ошибка включения"
+                            : "Горячая клавиша: включение завершено", "hotkey"));
+                }
+            }
+            catch (Exception ex) { Logger.Warn("Горячая клавиша: " + ex.Message, "hotkey"); }
+        }
+
+        private static bool TryParseGesture(string text, out KeyGesture gesture)
+        {
+            gesture = null;
+            if (string.IsNullOrWhiteSpace(text)) return false;
+            try
+            {
+                gesture = (KeyGesture)new System.Windows.Input.KeyGestureConverter()
+                    .ConvertFromString(text.Trim());
+                return gesture != null;
+            }
+            catch { gesture = null; return false; }
+        }
+
         // Pages are created on first navigation: building all three XAML trees up
         // front slowed startup and made a crash in any one of them fatal.
         private DashboardPage _dashboard;
@@ -50,6 +174,9 @@ namespace Ydp
                 Hide();
                 App.Tray.Notify("YoutubeDiscordPanel", "Панель свёрнута в трей — значок рядом с часами.");
             };
+
+            SourceInitialized += (s, e) => SetupHotkey();
+            Closing += (s, e) => UnregisterHotkey();
 
             Loaded += (s, e) =>
         {

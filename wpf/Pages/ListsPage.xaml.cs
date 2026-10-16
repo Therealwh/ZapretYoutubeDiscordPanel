@@ -87,5 +87,62 @@ namespace Ydp.Pages
         {
             if (Lists.ApplyOperation(_root, _key, "cleanup")) Load();
         }
+
+        // ---- presets: ready-made domain lists -------------------------------
+        // Typing every domain by hand is the slowest part of setting up the
+        // filter. These fill the "general" list with a known-good set for a
+        // service, so a one-click setup works out of the box.
+
+        private static readonly string[] DiscordPreset =
+        {
+            "discord.com",
+            "discord.gg",
+            "discordapp.com",
+            "discordapp.net",
+            "discord.media",
+            "cdn.discordapp.com",
+            "gateway.discord.gg",
+            "media.discordapp.net",
+        };
+
+        private static readonly string[] YouTubePreset =
+        {
+            "youtube.com",
+            "youtu.be",
+            "googlevideo.com",
+            "ytimg.com",
+            "ggpht.com",
+            "jnn-pa.googleapis.com",
+        };
+
+        private void ApplyPreset(string[] domains)
+        {
+            if (Lists.Write(_root, "general", string.Join(Environment.NewLine, domains)))
+            {
+                Logger.Info("Применён готовый список доменов (" + domains.Length + ")", "lists");
+                TabGeneral.IsChecked = true;
+                _key = "general";
+                Load();
+            }
+            else
+            {
+                Stats.Text = "Не удалось сохранить список (нет прав на запись?).";
+            }
+        }
+
+        private void BtnPresetDiscord_Click(object sender, RoutedEventArgs e) => ApplyPreset(DiscordPreset);
+
+        private void BtnPresetYoutube_Click(object sender, RoutedEventArgs e) => ApplyPreset(YouTubePreset);
+
+        private void BtnPresetClear_Click(object sender, RoutedEventArgs e)
+        {
+            if (MessageBox.Show(Window.GetWindow(this),
+                    "Очистить основной список доменов?",
+                    "Очистить список", MessageBoxButton.YesNo, MessageBoxImage.Question)
+                == MessageBoxResult.Yes)
+            {
+                ApplyPreset(new string[0]);
+            }
+        }
     }
 }

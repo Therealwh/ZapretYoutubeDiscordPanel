@@ -250,6 +250,7 @@
                     <DataGridTextColumn Header="Стратегия" Binding="{Binding Name}" Width="2*" />
                     <DataGridTextColumn Header="Методы" Binding="{Binding Badges}" Width="3*" />
                     <DataGridTextColumn Header="Состояние" Binding="{Binding State}" Width="*" />
+                    <DataGridTextColumn Header="Работала" Binding="{Binding LastGood}" Width="Auto" />
                     <DataGridTemplateColumn Header="" Width="Auto">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>

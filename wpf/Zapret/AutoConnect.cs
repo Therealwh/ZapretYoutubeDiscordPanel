@@ -66,6 +66,67 @@ namespace Ydp.Zapret
             return !string.IsNullOrWhiteSpace(file) && File.Exists(file) ? file : null;
         }
 
+        // ---- last-known-good timestamp, per strategy ------------------------
+        // The bundled tester is not deterministic, so a strategy that passed
+        // yesterday may fail today. Showing "last time this was seen working"
+        // lets the user pick a likely winner without re-running the whole sweep.
+        // Keyed by the .bat file name so it survives moves of the zapret folder.
+
+        public const string LastGoodPrefix = "lastGood:";
+
+        /// <summary>Stamp a strategy as "working right now".</summary>
+        public static void MarkGoodNow(string strategyFileOrName)
+        {
+            string name = NormalizeStrategyName(strategyFileOrName);
+            if (string.IsNullOrEmpty(name)) return;
+            Config.Set(LastGoodPrefix + name, DateTime.UtcNow.ToString("o"));
+        }
+
+        /// <summary>When a strategy last passed a check, or null if never.</summary>
+        public static DateTime? LastGood(string strategyFileOrName)
+        {
+            string name = NormalizeStrategyName(strategyFileOrName);
+            if (string.IsNullOrEmpty(name)) return null;
+            string raw = Config.Get(LastGoodPrefix + name, null);
+            DateTime parsed;
+            if (string.IsNullOrWhiteSpace(raw)) return null;
+            if (DateTime.TryParse(raw, null,
+                    System.Globalization.DateTimeStyles.RoundtripKind, out parsed))
+                return parsed.ToLocalTime();
+            return null;
+        }
+
+        /// <summary>
+        /// Russian relative label for the strategy list: "только что",
+        /// "5 мин назад", "вчера", "3 дн. назад", "12 окт".
+        /// </summary>
+        public static string LastGoodLabel(string strategyFileOrName)
+        {
+            var when = LastGood(strategyFileOrName);
+            if (when == null) return string.Empty;
+            var span = DateTime.Now - when.Value;
+            if (span < TimeSpan.FromMinutes(1)) return "только что";
+            if (span < TimeSpan.FromHours(1)) return ((int)span.TotalMinutes) + " мин назад";
+            if (span < TimeSpan.FromHours(24)) return ((int)span.TotalHours) + " ч назад";
+            if (span < TimeSpan.FromDays(2)) return "вчера";
+            if (span < TimeSpan.FromDays(30)) return ((int)span.TotalDays) + " дн. назад";
+            return when.Value.ToString("d MMM");
+        }
+
+        private static string NormalizeStrategyName(string fileOrName)
+        {
+            if (string.IsNullOrWhiteSpace(fileOrName)) return null;
+            string n = Path.GetFileName(fileOrName.Trim());
+            // strip a .bat/.cmd extension if present so a full path and a bare
+            // name map to the same key
+            string ext = Path.GetExtension(n);
+            if (!string.IsNullOrEmpty(ext)
+                && (ext.Equals(".bat", StringComparison.OrdinalIgnoreCase)
+                    || ext.Equals(".cmd", StringComparison.OrdinalIgnoreCase)))
+                n = Path.GetFileNameWithoutExtension(n);
+            return string.IsNullOrWhiteSpace(n) ? null : n;
+        }
+
         private static bool PreferService()
         {
             var value = Config.Get(KeyPreferService, "true");
@@ -116,6 +177,7 @@ namespace Ydp.Zapret
                     Config.Set(KeyLastWinner, file);
                     Config.Set("processStrategyName", Path.GetFileName(file));
                     RememberWorking(file);
+                    MarkGoodNow(file);
                     return new ConnectResult
                     {
                         ok = true,
@@ -147,6 +209,25 @@ namespace Ydp.Zapret
 
         public static ConnectResult Connect(string rootDir, Action<string> log, Action<Tester.StrategyRunResult, int, int> progress, Func<RememberedFailureAction> onRememberedFailure = null)
         {
+            // One connect at a time. The background watchdog and a manual click
+            // can otherwise race on the same service name: one stops the other's
+            // winws and the user is left with no bypass.
+            if (System.Threading.Interlocked.CompareExchange(ref _connecting, 1, 0) != 0)
+            {
+                log?.Invoke("Подключение уже выполняется — пропускаю повторный запуск");
+                return new ConnectResult { ok = false, reason = "already_connecting" };
+            }
+            try { return ConnectCore(rootDir, log, progress, onRememberedFailure); }
+            finally { System.Threading.Interlocked.Exchange(ref _connecting, 0); }
+        }
+
+        private static int _connecting;
+
+        /// <summary>True while a connect (manual or watchdog) is in progress.</summary>
+        public static bool IsConnecting { get { return System.Threading.Volatile.Read(ref _connecting) > 0; } }
+
+        private static ConnectResult ConnectCore(string rootDir, Action<string> log, Action<Tester.StrategyRunResult, int, int> progress, Func<RememberedFailureAction> onRememberedFailure)
+        {
             var result = new ConnectResult();
 
             // 1. Is what is running actually working?
@@ -161,6 +242,7 @@ namespace Ydp.Zapret
                 {
                     var remembered = LastWinner();
                     if (remembered != null) RememberWorking(remembered);
+                    MarkGoodNow(status.serviceStrategy ?? currentName);
                     return new ConnectResult { ok = true, already = true, strategy = currentName, mode = status.activeMode };
                 }
                 log?.Invoke($"Текущая стратегия \"{currentName}\" не подтвердилась за {verify.attempts} попытки — ищу лучше");

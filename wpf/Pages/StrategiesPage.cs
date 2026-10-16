@@ -45,6 +45,9 @@ namespace Ydp.Pages
         public string Active { get; set; }
         public string State { get; set; }
 
+        /// <summary>When this strategy last passed a check ("вчера", "3 дн. назад").</summary>
+        public string LastGood { get; set; }
+
         /// <summary>
         /// "Подключить" straight from the list, without running a test first.
         /// Goes through the same ConnectNow path as the report rows: install,
@@ -105,6 +108,7 @@ namespace Ydp.Pages
                     Badges = string.Join(" · ", s.badges),
                     Active = string.Equals(s.name, active, StringComparison.OrdinalIgnoreCase) ? "активная" : string.Empty,
                     State = string.IsNullOrEmpty(active) && status.activeMode == "off" ? string.Empty : (string.Equals(s.name, active, StringComparison.OrdinalIgnoreCase) ? "подключена" : string.Empty),
+                    LastGood = AutoConnect.LastGoodLabel(s.name),
                 };
                 // Per-row "Подключить": same install + verify + remember path as
                 // the tested rows, so an untested strategy can still be applied
@@ -391,6 +395,22 @@ private async void BtnTest_Click(object sender, RoutedEventArgs e)
         {
             if (!RequireRoot()) return;
             SetBusy(true, busyNote);
+            // Keep the bypass watchdog quiet for the whole run: the sweep cycles
+            // through every config on purpose, so its reachability is not a
+            // signal that the live bypass died.
+            Tester.SweepActive = true;
+            try
+            {
+                await RunSweepCoreAsync(selection, busyNote);
+            }
+            finally
+            {
+                Tester.SweepActive = false;
+            }
+        }
+
+        private async System.Threading.Tasks.Task RunSweepCoreAsync(string selection, string busyNote)
+        {
             // Start a fresh report: the list accumulates during the run.
             _runs.Clear();
             _tested = 0;
@@ -618,6 +638,7 @@ public void Execute(object parameter)
 
             Config.Set(AutoConnect.KeyLastWinner, file);
             AutoConnect.RememberWorking(file);
+            AutoConnect.MarkGoodNow(file);
             SetBusy(false, "Подключено: " + name + " (служба Windows, автозапуск)");
         }
 
@@ -715,6 +736,9 @@ public void Execute(object parameter)
                 Verdict = verdict,
             };
             row.ToggleCmd = new DelegateCommand(() => row.Expanded = !row.Expanded);
+            // A fully measured pass is evidence the strategy works right now,
+            // so it gets a "last good" stamp for the list.
+            if (ok) AutoConnect.MarkGoodNow(run.file);
             // Only a fully measured strategy can be connected: the partial run of an
             // aborted sweep is a truncated score, not evidence that it works.
             // Wrapped in DelegateCommand because the XAML binds Connect via Command.

@@ -21,6 +21,16 @@
                 <CheckBox x:Name="ChkAutoApply" Content="Применять запомненную стратегию автоматически"
                           Foreground="{StaticResource TextBrush}" IsEnabled="{Binding ElementName=ChkAutostart, Path=IsChecked}"
                           Checked="ChkAutoApply_Changed" Unchecked="ChkAutoApply_Changed" />
+                <CheckBox x:Name="ChkWatchdog" Content="Автовосстановление обхода (следить и переподключать)"
+                          Foreground="{StaticResource TextBrush}" Margin="0,10,0,0"
+                          Checked="ChkWatchdog_Changed" Unchecked="ChkWatchdog_Changed" />
+                <TextBlock x:Name="WatchdogNote" Style="{StaticResource Dim}" Margin="0,6,0,0"
+                           Text="Пока панель открыта: если обход включён, но Discord или YouTube перестали отвечать, панель сама переподключится — сначала запомненной стратегией, а если не выйдет — поиском новой." />
+                <CheckBox x:Name="ChkHotkey" Content="Глобальная горячая клавиша (Ctrl+Alt+B)"
+                          Foreground="{StaticResource TextBrush}" Margin="0,10,0,0"
+                          Checked="ChkHotkey_Changed" Unchecked="ChkHotkey_Changed" />
+                <TextBlock Style="{StaticResource Dim}" Margin="0,6,0,0"
+                           Text="Включает/выключает обход по нажатию Ctrl+Alt+B, даже когда панель свёрнута в трей." />
                 <TextBlock x:Name="AutoNote" Style="{StaticResource Dim}" Margin="0,8,0,0" />
             </StackPanel>
         </Border>

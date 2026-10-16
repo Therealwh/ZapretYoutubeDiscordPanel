@@ -108,6 +108,10 @@ base.OnStartup(e);
                     return;
                 }
 
+                // Bypass watchdog: opt-in from Settings. Runs on its own thread
+                // so a dead bypass recovers even while the user is on another page.
+                BypassWatchdog.Start();
+
                 // Start the Telegram proxy together with the panel when configured to. The
                 // user points Telegram at 127.0.0.1:<port>, so a panel that comes
                 // up without its listener leaves the client reconnecting to a dead

@@ -82,6 +82,8 @@ namespace Ydp.Pages
             {
                 ChkAutostart.IsChecked = AutoStart.IsEnabled();
                 ChkAutoApply.IsChecked = AutoStart.AutoApplyEnabled();
+                ChkWatchdog.IsChecked = BypassWatchdog.Enabled;
+                ChkHotkey.IsChecked = MainWindow.HotkeyEnabled;
                 ChkServiceMode.IsChecked = !string.Equals(Config.Get(AutoConnect.KeyPreferService, "true"), "false", StringComparison.OrdinalIgnoreCase);
 // Ship pre-filled: a fresh install works immediately, and anyone with their
     // own infrastructure overwrites it here.
@@ -139,6 +141,23 @@ namespace Ydp.Pages
                 ? "Запомненная рабочая стратегия будет применяться при каждом входе в Windows."
                 : "Автоприменение выключено — обход поднимется только через службу Windows.";
             Load();
+        }
+
+        private void ChkWatchdog_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_loading) return;
+            BypassWatchdog.Enabled = ChkWatchdog.IsChecked == true;
+            Logger.Info("Автовосстановление обхода " + (BypassWatchdog.Enabled ? "включено" : "выключено"), "watchdog");
+        }
+
+        private void ChkHotkey_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_loading) return;
+            bool on = ChkHotkey.IsChecked == true;
+            MainWindow.HotkeyEnabled = on;
+            // The MainWindow owns the registration; reach it to apply now.
+            var win = Window.GetWindow(this) as MainWindow;
+            if (win != null) win.ApplyHotkeySetting(on);
         }
 
         private void ChkServiceMode_Changed(object sender, RoutedEventArgs e)
