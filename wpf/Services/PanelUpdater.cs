@@ -130,6 +130,15 @@ namespace Ydp.Services
                     UseShellExecute = false,
                     CreateNoWindow = true,
                 };
+
+                // Release the Telegram proxy port and winws in THIS process before
+                // it exits. Without this the old instance keeps 127.0.0.1:1443
+                // while the new one starts, and the new proxy can never bind —
+                // Telegram then reconnects to a dead port. Stopping here frees
+                // the port immediately, ahead of the restart.
+                try { Ydp.Tg.TgProxy.Stop(); } catch { /* best effort */ }
+                try { ServiceOps.KillWinws(); } catch { /* best effort */ }
+
                 Process.Start(startInfo);
 
                 Logger.Info("Запущено обновление панели до " + _state.latest, "updater");

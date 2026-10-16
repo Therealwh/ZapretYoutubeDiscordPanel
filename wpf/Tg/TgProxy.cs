@@ -167,6 +167,48 @@ private static volatile bool _cfEnabled = true;
         }
 
         /// <summary>
+        /// Bind the listener, retrying if the port is momentarily held.
+        ///
+        /// After a panel self-update the new process can start while the old one
+        /// is still shutting down and still holding 127.0.0.1:1443, so a single
+        /// bind gave up and the Telegram proxy silently never came up. Retry for
+        /// a few seconds first (the old process exits on its own), and if the port
+        /// stays held, free it — the owner is a stale panel instance.
+        /// </summary>
+        private static bool TryBindWithRetry(TcpListener listener, int port, out string failReason)
+        {
+            failReason = null;
+            const int attempts = 8;
+            for (int attempt = 1; attempt <= attempts; attempt++)
+            {
+                try
+                {
+                    listener.Start();
+                    return true;
+                }
+                catch (System.Net.Sockets.SocketException ex)
+                {
+                    if (ex.SocketErrorCode != System.Net.Sockets.SocketError.AddressAlreadyInUse)
+                    {
+                        failReason = "listen_failed";
+                        return false;
+                    }
+                    if (attempt == 3)
+                    {
+                        // Give the previous instance a moment, then take the port
+                        // back from whatever is still holding it.
+                        _log("Порт " + port + " держит старый экземпляр панели — освобождаю", "info");
+                        try { FreePort(port); } catch { /* best effort */ }
+                    }
+                    _log("Порт " + port + " занят, попытка " + attempt + "/" + attempts, "info");
+                    System.Threading.Thread.Sleep(1200);
+                }
+            }
+            failReason = "port_busy";
+            return false;
+        }
+
+        /// <summary>
         /// PID of the process LISTENING on a local TCP port, via netstat -ano, or
         /// 0 when the port is free. netstat is used (not IP helper tables) because
         /// it needs no P/Invoke and the port is a single, local, 127.0.0.1 value.
@@ -276,28 +318,22 @@ private static volatile bool _cfEnabled = true;
 
 _cts = new CancellationTokenSource();
                 var listener = new TcpListener(IPAddress.Parse(_host == "0.0.0.0" ? "127.0.0.1" : _host), _port);
-                try
-                {
-                    listener.Start();
-                }
-                catch (System.Net.Sockets.SocketException ex)
+                string failReason;
+                if (!TryBindWithRetry(listener, _port, out failReason))
                 {
                     _cts = null;
                     // The raw Win32 message ("address already in use") is useless
                     // here: Telegram is configured for 127.0.0.1:1443 and keeps
                     // reconnecting to a dead port. Say what actually happened.
-                    string reason = ex.SocketErrorCode == System.Net.Sockets.SocketError.AddressAlreadyInUse
-                        ? "port_busy"
-                        : "listen_failed";
-                    _log(reason == "port_busy"
-                        ? "Порт " + _port + " уже занят — вероятно, прокси уже запущен в другом экземпляре панели. Закройте старую панель и запустите заново."
-                        : "Не удалось занять порт " + _port + ": " + ex.Message, "error");
+                    _log(failReason == "port_busy"
+                        ? "Порт " + _port + " занят и не освободился — закройте старый экземпляр панели и запустите прокси заново."
+                        : "Не удалось занять порт " + _port, "error");
                     return Task.FromResult(new ProxyStatsView
                     {
                         running = false,
                         host = _host,
                         port = _port,
-                        lastError = reason,
+                        lastError = failReason,
                         proxyUrl = ProxyLink(),
                     });
                 }
