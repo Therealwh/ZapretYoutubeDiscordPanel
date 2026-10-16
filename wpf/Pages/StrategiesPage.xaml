@@ -278,7 +278,16 @@
                                                     <ControlTemplate TargetType="Button">
                                                         <Border x:Name="Bg" Background="{TemplateBinding Background}"
                                                                 CornerRadius="6" Padding="3,0">
-                                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center" />
+                                                            <!-- Glyph as an explicit TextBlock whose
+                                                                 TextElement.Foreground follows the
+                                                                 button: a plain ContentPresenter
+                                                                 inherits the DataGrid colour instead
+                                                                 and rendered the pinned star white. -->
+                                                            <TextBlock Text="{TemplateBinding Content}"
+                                                                       FontFamily="{TemplateBinding FontFamily}"
+                                                                       FontSize="{TemplateBinding FontSize}"
+                                                                       TextElement.Foreground="{TemplateBinding Foreground}"
+                                                                       HorizontalAlignment="Center" VerticalAlignment="Center" />
                                                         </Border>
                                                         <ControlTemplate.Triggers>
                                                             <Trigger Property="IsMouseOver" Value="True">
