@@ -118,12 +118,19 @@ namespace Ydp.Services
                     return new UpdateResult { ok = false, reason = "asset_too_small", message = size + " байт" };
                 }
 
-                int pid = Process.GetCurrentProcess().Id;
-                // cmd waits for us to exit, then swaps the file and starts the
-                // new version. start "" is required so the path with spaces is
-                // not taken as the window title.
+                // Wait for this process to be GONE before copying — Windows refuses
+                // to overwrite a running exe. A fixed delay is used on purpose:
+                // polling with `tasklist /fi "PID eq N"` is unreliable here, because
+                // on a non-English (ru) Windows the localized tasklist output can
+                // make `/fi` reject the argument and the whole wait loop collapse.
+                // We already stop the Telegram proxy and winws right before, and we
+                // exit immediately after — so a 6-second grace is generous and
+                // safe. Once we are gone, cmd copies the new exe and starts it;
+                // the new instance then finds 127.0.0.1:1443 free.
+                // start "" is required so the path with spaces is not taken as
+                // the window title.
                 string command = string.Format(
-                    "ping -n 3 127.0.0.1 >nul & copy /y \"{0}\" \"{1}\" >nul & start \"\" \"{1}\"",
+                    "ping -n 7 127.0.0.1 >nul & copy /y \"{0}\" \"{1}\" >nul & start \"\" \"{1}\"",
                     download, target);
                 var startInfo = new ProcessStartInfo("cmd.exe", "/c " + command)
                 {
@@ -142,6 +149,13 @@ namespace Ydp.Services
                 Process.Start(startInfo);
 
                 Logger.Info("Запущено обновление панели до " + _state.latest, "updater");
+                // The panel must actually LEAVE. Without this the old process
+                // survives the update, keeps 127.0.0.1:1443, and the new
+                // instance cannot bind the Telegram proxy. Kill any child
+                // helpers first so nothing lingers holding a port.
+                // Environment.Exit (not Kill) so config is flushed and the
+                // process leaves cleanly; Windows then releases 1443 for us.
+                Environment.Exit(0);
                 return new UpdateResult { ok = true, message = _state.latest };
             }
             catch (Exception ex)

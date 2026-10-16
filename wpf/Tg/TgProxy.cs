@@ -178,7 +178,10 @@ private static volatile bool _cfEnabled = true;
         private static bool TryBindWithRetry(TcpListener listener, int port, out string failReason)
         {
             failReason = null;
-            const int attempts = 8;
+            // ~30 seconds of patience. A panel self-update replaces the exe and
+            // restarts, so the previous instance can hold the port for a while
+            // while it shuts down; 8 short attempts gave up before it did.
+            const int attempts = 25;
             for (int attempt = 1; attempt <= attempts; attempt++)
             {
                 try
@@ -193,12 +196,22 @@ private static volatile bool _cfEnabled = true;
                         failReason = "listen_failed";
                         return false;
                     }
-                    if (attempt == 3)
+                    // Give the previous instance a moment, then take the port
+                    // back from whatever is still holding it. Re-checked every
+                    // few attempts: an owner that ignores the first kill (or a
+                    // second stale instance) would otherwise hold it forever.
+                    if (attempt == 3 || attempt == 10 || attempt == 18)
                     {
-                        // Give the previous instance a moment, then take the port
-                        // back from whatever is still holding it.
                         _log("Порт " + port + " держит старый экземпляр панели — освобождаю", "info");
                         try { FreePort(port); } catch { /* best effort */ }
+                        // If OUR OWN proxy holds the port, no amount of waiting
+                        // helps: only «Стоп» frees it. Fail fast with a clear
+                        // reason instead of burning all the attempts.
+                        if (FindPortOwnerPid(port) == System.Diagnostics.Process.GetCurrentProcess().Id)
+                        {
+                            failReason = "held_by_self";
+                            return false;
+                        }
                     }
                     _log("Порт " + port + " занят, попытка " + attempt + "/" + attempts, "info");
                     System.Threading.Thread.Sleep(1200);
@@ -327,6 +340,8 @@ _cts = new CancellationTokenSource();
                     // reconnecting to a dead port. Say what actually happened.
                     _log(failReason == "port_busy"
                         ? "Порт " + _port + " занят и не освободился — закройте старый экземпляр панели и запустите прокси заново."
+                        : failReason == "held_by_self"
+                        ? "Порт " + _port + " держит уже запущенный прокси в этой панели — нажмите «Стоп», потом «Старт»."
                         : "Не удалось занять порт " + _port, "error");
                     return Task.FromResult(new ProxyStatsView
                     {
