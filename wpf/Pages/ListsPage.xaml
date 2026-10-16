@@ -11,11 +11,11 @@
 
         <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,10">
             <RadioButton x:Name="TabGeneral" GroupName="lists" Content="Основной список" IsChecked="True"
-                         Foreground="{StaticResource TextBrush}" Margin="0,0,16,0" Checked="Tab_Changed" />
+                         Foreground="{DynamicResource TextBrush}" Margin="0,0,16,0" Checked="Tab_Changed" />
             <RadioButton x:Name="TabExclude" GroupName="lists" Content="Исключения"
-                         Foreground="{StaticResource TextBrush}" Margin="0,0,16,0" Checked="Tab_Changed" />
+                         Foreground="{DynamicResource TextBrush}" Margin="0,0,16,0" Checked="Tab_Changed" />
             <RadioButton x:Name="TabIpset" GroupName="lists" Content="IPSet-исключения"
-                         Foreground="{StaticResource TextBrush}" Checked="Tab_Changed" />
+                         Foreground="{DynamicResource TextBrush}" Checked="Tab_Changed" />
         </StackPanel>
 
         <StackPanel Grid.Row="1" Margin="0,0,0,10">
@@ -44,7 +44,7 @@
         </StackPanel>
 
         <Border Grid.Row="2" Style="{StaticResource Card}" Padding="0">
-            <TextBox x:Name="Editor" Background="Transparent" Foreground="{StaticResource TextBrush}"
+            <TextBox x:Name="Editor" Background="Transparent" Foreground="{DynamicResource TextBrush}"
                      BorderThickness="0" AcceptsReturn="True" AcceptsTab="True"
                      FontFamily="Consolas, Cascadia Mono" FontSize="13"
                      VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"

@@ -18,9 +18,9 @@
                      It used to be a plain Border with no handler: it looked
                      clickable and silently did nothing. -->
                 <Border x:Name="SwitchTrack" Grid.Column="0" Width="58" Height="34" CornerRadius="17"
-                        Background="{StaticResource BorderBrush2}" VerticalAlignment="Center"
+                        Background="{DynamicResource BorderBrush2}" VerticalAlignment="Center"
                         Cursor="Hand" MouseLeftButtonUp="Switch_Click" ToolTip="Включить или выключить обход">
-                    <Ellipse x:Name="Knob" Width="26" Height="26" Fill="{StaticResource TextDimBrush}"
+                    <Ellipse x:Name="Knob" Width="26" Height="26" Fill="{DynamicResource TextDimBrush}"
                              HorizontalAlignment="Left" Margin="4,0,0,0" VerticalAlignment="Center" />
                 </Border>
 
@@ -31,8 +31,8 @@
                          so the wait has to be visible or it reads as a freeze. -->
                     <StackPanel x:Name="BusyPanel" Orientation="Horizontal" Margin="0,4,0,0" Visibility="Collapsed">
                         <ProgressBar x:Name="BusyBar" Width="90" Height="4" VerticalAlignment="Center"
-                                     IsIndeterminate="True" Foreground="{StaticResource AccentBrush}"
-                                     Background="{StaticResource BgHoverBrush}" />
+                                     IsIndeterminate="True" Foreground="{DynamicResource AccentBrush}"
+                                     Background="{DynamicResource BgHoverBrush}" />
                         <TextBlock x:Name="BusyText" Text="Подключаю…" Margin="8,0,0,0" Style="{StaticResource Hint}" />
                     </StackPanel>
                 </StackPanel>
@@ -126,7 +126,7 @@
                                TextTrimming="CharacterEllipsis" />
 
                     <!-- Веб-прокси: отдельный способ зайти в Telegram, когда локальный прокси не нужен -->
-                    <Border Height="1" Background="{StaticResource BorderBrush2}" Margin="0,14,0,12" />
+                    <Border Height="1" Background="{DynamicResource BorderBrush2}" Margin="0,14,0,12" />
                     <TextBlock Text="Веб-прокси (Telegram Web)" Style="{StaticResource CardTitle}" />
                     <TextBlock Style="{StaticResource Hint}" Margin="0,4,0,10"
                                Text="Отдельный прокси, который работает через браузер. Нужен, если локальный MTProto-прокси недоступен." />

@@ -317,7 +317,7 @@ private static void CreateShortcuts(bool desktop)
             {
                 string target = Path.Combine(InstallDir, ProductName + ".exe");
                 string workDir = InstallDir;
-                string description = "Панель обхода zapret";
+                string description = "Панель обхода Discord и YouTube";
                 // Activator.CreateInstance, not a cast of Type to dynamic:
                 // GetTypeFromProgID returns a Type, and casting it yields a
                 // TypeInfo whose members are not the COM object's, so

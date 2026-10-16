@@ -1,68 +1,29 @@
 <!--
-    Dark theme resources.
+    Shared styles: cards, tiles, text, buttons.
 
-    Palette: "dark tech, dashboard density". Background #0F172A / side #0B1220 /
-    card #1B2336 / hover #272F42, text #F8FAFC / dim #94A3B8 / border #334155.
-    Accent indigo #6D6BFF carries primary actions; status green #22C55E /
-    amber #FFB020 / red #EF4444 carry state.
+    Theme-independent by construction: every colour comes from the palette via
+    DynamicResource, so swapping Palette.Dark.xaml for Palette.Light.xaml at
+    runtime restyles the whole app without a restart.
 
-    Status surfaces are deliberately muted: a 10-15% tinted fill with a
-    desaturated border and a faint glow of the same hue. The colour is readable
-    at a glance without glaring, and text contrast stays above 4.5:1.
+    BasedOn still has to be StaticResource (WPF does not support DynamicResource
+    there), but that is fine: the inheritance chain itself never changes, only
+    the colours the leaf setters point at.
 -->
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-                    xmlns:sys="clr-namespace:System;assembly=mscorlib">
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
-    <Color x:Key="BgColor">#0F172A</Color>
-    <Color x:Key="BgSideColor">#0B1220</Color>
-    <Color x:Key="BgCardColor">#1B2336</Color>
-    <Color x:Key="BgHoverColor">#252D42</Color>
-    <Color x:Key="TextColor">#F8FAFC</Color>
-    <Color x:Key="TextDimColor">#94A3B8</Color>
-    <Color x:Key="BorderColor">#334155</Color>
-    <Color x:Key="AccentColor">#6D6BFF</Color>
-    <Color x:Key="OkColor">#2ED573</Color>
-    <Color x:Key="WarnColor">#FFB020</Color>
-    <Color x:Key="ErrColor">#F4636B</Color>
-
-    <!-- Status surfaces: tinted fills ~12% and desaturated borders. Saturated
-         hues live only in dots and small accents, never as full surfaces. -->
-    <Color x:Key="OkTileColor">#17251F</Color>
-    <Color x:Key="WarnTileColor">#2A2519</Color>
-    <Color x:Key="ErrTileColor">#2C1E22</Color>
-    <Color x:Key="AccentTileColor">#232348</Color>
-    <Color x:Key="OkSoftColor">#3E7D5C</Color>
-    <Color x:Key="WarnSoftColor">#8A6E33</Color>
-    <Color x:Key="ErrSoftColor">#8A444C</Color>
-
-    <SolidColorBrush x:Key="BgBrush" Color="{StaticResource BgColor}" />
-    <SolidColorBrush x:Key="BgSideBrush" Color="{StaticResource BgSideColor}" />
-    <SolidColorBrush x:Key="BgCardBrush" Color="{StaticResource BgCardColor}" />
-    <SolidColorBrush x:Key="BgHoverBrush" Color="{StaticResource BgHoverColor}" />
-    <SolidColorBrush x:Key="TextBrush" Color="{StaticResource TextColor}" />
-    <SolidColorBrush x:Key="TextDimBrush" Color="{StaticResource TextDimColor}" />
-    <SolidColorBrush x:Key="BorderBrush2" Color="{StaticResource BorderColor}" />
-    <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource AccentColor}" />
-    <SolidColorBrush x:Key="OkBrush" Color="{StaticResource OkColor}" />
-    <SolidColorBrush x:Key="WarnBrush" Color="{StaticResource WarnColor}" />
-    <SolidColorBrush x:Key="ErrBrush" Color="{StaticResource ErrColor}" />
-    <SolidColorBrush x:Key="OkTileBrush" Color="{StaticResource OkTileColor}" />
-    <SolidColorBrush x:Key="WarnTileBrush" Color="{StaticResource WarnTileColor}" />
-    <SolidColorBrush x:Key="ErrTileBrush" Color="{StaticResource ErrTileColor}" />
-    <SolidColorBrush x:Key="AccentTileBrush" Color="{StaticResource AccentTileColor}" />
-    <SolidColorBrush x:Key="OkSoftBrush" Color="{StaticResource OkSoftColor}" />
-    <SolidColorBrush x:Key="WarnSoftBrush" Color="{StaticResource WarnSoftColor}" />
-    <SolidColorBrush x:Key="ErrSoftBrush" Color="{StaticResource ErrSoftColor}" />
+    <!-- Spoiler blocks in the strategy report: bind Visibility straight to the
+         expand flag instead of writing converters at every use. -->
+    <BooleanToVisibilityConverter x:Key="BoolToVis" />
 
     <!-- Tooltips. Implicit style (no x:Key) so it applies to every tooltip in
          the app. Without this, WPF falls back to the system tooltip: a white
          box on the dark UI, and because the tooltip text inherits the app's
          white Foreground it rendered as a blank white bar on hover. -->
     <Style TargetType="ToolTip">
-        <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
-        <Setter Property="Background" Value="{StaticResource BgCardBrush}" />
-        <Setter Property="BorderBrush" Value="{StaticResource BorderBrush2}" />
+        <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+        <Setter Property="Background" Value="{DynamicResource BgCardBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush2}" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="Padding" Value="10,6" />
         <Setter Property="FontSize" Value="12" />
@@ -89,25 +50,14 @@
         </Setter>
     </Style>
 
-    <!-- Spoiler blocks in the strategy report: bind Visibility straight to the
-         expand flag instead of writing converters at every use. -->
-    <BooleanToVisibilityConverter x:Key="BoolToVis" />
-
-    <!-- glow / depth effects. Faint by design: they read as light, not neon. -->
-    <DropShadowEffect x:Key="GlowOk" Color="{StaticResource OkColor}" BlurRadius="10" ShadowDepth="0" Opacity="0.22" />
-    <DropShadowEffect x:Key="GlowWarn" Color="{StaticResource WarnColor}" BlurRadius="10" ShadowDepth="0" Opacity="0.2" />
-    <DropShadowEffect x:Key="GlowErr" Color="{StaticResource ErrColor}" BlurRadius="10" ShadowDepth="0" Opacity="0.25" />
-    <DropShadowEffect x:Key="GlowAccent" Color="{StaticResource AccentColor}" BlurRadius="10" ShadowDepth="0" Opacity="0.25" />
-    <DropShadowEffect x:Key="CardShadow" Color="#000000" BlurRadius="16" ShadowDepth="2" Direction="270" Opacity="0.28" />
-
     <!-- surfaces -->
     <Style x:Key="Card" TargetType="Border">
-        <Setter Property="Background" Value="{StaticResource BgCardBrush}" />
-        <Setter Property="BorderBrush" Value="{StaticResource BorderBrush2}" />
+        <Setter Property="Background" Value="{DynamicResource BgCardBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush2}" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="CornerRadius" Value="12" />
         <Setter Property="Padding" Value="16" />
-        <Setter Property="Effect" Value="{StaticResource CardShadow}" />
+        <Setter Property="Effect" Value="{DynamicResource CardShadow}" />
     </Style>
 
     <!-- Status tiles. Pages switch between these via SetTile(); border + tint +
@@ -116,36 +66,36 @@
         <Setter Property="Padding" Value="14,12" />
     </Style>
     <Style x:Key="TileOk" TargetType="Border" BasedOn="{StaticResource TileBase}">
-        <Setter Property="Background" Value="{StaticResource OkTileBrush}" />
-        <Setter Property="BorderBrush" Value="{StaticResource OkSoftBrush}" />
-        <Setter Property="Effect" Value="{StaticResource GlowOk}" />
+        <Setter Property="Background" Value="{DynamicResource OkTileBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource OkSoftBrush}" />
+        <Setter Property="Effect" Value="{DynamicResource GlowOk}" />
     </Style>
     <Style x:Key="TileWarn" TargetType="Border" BasedOn="{StaticResource TileBase}">
-        <Setter Property="Background" Value="{StaticResource WarnTileBrush}" />
-        <Setter Property="BorderBrush" Value="{StaticResource WarnSoftBrush}" />
-        <Setter Property="Effect" Value="{StaticResource GlowWarn}" />
+        <Setter Property="Background" Value="{DynamicResource WarnTileBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource WarnSoftBrush}" />
+        <Setter Property="Effect" Value="{DynamicResource GlowWarn}" />
     </Style>
     <Style x:Key="TileErr" TargetType="Border" BasedOn="{StaticResource TileBase}">
-        <Setter Property="Background" Value="{StaticResource ErrTileBrush}" />
-        <Setter Property="BorderBrush" Value="{StaticResource ErrSoftBrush}" />
-        <Setter Property="Effect" Value="{StaticResource GlowErr}" />
+        <Setter Property="Background" Value="{DynamicResource ErrTileBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource ErrSoftBrush}" />
+        <Setter Property="Effect" Value="{DynamicResource GlowErr}" />
     </Style>
     <Style x:Key="TileIdle" TargetType="Border" BasedOn="{StaticResource TileBase}" />
 
     <Style x:Key="H1" TargetType="TextBlock">
-        <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
         <Setter Property="FontFamily" Value="Segoe UI Variable Display, Segoe UI" />
         <Setter Property="FontSize" Value="17" />
         <Setter Property="FontWeight" Value="SemiBold" />
     </Style>
 
     <Style x:Key="Dim" TargetType="TextBlock">
-        <Setter Property="Foreground" Value="{StaticResource TextDimBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource TextDimBrush}" />
         <Setter Property="FontSize" Value="12" />
     </Style>
 
     <Style x:Key="Value" TargetType="TextBlock">
-        <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
         <Setter Property="FontSize" Value="15" />
         <Setter Property="FontWeight" Value="SemiBold" />
         <Setter Property="TextTrimming" Value="CharacterEllipsis" />
@@ -155,14 +105,14 @@
     <Style x:Key="Mono" TargetType="TextBlock">
         <Setter Property="FontFamily" Value="Cascadia Code, Consolas" />
         <Setter Property="FontSize" Value="12" />
-        <Setter Property="Foreground" Value="{StaticResource TextDimBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource TextDimBrush}" />
     </Style>
 
     <!-- buttons -->
     <Style x:Key="Btn" TargetType="Button">
-        <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
-        <Setter Property="Background" Value="{StaticResource BgHoverBrush}" />
-        <Setter Property="BorderBrush" Value="{StaticResource BorderBrush2}" />
+        <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
+        <Setter Property="Background" Value="{DynamicResource BgHoverBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush2}" />
         <Setter Property="BorderThickness" Value="1" />
         <Setter Property="Padding" Value="14,8" />
         <Setter Property="Cursor" Value="Hand" />
@@ -177,11 +127,11 @@
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="bg" Property="Background" Value="#2E3852" />
-                            <Setter TargetName="bg" Property="BorderBrush" Value="#4A5680" />
+                            <Setter TargetName="bg" Property="Background" Value="{DynamicResource BtnHoverBrush}" />
+                            <Setter TargetName="bg" Property="BorderBrush" Value="{DynamicResource BtnHoverBorderBrush}" />
                         </Trigger>
                         <Trigger Property="IsPressed" Value="True">
-                            <Setter TargetName="bg" Property="Background" Value="#222A40" />
+                            <Setter TargetName="bg" Property="Background" Value="{DynamicResource BtnPressedBrush}" />
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter TargetName="bg" Property="Opacity" Value="0.4" />
@@ -193,9 +143,9 @@
     </Style>
 
     <Style x:Key="BtnPrimary" TargetType="Button" BasedOn="{StaticResource Btn}">
-        <Setter Property="Background" Value="{StaticResource AccentBrush}" />
-        <Setter Property="BorderBrush" Value="{StaticResource AccentBrush}" />
-        <Setter Property="Foreground" Value="#FFFFFF" />
+        <Setter Property="Background" Value="{DynamicResource AccentBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource AccentBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource OnAccentBrush}" />
         <Setter Property="FontWeight" Value="SemiBold" />
         <Setter Property="Template">
             <Setter.Value>
@@ -208,10 +158,12 @@
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="bg" Property="Background" Value="#7C7AFF" />
+                            <Setter TargetName="bg" Property="Background" Value="{DynamicResource BtnHoverBorderBrush}" />
+                            <Setter TargetName="bg" Property="BorderBrush" Value="{DynamicResource BtnHoverBorderBrush}" />
                         </Trigger>
                         <Trigger Property="IsPressed" Value="True">
-                            <Setter TargetName="bg" Property="Background" Value="#5856E8" />
+                            <Setter TargetName="bg" Property="Background" Value="{DynamicResource BtnPressedBrush}" />
+                            <Setter TargetName="bg" Property="BorderBrush" Value="{DynamicResource BtnPressedBrush}" />
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter TargetName="bg" Property="Opacity" Value="0.4" />
@@ -223,9 +175,9 @@
     </Style>
 
     <Style x:Key="BtnDanger" TargetType="Button" BasedOn="{StaticResource Btn}">
-        <Setter Property="Background" Value="{StaticResource ErrTileBrush}" />
-        <Setter Property="BorderBrush" Value="{StaticResource ErrSoftBrush}" />
-        <Setter Property="Foreground" Value="#F2A9AF" />
+        <Setter Property="Background" Value="{DynamicResource ErrTileBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource ErrSoftBrush}" />
+        <Setter Property="Foreground" Value="{DynamicResource DangerTextBrush}" />
         <Setter Property="FontWeight" Value="SemiBold" />
         <Setter Property="Template">
             <Setter.Value>
@@ -238,11 +190,11 @@
                     </Border>
                     <ControlTemplate.Triggers>
                         <Trigger Property="IsMouseOver" Value="True">
-                            <Setter TargetName="bg" Property="Background" Value="#3C252B" />
-                            <Setter TargetName="bg" Property="BorderBrush" Value="{StaticResource ErrBrush}" />
+                            <Setter TargetName="bg" Property="Background" Value="{DynamicResource DangerHoverBrush}" />
+                            <Setter TargetName="bg" Property="BorderBrush" Value="{DynamicResource ErrBrush}" />
                         </Trigger>
                         <Trigger Property="IsPressed" Value="True">
-                            <Setter TargetName="bg" Property="Background" Value="#27181C" />
+                            <Setter TargetName="bg" Property="Background" Value="{DynamicResource DangerPressedBrush}" />
                         </Trigger>
                         <Trigger Property="IsEnabled" Value="False">
                             <Setter TargetName="bg" Property="Opacity" Value="0.4" />
@@ -253,8 +205,16 @@
         </Setter>
     </Style>
 
+    <!--
+      No Foreground here on purpose. An implicit style's setter OUTRANKS an
+      inherited value, so setting Foreground here silently overrode every
+      control that sets Foreground on purpose — BtnPrimary painted its label in
+      theme text colour instead of white (dark text on an indigo button in the
+      light theme), and the same applied to selected DataGrid rows and
+      ComboBox/CheckBox items. Colour now arrives by inheritance from the Window
+      root, and a button's own Foreground reaches its label again.
+    -->
     <Style TargetType="TextBlock">
-        <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
         <Setter Property="FontFamily" Value="Segoe UI Variable Text, Segoe UI" />
     </Style>
 

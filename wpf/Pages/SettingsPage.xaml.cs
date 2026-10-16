@@ -75,11 +75,24 @@ namespace Ydp.Pages
                 });
         }
 
+        private void Theme_Changed(object sender, RoutedEventArgs e)
+        {
+            // Fire while Load() is still populating the controls: it only sets the
+            // stored value back, which is a no-op but still logs a bogus switch.
+            if (_loading) return;
+            var rb = sender as System.Windows.Controls.RadioButton;
+            string theme = rb != null ? rb.Tag as string : null;
+            if (string.IsNullOrEmpty(theme)) return;
+            ThemeManager.SetTheme(theme);
+        }
+
         private void Load()
         {
             _loading = true;
             try
             {
+                // Reflect the stored theme WITHOUT firing Theme_Changed.
+                (ThemeManager.Current == ThemeManager.Light ? ThemeLight : ThemeDark).IsChecked = true;
                 ChkAutostart.IsChecked = AutoStart.IsEnabled();
                 ChkAutoApply.IsChecked = AutoStart.AutoApplyEnabled();
                 ChkWatchdog.IsChecked = BypassWatchdog.Enabled;

@@ -1,0 +1,85 @@
+<!--
+    Dark palette: colours ONLY. Every style lives in Theme/Shared.xaml and
+    Theme/Controls.xaml and reads these through DynamicResource, which is what
+    lets the theme switch live at runtime. A colour that only exists as a
+    hardcoded #RRGGBB inside a style template cannot follow the switch, so the
+    ones the templates need are promoted to resources here (button hover,
+    scrollbar thumb, row selection, text on accent, card shadow).
+-->
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <Color x:Key="BgColor">#0F172A</Color>
+    <Color x:Key="BgSideColor">#0B1220</Color>
+    <Color x:Key="BgCardColor">#1B2336</Color>
+    <Color x:Key="BgHoverColor">#252D42</Color>
+    <Color x:Key="TextColor">#F8FAFC</Color>
+    <Color x:Key="TextDimColor">#94A3B8</Color>
+    <Color x:Key="BorderColor">#334155</Color>
+    <Color x:Key="AccentColor">#6D6BFF</Color>
+    <Color x:Key="OkColor">#2ED573</Color>
+    <Color x:Key="WarnColor">#FFB020</Color>
+    <Color x:Key="ErrColor">#F4636B</Color>
+
+    <!-- Status surfaces: tinted fills ~12% and desaturated borders. Saturated
+         hues live only in dots and small accents, never as full surfaces. -->
+    <Color x:Key="OkTileColor">#17251F</Color>
+    <Color x:Key="WarnTileColor">#2A2519</Color>
+    <Color x:Key="ErrTileColor">#2C1E22</Color>
+    <Color x:Key="AccentTileColor">#232348</Color>
+    <Color x:Key="OkSoftColor">#3E7D5C</Color>
+    <Color x:Key="WarnSoftColor">#8A6E33</Color>
+    <Color x:Key="ErrSoftColor">#8A444C</Color>
+
+    <!-- Template-only colours, promoted so the theme can reach them. -->
+    <Color x:Key="OnAccentColor">#FFFFFF</Color>
+    <Color x:Key="BtnHoverColor">#2E3852</Color>
+    <Color x:Key="BtnPressedColor">#222A40</Color>
+    <Color x:Key="BtnHoverBorderColor">#4A5680</Color>
+    <Color x:Key="ScrollThumbColor">#3A3F5C</Color>
+    <Color x:Key="RowSelectedColor">#4A50E8</Color>
+    <Color x:Key="DangerTextColor">#F2A9AF</Color>
+    <Color x:Key="DangerHoverColor">#3C252B</Color>
+    <Color x:Key="DangerPressedColor">#27181C</Color>
+    <Color x:Key="ShadowColor">#000000</Color>
+    <Color x:Key="PinGoldColor">#FFD426</Color>
+    <Color x:Key="SoftAccentColor">#A5B4FC</Color>
+
+    <SolidColorBrush x:Key="BgBrush" Color="{StaticResource BgColor}" />
+    <SolidColorBrush x:Key="BgSideBrush" Color="{StaticResource BgSideColor}" />
+    <SolidColorBrush x:Key="BgCardBrush" Color="{StaticResource BgCardColor}" />
+    <SolidColorBrush x:Key="BgHoverBrush" Color="{StaticResource BgHoverColor}" />
+    <SolidColorBrush x:Key="TextBrush" Color="{StaticResource TextColor}" />
+    <SolidColorBrush x:Key="TextDimBrush" Color="{StaticResource TextDimColor}" />
+    <SolidColorBrush x:Key="BorderBrush2" Color="{StaticResource BorderColor}" />
+    <SolidColorBrush x:Key="AccentBrush" Color="{StaticResource AccentColor}" />
+    <SolidColorBrush x:Key="OkBrush" Color="{StaticResource OkColor}" />
+    <SolidColorBrush x:Key="WarnBrush" Color="{StaticResource WarnColor}" />
+    <SolidColorBrush x:Key="ErrBrush" Color="{StaticResource ErrColor}" />
+    <SolidColorBrush x:Key="OkTileBrush" Color="{StaticResource OkTileColor}" />
+    <SolidColorBrush x:Key="WarnTileBrush" Color="{StaticResource WarnTileColor}" />
+    <SolidColorBrush x:Key="ErrTileBrush" Color="{StaticResource ErrTileColor}" />
+    <SolidColorBrush x:Key="AccentTileBrush" Color="{StaticResource AccentTileColor}" />
+    <SolidColorBrush x:Key="OkSoftBrush" Color="{StaticResource OkSoftColor}" />
+    <SolidColorBrush x:Key="WarnSoftBrush" Color="{StaticResource WarnSoftColor}" />
+    <SolidColorBrush x:Key="ErrSoftBrush" Color="{StaticResource ErrSoftColor}" />
+    <SolidColorBrush x:Key="OnAccentBrush" Color="{StaticResource OnAccentColor}" />
+    <SolidColorBrush x:Key="BtnHoverBrush" Color="{StaticResource BtnHoverColor}" />
+    <SolidColorBrush x:Key="BtnPressedBrush" Color="{StaticResource BtnPressedColor}" />
+    <SolidColorBrush x:Key="BtnHoverBorderBrush" Color="{StaticResource BtnHoverBorderColor}" />
+    <SolidColorBrush x:Key="ScrollThumbBrush" Color="{StaticResource ScrollThumbColor}" />
+    <SolidColorBrush x:Key="RowSelectedBrush" Color="{StaticResource RowSelectedColor}" />
+    <SolidColorBrush x:Key="DangerTextBrush" Color="{StaticResource DangerTextColor}" />
+    <SolidColorBrush x:Key="DangerHoverBrush" Color="{StaticResource DangerHoverColor}" />
+    <SolidColorBrush x:Key="DangerPressedBrush" Color="{StaticResource DangerPressedColor}" />
+    <SolidColorBrush x:Key="PinGoldBrush" Color="{StaticResource PinGoldColor}" />
+    <SolidColorBrush x:Key="SoftAccentBrush" Color="{StaticResource SoftAccentColor}" />
+
+    <!-- glow / depth effects. Faint by design: they read as light, not neon. -->
+    <DropShadowEffect x:Key="GlowOk" Color="{StaticResource OkColor}" BlurRadius="10" ShadowDepth="0" Opacity="0.22" />
+    <DropShadowEffect x:Key="GlowWarn" Color="{StaticResource WarnColor}" BlurRadius="10" ShadowDepth="0" Opacity="0.2" />
+    <DropShadowEffect x:Key="GlowErr" Color="{StaticResource ErrColor}" BlurRadius="10" ShadowDepth="0" Opacity="0.25" />
+    <DropShadowEffect x:Key="GlowAccent" Color="{StaticResource AccentColor}" BlurRadius="10" ShadowDepth="0" Opacity="0.25" />
+    <DropShadowEffect x:Key="CardShadow" Color="{StaticResource ShadowColor}" BlurRadius="16" ShadowDepth="2" Direction="270" Opacity="0.28" />
+
+</ResourceDictionary>

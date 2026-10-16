@@ -9,6 +9,21 @@
     <StackPanel>
         <TextBlock Text="Настройки" Style="{StaticResource SectionTitle}" Margin="0,0,0,16" />
 
+          <!-- Appearance -->
+          <Border Style="{StaticResource Card}" Margin="0,0,0,12">
+              <StackPanel>
+                  <TextBlock Text="Оформление панели" Style="{StaticResource H1}" />
+                  <TextBlock Style="{StaticResource Dim}" Margin="0,4,0,10"
+                             Text="Тёмная или светлая тема. Применяется сразу, перезапускать панель не нужно." />
+                  <StackPanel Orientation="Horizontal">
+                      <RadioButton x:Name="ThemeDark" Content="Тёмная" AutomationProperties.Name="Тёмная тема" Margin="0,0,10,0"
+                                   Checked="Theme_Changed" Tag="dark" />
+                      <RadioButton x:Name="ThemeLight" Content="Светлая" AutomationProperties.Name="Светлая тема"
+                                   Checked="Theme_Changed" Tag="light" />
+                  </StackPanel>
+              </StackPanel>
+          </Border>
+
         <!-- Autostart: the feature the user asked for -->
         <Border Style="{StaticResource Card}" Margin="0,0,0,12">
             <StackPanel>
@@ -16,23 +31,23 @@
                 <TextBlock Style="{StaticResource Dim}" Margin="0,4,0,10"
                            Text="Панель запускается вместе с Windows и сразу применяет запомненную рабочую стратегию — заходить в программу не нужно." />
                 <CheckBox x:Name="ChkAutostart" Content="Запускать панель при входе в Windows"
-                          Foreground="{StaticResource TextBrush}" Margin="0,0,0,8"
+                          Foreground="{DynamicResource TextBrush}" Margin="0,0,0,8"
                           Checked="ChkAutostart_Changed" Unchecked="ChkAutostart_Changed" />
                 <CheckBox x:Name="ChkAutoApply" Content="Применять запомненную стратегию автоматически"
-                          Foreground="{StaticResource TextBrush}" IsEnabled="{Binding ElementName=ChkAutostart, Path=IsChecked}"
+                          Foreground="{DynamicResource TextBrush}" IsEnabled="{Binding ElementName=ChkAutostart, Path=IsChecked}"
                           Checked="ChkAutoApply_Changed" Unchecked="ChkAutoApply_Changed" />
                 <CheckBox x:Name="ChkWatchdog" Content="Автовосстановление обхода (переподключать самому)"
-                          Foreground="{StaticResource TextBrush}" Margin="0,10,0,0"
+                          Foreground="{DynamicResource TextBrush}" Margin="0,10,0,0"
                           Checked="ChkWatchdog_Changed" Unchecked="ChkWatchdog_Changed" />
                 <TextBlock x:Name="WatchdogNote" Style="{StaticResource Dim}" Margin="0,6,0,0"
                            Text="Пока панель открыта: если обход включён, но Discord или YouTube перестали отвечать (в том числе после смены сети), панель сама переподключится — сначала запомненной стратегией, а если не выйдет — поиском новой." />
                 <CheckBox x:Name="ChkNotify" Content="Уведомлять, если обход включён, но не работает"
-                          Foreground="{StaticResource TextBrush}" Margin="0,10,0,0"
+                          Foreground="{DynamicResource TextBrush}" Margin="0,10,0,0"
                           Checked="ChkNotify_Changed" Unchecked="ChkNotify_Changed" />
                 <TextBlock Style="{StaticResource Dim}" Margin="0,6,0,0"
                            Text="Показывает уведомление в трее, когда сайты не отвечают, — чтобы не гадать, почему Discord не грузится. Ничего не переключает само." />
                 <CheckBox x:Name="ChkHotkey" Content="Глобальная горячая клавиша (Ctrl+Alt+B)"
-                          Foreground="{StaticResource TextBrush}" Margin="0,10,0,0"
+                          Foreground="{DynamicResource TextBrush}" Margin="0,10,0,0"
                           Checked="ChkHotkey_Changed" Unchecked="ChkHotkey_Changed" />
                 <TextBlock Style="{StaticResource Dim}" Margin="0,6,0,0"
                            Text="Включает/выключает обход по нажатию Ctrl+Alt+B, даже когда панель свёрнута в трей." />
@@ -147,7 +162,7 @@
             <StackPanel>
                 <TextBlock Text="Режим запуска" Style="{StaticResource H1}" />
                 <CheckBox x:Name="ChkServiceMode" Content="Ставить стратегию как службу Windows (автозапуск с ОС)"
-                          Foreground="{StaticResource TextBrush}" Margin="0,8,0,4"
+                          Foreground="{DynamicResource TextBrush}" Margin="0,8,0,4"
                           Checked="ChkServiceMode_Changed" Unchecked="ChkServiceMode_Changed" />
                 <TextBlock x:Name="AdminNote" Style="{StaticResource Dim}" TextWrapping="Wrap" />
             </StackPanel>

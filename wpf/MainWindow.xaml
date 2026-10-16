@@ -4,7 +4,8 @@
         xmlns:shell="clr-namespace:System.Windows.Shell;assembly=PresentationFramework"
         Title="YoutubeDiscordPanel" Height="900" Width="1400"
         MinHeight="700" MinWidth="1000"
-        Background="{StaticResource BgBrush}"
+Background="{DynamicResource BgBrush}"
+        Foreground="{DynamicResource TextBrush}"
         TextOptions.TextFormattingMode="Display"
         UseLayoutRounding="True" WindowStartupLocation="CenterScreen"
         WindowStyle="None">
@@ -28,7 +29,7 @@
              section is obvious at a glance instead of relying on a subtle
              fill. Icons are vector shapes - no icon font to go missing. -->
         <Style x:Key="NavItem" TargetType="RadioButton">
-            <Setter Property="Foreground" Value="{StaticResource TextDimBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource TextDimBrush}" />
             <Setter Property="Cursor" Value="Hand" />
             <Setter Property="Margin" Value="10,2" />
             <Setter Property="Height" Value="40" />
@@ -44,13 +45,13 @@
                         </Grid>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="bg" Property="Background" Value="{StaticResource BgHoverBrush}" />
-                                <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+                                <Setter TargetName="bg" Property="Background" Value="{DynamicResource BgHoverBrush}" />
+                                <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
                             </Trigger>
                             <Trigger Property="IsChecked" Value="True">
-                                <Setter TargetName="bg" Property="Background" Value="{StaticResource AccentTileBrush}" />
-                                <Setter TargetName="rail" Property="Background" Value="{StaticResource AccentBrush}" />
-                                <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+                                <Setter TargetName="bg" Property="Background" Value="{DynamicResource AccentTileBrush}" />
+                                <Setter TargetName="rail" Property="Background" Value="{DynamicResource AccentBrush}" />
+                                <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
                                 <Setter Property="FontWeight" Value="SemiBold" />
                             </Trigger>
                         </ControlTemplate.Triggers>
@@ -63,7 +64,7 @@
         <Style x:Key="CaptionButton" TargetType="Button">
             <Setter Property="Width" Value="46" />
             <Setter Property="Height" Value="34" />
-            <Setter Property="Foreground" Value="{StaticResource TextDimBrush}" />
+            <Setter Property="Foreground" Value="{DynamicResource TextDimBrush}" />
             <Setter Property="Background" Value="Transparent" />
             <Setter Property="BorderThickness" Value="0" />
             <Setter Property="shell:WindowChrome.IsHitTestVisibleInChrome" Value="True" />
@@ -75,8 +76,8 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="bg" Property="Background" Value="{StaticResource BgHoverBrush}" />
-                                <Setter Property="Foreground" Value="{StaticResource TextBrush}" />
+                                <Setter TargetName="bg" Property="Background" Value="{DynamicResource BgHoverBrush}" />
+                                <Setter Property="Foreground" Value="{DynamicResource TextBrush}" />
                             </Trigger>
                         </ControlTemplate.Triggers>
                     </ControlTemplate>
@@ -93,7 +94,7 @@
                         </Border>
                         <ControlTemplate.Triggers>
                             <Trigger Property="IsMouseOver" Value="True">
-                                <Setter TargetName="bg" Property="Background" Value="#E03B3B" />
+                                <Setter TargetName="bg" Property="Background" Value="{DynamicResource ErrBrush}" />
                                 <Setter Property="Foreground" Value="White" />
                             </Trigger>
                         </ControlTemplate.Triggers>
@@ -130,7 +131,7 @@
         </Grid.RowDefinitions>
 
         <!-- Title bar -->
-        <Border Grid.Row="0" Background="{StaticResource BgBrush}">
+        <Border Grid.Row="0" Background="{DynamicResource BgBrush}">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
@@ -139,7 +140,7 @@
                 </Grid.ColumnDefinitions>
                 <TextBlock Grid.Column="0" Text="YoutubeDiscordPanel" Margin="14,0,0,0"
                            VerticalAlignment="Center" FontSize="12"
-                           Foreground="{StaticResource TextDimBrush}" />
+                           Foreground="{DynamicResource TextDimBrush}" />
                 <!-- Icons are drawn as vectors on purpose: the Segoe MDL2 Assets glyphs
              render as empty boxes on machines where that font is absent. -->
         <StackPanel Grid.Column="2" Orientation="Horizontal">
@@ -165,7 +166,7 @@
              release; lives above the content on every page so the offer is
              impossible to miss but never blocks navigation. -->
         <Border x:Name="UpdateBanner" Grid.Row="1" Margin="24,12,24,0" Padding="14,10"
-                Background="{StaticResource AccentTileBrush}" BorderBrush="{StaticResource AccentBrush}"
+                Background="{DynamicResource AccentTileBrush}" BorderBrush="{DynamicResource AccentBrush}"
                 BorderThickness="1" CornerRadius="10" Visibility="Collapsed">
             <Grid>
                 <Grid.ColumnDefinitions>
@@ -173,7 +174,7 @@
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
                 <StackPanel Grid.Column="0" VerticalAlignment="Center">
-                    <TextBlock x:Name="UpdateTitle" FontWeight="SemiBold" Foreground="{StaticResource TextBrush}" />
+                    <TextBlock x:Name="UpdateTitle" FontWeight="SemiBold" Foreground="{DynamicResource TextBrush}" />
                     <TextBlock x:Name="UpdateDetails" Style="{StaticResource Dim}" TextWrapping="Wrap" />
                 </StackPanel>
                 <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
@@ -192,7 +193,7 @@
         </Grid.ColumnDefinitions>
 
         <!-- Sidebar -->
-        <Border Grid.Column="0" Background="{StaticResource BgSideBrush}">
+        <Border Grid.Column="0" Background="{DynamicResource BgSideBrush}">
             <Grid>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="Auto" />
@@ -203,53 +204,53 @@
                 <StackPanel Grid.Row="0" Margin="18,22,12,20">
                     <StackPanel Orientation="Horizontal">
                         <TextBlock Text="Zapret" FontWeight="Bold" FontFamily="Segoe UI Variable Display, Segoe UI"
-                                   FontSize="17" Foreground="{StaticResource TextBrush}" />
-                        <Border Background="{StaticResource AccentTileBrush}" CornerRadius="6" Padding="7,2"
+                                   FontSize="17" Foreground="{DynamicResource TextBrush}" />
+                        <Border Background="{DynamicResource AccentTileBrush}" CornerRadius="6" Padding="7,2"
                                 Margin="8,0,0,0" VerticalAlignment="Center">
                             <TextBlock x:Name="VersionBadge" Text="2.x" FontSize="10.5"
-                                       Foreground="{StaticResource AccentBrush}" FontWeight="SemiBold" />
+                                       Foreground="{DynamicResource AccentBrush}" FontWeight="SemiBold" />
                         </Border>
                     </StackPanel>
                     <TextBlock Text="обход DPI для Discord и YouTube" FontSize="11"
                                Style="{StaticResource Dim}" Margin="0,4,0,0" />
                 </StackPanel>
                 <StackPanel Grid.Row="1" VerticalAlignment="Top">
-                    <RadioButton x:Name="NavDashboard" Style="{StaticResource NavItem}" GroupName="nav" IsChecked="True"
+                    <RadioButton x:Name="NavDashboard" AutomationProperties.Name="Обход" Style="{StaticResource NavItem}" GroupName="nav" IsChecked="True"
                                  Tag="dashboard" Checked="Nav_Checked">
                         <StackPanel Orientation="Horizontal">
                             <Path Style="{StaticResource NavIcon}" Data="M1,1.5 L9,1.5 L9,6 L5,9.5 L1,6 Z" />
                             <TextBlock Style="{StaticResource NavText}" Text="Обход" />
                         </StackPanel>
                     </RadioButton>
-                    <RadioButton x:Name="NavStrategies" Style="{StaticResource NavItem}" GroupName="nav"
+                    <RadioButton x:Name="NavStrategies" AutomationProperties.Name="Стратегии" Style="{StaticResource NavItem}" GroupName="nav"
                                  Tag="strategies" Checked="Nav_Checked">
                         <StackPanel Orientation="Horizontal">
                             <Path Style="{StaticResource NavIcon}" Data="M0.5,2.5 H9.5 M0.5,7 H9.5" />
                             <TextBlock Style="{StaticResource NavText}" Text="Стратегии" />
                         </StackPanel>
                     </RadioButton>
-                    <RadioButton x:Name="NavFilters" Style="{StaticResource NavItem}" GroupName="nav"
+                    <RadioButton x:Name="NavFilters" AutomationProperties.Name="Фильтры" Style="{StaticResource NavItem}" GroupName="nav"
                                  Tag="filters" Checked="Nav_Checked">
                         <StackPanel Orientation="Horizontal">
                             <Path Style="{StaticResource NavIcon}" Data="M0.5,0.8 L9.5,0.8 L6.2,5 V9.8 L3.8,8.6 V5 Z" />
                             <TextBlock Style="{StaticResource NavText}" Text="Фильтры" />
                         </StackPanel>
                     </RadioButton>
-                    <RadioButton x:Name="NavLists" Style="{StaticResource NavItem}" GroupName="nav"
+                    <RadioButton x:Name="NavLists" AutomationProperties.Name="Списки" Style="{StaticResource NavItem}" GroupName="nav"
                                  Tag="lists" Checked="Nav_Checked">
                         <StackPanel Orientation="Horizontal">
                             <Path Style="{StaticResource NavIcon}" Data="M2,0.5 L6.4,0.5 L8.5,2.8 L8.5,9.5 L2,9.5 Z M6.4,0.5 L6.4,2.8 L8.5,2.8" />
                             <TextBlock Style="{StaticResource NavText}" Text="Списки" />
                         </StackPanel>
                     </RadioButton>
-                    <RadioButton x:Name="NavUpdates" Style="{StaticResource NavItem}" GroupName="nav"
+                    <RadioButton x:Name="NavUpdates" AutomationProperties.Name="Обновления" Style="{StaticResource NavItem}" GroupName="nav"
                                  Tag="updates" Checked="Nav_Checked">
                         <StackPanel Orientation="Horizontal">
                             <Path Style="{StaticResource NavIcon}" Data="M9,3.6 A4,4 0 1 0 8.6,6.6 M9,0.6 L9,3.9 L5.9,3.9" />
                             <TextBlock Style="{StaticResource NavText}" Text="Обновления" />
                         </StackPanel>
                     </RadioButton>
-                    <RadioButton x:Name="NavDiagnostics" Style="{StaticResource NavItem}" GroupName="nav"
+                    <RadioButton x:Name="NavDiagnostics" AutomationProperties.Name="Диагностика" Style="{StaticResource NavItem}" GroupName="nav"
                                  Tag="diagnostics" Checked="Nav_Checked">
                         <StackPanel Orientation="Horizontal">
                             <Path Style="{StaticResource NavIcon}" Data="M0.5,5 L3,5 L4.4,1.4 L6.4,8.8 L7.8,5 L9.5,5" />
@@ -258,30 +259,30 @@
                     </RadioButton>
                     <!-- Secondary section below a divider: supporting pages read
                          as a separate group from the working ones. -->
-                    <Border Height="1" Background="{StaticResource BorderBrush2}" Opacity="0.5"
+                    <Border Height="1" Background="{DynamicResource BorderBrush2}" Opacity="0.5"
                             Margin="16,10,16,8" />
-                    <RadioButton x:Name="NavLogs" Style="{StaticResource NavItem}" GroupName="nav"
+                    <RadioButton x:Name="NavLogs" AutomationProperties.Name="Логи" Style="{StaticResource NavItem}" GroupName="nav"
                                  Tag="logs" Checked="Nav_Checked">
                         <StackPanel Orientation="Horizontal">
                             <Path Style="{StaticResource NavIcon}" Data="M0.5,2 H9.5 M0.5,5 H9.5 M0.5,8 H6.5" />
                             <TextBlock Style="{StaticResource NavText}" Text="Логи" />
                         </StackPanel>
                     </RadioButton>
-                    <RadioButton x:Name="NavSettings" Style="{StaticResource NavItem}" GroupName="nav"
+                    <RadioButton x:Name="NavSettings" AutomationProperties.Name="Настройки" Style="{StaticResource NavItem}" GroupName="nav"
                                  Tag="settings" Checked="Nav_Checked">
                         <StackPanel Orientation="Horizontal">
                             <Path Style="{StaticResource NavIcon}" Data="M5,1.6 A3.4,3.4 0 1 0 5,8.4 A3.4,3.4 0 1 0 5,1.6 M5,0 L5,1.8 M5,8.2 L5,10 M0,5 L1.8,5 M8.2,5 L10,5" />
                             <TextBlock Style="{StaticResource NavText}" Text="Настройки" />
                         </StackPanel>
                     </RadioButton>
-                    <RadioButton x:Name="NavContacts" Style="{StaticResource NavItem}" GroupName="nav"
+                    <RadioButton x:Name="NavContacts" AutomationProperties.Name="Контакты" Style="{StaticResource NavItem}" GroupName="nav"
                                  Tag="contacts" Checked="Nav_Checked">
                         <StackPanel Orientation="Horizontal">
                             <Path Style="{StaticResource NavIcon}" Data="M4,3 L16,8.5 L4,14 Z" />
                             <TextBlock Style="{StaticResource NavText}" Text="Контакты" />
                         </StackPanel>
                     </RadioButton>
-                    <RadioButton x:Name="NavSupport" Style="{StaticResource NavItem}" GroupName="nav"
+                    <RadioButton x:Name="NavSupport" AutomationProperties.Name="Поддержка" Style="{StaticResource NavItem}" GroupName="nav"
                                  Tag="support" Checked="Nav_Checked">
                         <StackPanel Orientation="Horizontal">
                             <Path Style="{StaticResource NavIcon}" Data="M5,9 C1.5,6 0.5,4 1.8,2.6 A2.4,2.4 0 0 1 5,3.4 A2.4,2.4 0 0 1 8.2,2.6 C9.5,4 8.5,6 5,9 Z" />

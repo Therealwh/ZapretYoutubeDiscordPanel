@@ -41,27 +41,27 @@
                         <DataGridTextColumn.ElementStyle>
                             <Style TargetType="TextBlock">
                                 <Setter Property="FontWeight" Value="SemiBold" />
-                                <Setter Property="Foreground" Value="{StaticResource TextDimBrush}" />
+                                <Setter Property="Foreground" Value="{DynamicResource TextDimBrush}" />
                                 <Style.Triggers>
                                     <!-- Logger writes lowercase; match both cases so a
                                          future upper-case writer is covered too. -->
                                     <DataTrigger Binding="{Binding level}" Value="info">
-                                        <Setter Property="Foreground" Value="{StaticResource OkBrush}" />
+                                        <Setter Property="Foreground" Value="{DynamicResource OkBrush}" />
                                     </DataTrigger>
                                     <DataTrigger Binding="{Binding level}" Value="INFO">
-                                        <Setter Property="Foreground" Value="{StaticResource OkBrush}" />
+                                        <Setter Property="Foreground" Value="{DynamicResource OkBrush}" />
                                     </DataTrigger>
                                     <DataTrigger Binding="{Binding level}" Value="warn">
-                                        <Setter Property="Foreground" Value="{StaticResource WarnBrush}" />
+                                        <Setter Property="Foreground" Value="{DynamicResource WarnBrush}" />
                                     </DataTrigger>
                                     <DataTrigger Binding="{Binding level}" Value="WARN">
-                                        <Setter Property="Foreground" Value="{StaticResource WarnBrush}" />
+                                        <Setter Property="Foreground" Value="{DynamicResource WarnBrush}" />
                                     </DataTrigger>
                                     <DataTrigger Binding="{Binding level}" Value="error">
-                                        <Setter Property="Foreground" Value="{StaticResource ErrBrush}" />
+                                        <Setter Property="Foreground" Value="{DynamicResource ErrBrush}" />
                                     </DataTrigger>
                                     <DataTrigger Binding="{Binding level}" Value="ERROR">
-                                        <Setter Property="Foreground" Value="{StaticResource ErrBrush}" />
+                                        <Setter Property="Foreground" Value="{DynamicResource ErrBrush}" />
                                     </DataTrigger>
                                 </Style.Triggers>
                             </Style>

@@ -18,8 +18,8 @@
                     </Grid.ColumnDefinitions>
                     <TextBox x:Name="Trc20" IsReadOnly="True" Padding="10,8"
                              FontFamily="Consolas, Cascadia Mono" FontSize="12.5"
-                             Background="{StaticResource BgBrush}" Foreground="{StaticResource TextBrush}"
-                             BorderBrush="{StaticResource BorderBrush2}" BorderThickness="1" />
+                             Background="{DynamicResource BgBrush}" Foreground="{DynamicResource TextBrush}"
+                             BorderBrush="{DynamicResource BorderBrush2}" BorderThickness="1" />
                     <Button Grid.Column="1" Content="Скопировать" Style="{StaticResource BtnPrimary}"
                             Margin="10,0,0,0" Click="Copy_Click" Tag="Trc20" />
                 </Grid>
@@ -36,8 +36,8 @@
                     </Grid.ColumnDefinitions>
                     <TextBox x:Name="Trx" IsReadOnly="True" Padding="10,8"
                              FontFamily="Consolas, Cascadia Mono" FontSize="12.5"
-                             Background="{StaticResource BgBrush}" Foreground="{StaticResource TextBrush}"
-                             BorderBrush="{StaticResource BorderBrush2}" BorderThickness="1" />
+                             Background="{DynamicResource BgBrush}" Foreground="{DynamicResource TextBrush}"
+                             BorderBrush="{DynamicResource BorderBrush2}" BorderThickness="1" />
                     <Button Grid.Column="1" Content="Скопировать" Style="{StaticResource BtnPrimary}"
                             Margin="10,0,0,0" Click="Copy_Click" Tag="Trx" />
                 </Grid>
@@ -54,8 +54,8 @@
                     </Grid.ColumnDefinitions>
                     <TextBox x:Name="TonUsdt" IsReadOnly="True" Padding="10,8"
                              FontFamily="Consolas, Cascadia Mono" FontSize="12.5"
-                             Background="{StaticResource BgBrush}" Foreground="{StaticResource TextBrush}"
-                             BorderBrush="{StaticResource BorderBrush2}" BorderThickness="1" />
+                             Background="{DynamicResource BgBrush}" Foreground="{DynamicResource TextBrush}"
+                             BorderBrush="{DynamicResource BorderBrush2}" BorderThickness="1" />
                     <Button Grid.Column="1" Content="Скопировать" Style="{StaticResource BtnPrimary}"
                             Margin="10,0,0,0" Click="Copy_Click" Tag="TonUsdt" />
                 </Grid>
@@ -72,8 +72,8 @@
                     </Grid.ColumnDefinitions>
                     <TextBox x:Name="TonGram" IsReadOnly="True" Padding="10,8"
                              FontFamily="Consolas, Cascadia Mono" FontSize="12.5"
-                             Background="{StaticResource BgBrush}" Foreground="{StaticResource TextBrush}"
-                             BorderBrush="{StaticResource BorderBrush2}" BorderThickness="1" />
+                             Background="{DynamicResource BgBrush}" Foreground="{DynamicResource TextBrush}"
+                             BorderBrush="{DynamicResource BorderBrush2}" BorderThickness="1" />
                     <Button Grid.Column="1" Content="Скопировать" Style="{StaticResource BtnPrimary}"
                             Margin="10,0,0,0" Click="Copy_Click" Tag="TonGram" />
                 </Grid>
@@ -90,8 +90,8 @@
                     </Grid.ColumnDefinitions>
                     <TextBox x:Name="Bnb" IsReadOnly="True" Padding="10,8"
                              FontFamily="Consolas, Cascadia Mono" FontSize="12.5"
-                             Background="{StaticResource BgBrush}" Foreground="{StaticResource TextBrush}"
-                             BorderBrush="{StaticResource BorderBrush2}" BorderThickness="1" />
+                             Background="{DynamicResource BgBrush}" Foreground="{DynamicResource TextBrush}"
+                             BorderBrush="{DynamicResource BorderBrush2}" BorderThickness="1" />
                     <Button Grid.Column="1" Content="Скопировать" Style="{StaticResource BtnPrimary}"
                             Margin="10,0,0,0" Click="Copy_Click" Tag="Bnb" />
                 </Grid>

@@ -69,6 +69,10 @@ base.OnStartup(e);
             {
                 Log("app version " + System.Reflection.Assembly.GetExecutingAssembly().GetName().Version);
 
+                // Stored light/dark choice, before the first window renders so the
+                // app never flashes dark and then repaints.
+                ThemeManager.ApplyStored();
+
                 // Telegram proxy reads its settings from the config directly: the proxy must
                 // know its routes even when the settings page was never opened
                 // (after a login autostart, or in --proxy-test).
