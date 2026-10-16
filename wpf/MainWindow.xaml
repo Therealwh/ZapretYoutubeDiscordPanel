@@ -274,6 +274,13 @@
                             <TextBlock Style="{StaticResource NavText}" Text="Настройки" />
                         </StackPanel>
                     </RadioButton>
+                    <RadioButton x:Name="NavContacts" Style="{StaticResource NavItem}" GroupName="nav"
+                                 Tag="contacts" Checked="Nav_Checked">
+                        <StackPanel Orientation="Horizontal">
+                            <Path Style="{StaticResource NavIcon}" Data="M4,3 L16,8.5 L4,14 Z" />
+                            <TextBlock Style="{StaticResource NavText}" Text="Контакты" />
+                        </StackPanel>
+                    </RadioButton>
                     <RadioButton x:Name="NavSupport" Style="{StaticResource NavItem}" GroupName="nav"
                                  Tag="support" Checked="Nav_Checked">
                         <StackPanel Orientation="Horizontal">

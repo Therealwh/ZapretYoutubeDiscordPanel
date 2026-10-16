@@ -144,6 +144,7 @@ namespace Ydp
         private LogsPage _logs;
         private SettingsPage _settings;
         private SupportPage _support;
+        private ContactsPage _contacts;
 
         public MainWindow()
         {
@@ -236,6 +237,10 @@ case "support":
                             if (_support == null) _support = new SupportPage();
                             PageHost.Content = _support;
                             break;
+                        case "contacts":
+                            if (_contacts == null) _contacts = new ContactsPage();
+                            PageHost.Content = _contacts;
+                            break;
                     default:
                         if (_dashboard == null) _dashboard = new DashboardPage();
                         PageHost.Content = _dashboard;
@@ -262,6 +267,7 @@ case "support":
                 case "diagnostics": NavDiagnostics.IsChecked = true; break;
                 case "logs": NavLogs.IsChecked = true; break;
             case "support": NavSupport.IsChecked = true; break;
+                case "contacts": NavContacts.IsChecked = true; break;
                 default: NavDashboard.IsChecked = true; break;
             }
             Show();
