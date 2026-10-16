@@ -722,10 +722,11 @@ if (string.IsNullOrEmpty(root))
             SetBusy(true, "Проверяю текущий обход…");
             try
             {
-                var verify = await System.Threading.Tasks.Task.Run(() => Tester.VerifyStrategy(root, attempts: 1));
-                QuickNote.Text = verify.ok
-                    ? "Обход работает: Discord и YouTube отвечают."
-                    : "Обход не отвечает (проверена одна попытка).";
+                // One probe -> per-target verdict, and the tray icon follows.
+                var health = await System.Threading.Tasks.Task.Run(() => BypassHealth.Probe(root, 6));
+                QuickNote.Text = health == null
+                    ? "Проверка уже выполняется — посмотрите результат в логе."
+                    : BypassHealth.Describe(health);
             }
             catch (Exception ex)
             {

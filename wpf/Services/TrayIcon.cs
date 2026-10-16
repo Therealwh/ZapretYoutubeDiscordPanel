@@ -39,6 +39,48 @@ namespace Ydp.Services
             _icon.BalloonTipClicked += (s, e) => Show();
         }
 
+        /// <summary>
+        /// Tint the tray icon by live bypass state: green = working, red = on
+        /// but not unblocking, grey = off. Lets you read the state at a glance
+        /// without opening the window.
+        /// </summary>
+        public void SetState(string state, string tip)
+        {
+            try
+            {
+                Color c;
+                if (state == "ok") c = Color.FromArgb(0x2E, 0xD5, 0x73);       // green
+                else if (state == "err") c = Color.FromArgb(0xE8, 0x4A, 0x4A);  // red
+                else c = Color.FromArgb(0x8A, 0x94, 0xA6);                    // grey
+                _icon.Icon = MakeDotIcon(c);
+                _icon.Text = string.IsNullOrEmpty(tip) ? "Zapret Panel" : Trim(tip);
+            }
+            catch { /* a bad icon must never crash the panel */ }
+        }
+
+        private static string Trim(string s)
+        {
+            s = s.Replace("\r", " ").Replace("\n", " ");
+            return s.Length > 127 ? s.Substring(0, 127) : s;   // NotifyIcon limit
+        }
+
+        private static Icon MakeDotIcon(Color color)
+        {
+            using (var bmp = new Bitmap(32, 32))
+            {
+                using (var g = Graphics.FromImage(bmp))
+                {
+                    g.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+                    g.Clear(Color.Transparent);
+                    using (var brush = new SolidBrush(color))
+                        g.FillEllipse(brush, 3, 3, 26, 26);
+                    using (var pen = new Pen(Color.FromArgb(0x20, 0x20, 0x28), 2))
+                        g.DrawEllipse(pen, 4, 4, 24, 24);
+                }
+                return Icon.FromHandle(bmp.GetHicon());
+            }
+        }
+
         private static Icon LoadIcon()
         {
             try

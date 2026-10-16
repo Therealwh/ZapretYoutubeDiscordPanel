@@ -90,8 +90,9 @@ namespace Ydp.Zapret
 
         private static void Tick(string reason)
         {
-            // Both behaviours off: nothing to do, don't even probe.
-            if (!Notify && !Enabled) return;
+            // Always probe: this is what keeps the tray icon and the dashboard
+            // verdict current. Whether we notify and whether we auto-recover are
+            // separate, opt-in decisions made further down.
             // One action at a time; a recovery can take minutes.
             if (Interlocked.CompareExchange(ref _recovering, 1, 0) != 0) return;
             try
@@ -100,15 +101,16 @@ namespace Ydp.Zapret
                 if (string.IsNullOrEmpty(root)) return;
 
                 var st = Status.GetStatus(root);
-                // Nothing to protect while the bypass is off.
-                if (st.activeMode == "off") { Reset(); return; }
+                // Nothing to protect while the bypass is off; reflect that in the tray.
+                if (st.activeMode == "off") { BypassHealth.MarkOff(); Reset(); return; }
 
                 // Stay out of the way while a test or a connect is in progress:
                 // their transient reachability is not a dead bypass.
                 if (Tester.SweepActive || AutoConnect.IsConnecting) { Reset(); return; }
 
-                var check = Tester.CheckReachability(root, 4);
-                if (Tester.IsWorking(check.groups)) { Reset(); return; }
+                // One probe feeds the tray icon and this decision alike.
+                var health = BypassHealth.Probe(root, 4);
+                if (health == null || health.ok) { Reset(); return; }
 
                 int fails = Interlocked.Increment(ref _fails);
                 if (fails < RequiredFails)
