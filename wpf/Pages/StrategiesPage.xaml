@@ -250,6 +250,16 @@
                     <DataGridTextColumn Header="Стратегия" Binding="{Binding Name}" Width="2*" />
                     <DataGridTextColumn Header="Методы" Binding="{Binding Badges}" Width="3*" />
                     <DataGridTextColumn Header="Состояние" Binding="{Binding State}" Width="*" />
+                    <DataGridTemplateColumn Header="" Width="Auto">
+                        <DataGridTemplateColumn.CellTemplate>
+                            <DataTemplate>
+                                <Button Content="Подключить" Command="{Binding ConnectCmd}"
+                                        Style="{StaticResource Btn}"
+                                        Padding="12,3" FontSize="12" Margin="4,0"
+                                        ToolTip="Установить эту стратегию как обход, даже без проверки" />
+                            </DataTemplate>
+                        </DataGridTemplateColumn.CellTemplate>
+                    </DataGridTemplateColumn>
                 </DataGrid.Columns>
             </DataGrid>
         </Border>

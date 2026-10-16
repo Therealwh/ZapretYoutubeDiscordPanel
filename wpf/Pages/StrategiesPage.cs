@@ -45,6 +45,14 @@ namespace Ydp.Pages
         public string Active { get; set; }
         public string State { get; set; }
 
+        /// <summary>
+        /// "Подключить" straight from the list, without running a test first.
+        /// Goes through the same ConnectNow path as the report rows: install,
+        /// verify, and only then remember. ICommand, not Action — the XAML binds
+        /// it through Command.
+        /// </summary>
+        public System.Windows.Input.ICommand ConnectCmd { get; set; }
+
         public event PropertyChangedEventHandler PropertyChanged;
         private void Raise(string name)
         {
@@ -89,7 +97,7 @@ namespace Ydp.Pages
             int no = 0;
             foreach (var s in list)
             {
-                Rows.Add(new StrategyRow
+                var row = new StrategyRow
                 {
                     No = (++no).ToString(),
                     Name = s.name,
@@ -97,7 +105,12 @@ namespace Ydp.Pages
                     Badges = string.Join(" · ", s.badges),
                     Active = string.Equals(s.name, active, StringComparison.OrdinalIgnoreCase) ? "активная" : string.Empty,
                     State = string.IsNullOrEmpty(active) && status.activeMode == "off" ? string.Empty : (string.Equals(s.name, active, StringComparison.OrdinalIgnoreCase) ? "подключена" : string.Empty),
-                });
+                };
+                // Per-row "Подключить": same install + verify + remember path as
+                // the tested rows, so an untested strategy can still be applied
+                // straight from the list.
+                row.ConnectCmd = new DelegateCommand(() => ConnectNow(row.File, row.Name));
+                Rows.Add(row);
             }
             await System.Threading.Tasks.Task.Yield();
         }
@@ -319,7 +332,7 @@ private async void BtnTest_Click(object sender, RoutedEventArgs e)
             Window dlg = null;
             var okBtn = new Button { Content = "Запустить тест", IsDefault = true, Margin = new Thickness(0, 0, 8, 0), Padding = new Thickness(16, 6, 16, 6), MinWidth = 140 };
             if (TryFindResource("BtnPrimary") is Style primary) okBtn.Style = primary;
-            var cancelBtn = new Button { Content = "Отмена", IsCancel = true, Padding = new Thickness(16, 6, 16, 6), MinWidth = 100 };
+            var cancelBtn = new Button { Content = "Отмена", Padding = new Thickness(16, 6, 16, 6), MinWidth = 100 };
             if (TryFindResource("Btn") is Style normal) cancelBtn.Style = normal;
             var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
             buttons.Children.Add(okBtn);
@@ -345,6 +358,11 @@ private async void BtnTest_Click(object sender, RoutedEventArgs e)
                 result = parsed;
                 dlg?.Close();
             };
+            // Cancel closes explicitly instead of relying on IsCancel: relying on
+            // it made the close depend on how the click was delivered, and a
+            // programmatic invoke left the dialog open. An explicit handler
+            // behaves the same for a mouse click and for automation.
+            cancelBtn.Click += (s, e2) => { result = null; dlg?.Close(); };
             dlg = new Window
             {
                 Title = "Тест выбранных стратегий",
@@ -582,6 +600,22 @@ public void Execute(object parameter)
                 SetBusy(false, "Не удалось подключить " + name + ": " + (result.reason ?? "ошибка"));
                 return;
             }
+
+            // A RUNNING service is not proof the bypass works: winws can be up
+            // and still blocked. Wait for it to finish loading, then probe. If
+            // it does not bypass, stop it and report honestly instead of
+            // remembering a strategy that is not really connected.
+            System.Threading.Thread.Sleep(2000);
+            var verify = Tester.VerifyStrategy(_root, attempts: 3, timeoutSec: 6);
+            if (!verify.ok)
+            {
+                ServiceOps.StopService();
+                ServiceOps.KillWinws();
+                _keepConnected = false;
+                SetBusy(false, "Служба запущена, но " + name + " не прошла проверку — обход выключен. Попробуйте другую стратегию.");
+                return;
+            }
+
             Config.Set(AutoConnect.KeyLastWinner, file);
             AutoConnect.RememberWorking(file);
             SetBusy(false, "Подключено: " + name + " (служба Windows, автозапуск)");
@@ -814,7 +848,10 @@ public void Execute(object parameter)
         private void StrategyList_PreviewMouseWheel(object sender, MouseWheelEventArgs e)
         {
             if (PageScroll == null) return;
-            PageScroll.ScrollToVerticalOffset(PageScroll.VerticalOffset - e.Delta);
+            // A wheel notch is ~120px; feeding that straight into ScrollToVerticalOffset
+            // jumped more than three rows per click and read as a jerk. A third of it
+            // (~40px, about a row) matches the feel of scrolling outside the grid.
+            PageScroll.ScrollToVerticalOffset(PageScroll.VerticalOffset - (e.Delta / 3));
             e.Handled = true;
         }
 

@@ -104,9 +104,13 @@ namespace Ydp.Zapret
                 if (!applied.ok) continue;
 
                 // Installed means winws came up, not that it actually bypasses;
-                // one short probe is the difference between "on" and "on but
-                // still blocked".
-                var verify = Tester.VerifyStrategy(rootDir, attempts: 1, timeoutSec: 5);
+                // one probe is the difference between "on" and "on but still
+                // blocked". But a freshly started service is still loading its
+                // lists: probing the instant it reports RUNNING made a perfectly
+                // good remembered strategy look dead and sent the toggle into the
+                // full search. Give it a beat, then probe patiently.
+                System.Threading.Thread.Sleep(2000);
+                var verify = Tester.VerifyStrategy(rootDir, attempts: 3, timeoutSec: 6);
                 if (verify.ok)
                 {
                     Config.Set(KeyLastWinner, file);
@@ -179,6 +183,13 @@ namespace Ydp.Zapret
             // to ask, let the user decide: retry the memory, run the full
             // search, or cancel and stay off. With no prompt (headless paths)
             // this keeps the old behaviour and searches right away.
+            //
+            // "Повторить" re-runs the whole remembered set every time, so an
+            // uncapped loop turned one press into an endless round through the
+            // same strategies. Cap it: after a few fruitless retries, fall
+            // through to the full search on our own.
+            const int maxRetries = 2;
+            int retries = 0;
             while (onRememberedFailure != null)
             {
                 var action = onRememberedFailure();
@@ -187,9 +198,14 @@ namespace Ydp.Zapret
                 if (action == RememberedFailureAction.Search)
                     break; // fall through to the full search below
 
+                if (retries++ >= maxRetries)
+                {
+                    log?.Invoke("Запомненная стратегия не сработала несколько раз подряд — запускаю полный поиск");
+                    break;
+                }
+
                 // Retry: hand the remembered strategies another chance. If one
-                // works now, the bypass is up and the search is skipped; if not,
-                // ask again so the user can switch to search or cancel.
+                // works now, the bypass is up and the search is skipped.
                 var again = TryRememberedFirst(rootDir, log);
                 if (again != null) return again;
             }

@@ -17,9 +17,10 @@
     <AssemblyName>YoutubeDiscordPanel-Setup</AssemblyName>
     <RootNamespace>Ydp.Setup</RootNamespace>
     <ApplicationIcon>..\Resources\app.ico</ApplicationIcon>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
     <Product>YoutubeDiscordPanel</Product>
-    <Version>2.1.8</Version>
-    <FileVersion>2.1.8.0</FileVersion>
+    <Version>2.1.10</Version>
+    <FileVersion>2.1.10.0</FileVersion>
     <DebugType>none</DebugType>
     <!-- We define Main ourselves; the SDK also generates one for WinExe. -->
     <StartupObject>Ydp.Setup.Program</StartupObject>
