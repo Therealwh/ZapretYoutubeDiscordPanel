@@ -147,6 +147,7 @@ namespace Ydp
         private SupportPage _support;
         private ContactsPage _contacts;
         private TransparencyPage _transparency;
+        private ExpertPage _expert;
 
         public MainWindow()
         {
@@ -217,7 +218,11 @@ namespace Ydp
                         if (_strategies == null) _strategies = new StrategiesPage();
                         PageHost.Content = _strategies;
                         break;
-                    case "filters":
+                        case "expert":
+                            if (_expert == null) _expert = new ExpertPage();
+                            PageHost.Content = _expert;
+                            break;
+                        case "filters":
                         if (_filters == null) _filters = new FiltersPage();
                         PageHost.Content = _filters;
                         break;

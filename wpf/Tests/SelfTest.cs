@@ -50,6 +50,7 @@ namespace Ydp.Tests
             Guard("tester", TesterTests);
             Guard("lists", ListTests);
             Guard("ui", UiBindingTests);
+            Guard("dpi", DpiStrategyTests);
 
             var report = new StringBuilder();
             report.Append("tests: ").Append(_passed + Failures.Count)
@@ -544,6 +545,92 @@ namespace Ydp.Tests
         /// real RunRow and flipping Expanded catches that exact mistake in
         /// milliseconds, with no sweep needed.
         /// </summary>
+        /// <summary>
+        /// DPI expert: a strategy generated in the UI must survive the panel's own
+        /// parser. This is the check that matters, because the parser tokenizes on
+        /// commas AND '=' - a generated file that folds sub-options into one
+        /// --dpi-desync list loses every '=' on the way back and zapret stops
+        /// seeing values for fooling/repeats/ttl.
+        /// </summary>
+        private static void DpiStrategyTests()
+        {
+            var catalog = Ydp.Zapret.DpiCatalog.Flags;
+            Check("dpi: catalog is populated", catalog != null && catalog.Count >= 15,
+                "count=" + (catalog == null ? 0 : catalog.Count));
+            Check("dpi: every flag has a label and a group",
+                catalog != null && catalog.All(f => !string.IsNullOrWhiteSpace(f.label) && !string.IsNullOrWhiteSpace(f.group)));
+            Check("dpi: flag ids are unique",
+                catalog != null && catalog.Select(f => f.id).Distinct().Count() == catalog.Count);
+
+            var plan = Ydp.Zapret.AutoTuner.PlanFor(1); // fake,split2 / md5sig / autottl
+            var bat = Ydp.Zapret.DpiStrategy.WriteBat(plan, null, "t.bat");
+
+            Check("dpi: bat launches winws", bat.Contains("winws.exe"));
+            Check("dpi: bat splits YouTube/Discord/QUIC into three blocks",
+                CountOf(bat, "--new") == 2, "new=" + CountOf(bat, "--new"));
+            Check("dpi: sub-options are separate flags, not a folded comma list",
+                bat.Contains("--dpi-desync-fooling=") && !bat.Contains("fooling=md5sig,repeats"));
+
+            // Write it out and read it back with the REAL parser.
+            string tmp = System.IO.Path.Combine(System.IO.Path.GetTempPath(),
+                "ydp-selftest-" + Guid.NewGuid().ToString("N").Substring(0, 8) + ".bat");
+            try
+            {
+                System.IO.File.WriteAllText(tmp, bat);
+                var parsed = Ydp.Zapret.Strategy.ParseStrategyFile(tmp);
+                Check("dpi: generated bat parses", parsed.args != null && parsed.args.Count > 5,
+                    "args=" + (parsed.args == null ? 0 : parsed.args.Count));
+                Check("dpi: no launcher noise leaks into args",
+                    parsed.args != null && !parsed.args.Any(a => a.IndexOf("winws", StringComparison.OrdinalIgnoreCase) >= 0
+                                                              || a == "start" || a == "cmd"));
+                Check("dpi: blocks survive as --new",
+                    parsed.args != null && parsed.args.Count(a => a == "--new") == 2);
+                Check("dpi: fooling keeps its value through the parser",
+                    parsed.args != null && IndexOfValue(parsed.args, "--dpi-desync-fooling") == "md5sig");
+                Check("dpi: repeats keeps its value",
+                    parsed.args != null && IndexOfValue(parsed.args, "--dpi-desync-repeats") == "6");
+                Check("dpi: autottl keeps its value",
+                    parsed.args != null && IndexOfValue(parsed.args, "--dpi-desync-autottl") == "1:3-20");
+                Check("dpi: desync modes keep their value",
+                    parsed.args != null && IndexOfValue(parsed.args, "--dpi-desync") == "fake,split2");
+
+                // ...and back into an editable plan.
+                var back = Ydp.Zapret.DpiStrategy.FromArgs(parsed.args, "t");
+                Check("dpi: plan round-trips back", back.Get("--dpi-desync-fooling") == "md5sig",
+                    "got=" + back.Get("--dpi-desync-fooling"));
+            }
+            finally
+            {
+                try { System.IO.File.Delete(tmp); } catch { }
+            }
+
+            // Every autotune candidate must produce a parsable bat.
+            int good = 0;
+            for (int i = 0; i < Ydp.Zapret.AutoTuner.CandidateCount; i++)
+            {
+                string cbat = Ydp.Zapret.DpiStrategy.WriteBat(Ydp.Zapret.AutoTuner.PlanFor(i), null, "c.bat");
+                if (cbat.Contains("winws.exe") && CountOf(cbat, "--new") == 2) good++;
+            }
+            Check("dpi: every autotune candidate builds a valid bat", good == Ydp.Zapret.AutoTuner.CandidateCount,
+                good + "/" + Ydp.Zapret.AutoTuner.CandidateCount);
+        }
+
+        private static int CountOf(string haystack, string needle)
+        {
+            int n = 0, i = 0;
+            while ((i = (haystack ?? string.Empty).IndexOf(needle, i, StringComparison.Ordinal)) >= 0) { n++; i += needle.Length; }
+            return n;
+        }
+
+        /// <summary>Value following a flag in a parsed arg list.</summary>
+        private static string IndexOfValue(System.Collections.Generic.List<string> args, string flag)
+        {
+            if (args == null) return null;
+            for (int i = 0; i < args.Count - 1; i++)
+                if (args[i] == flag) return args[i + 1];
+            return null;
+        }
+
         private static void UiBindingTests()
         {
             var row = new Ydp.Pages.StrategiesPage.RunRow();

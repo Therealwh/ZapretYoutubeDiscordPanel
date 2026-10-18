@@ -1,0 +1,98 @@
+<UserControl x:Class="Ydp.Pages.ExpertPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Loaded="Page_Loaded">
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,10,0">
+    <StackPanel>
+        <TextBlock Text="DPI-эксперт" Style="{StaticResource SectionTitle}" Margin="0,0,0,16" />
+
+        <!-- ============ автоподбор ============ -->
+        <Border Style="{StaticResource Card}" Margin="0,0,0,12">
+            <StackPanel>
+                <TextBlock Text="Автоподбор стратегии" Style="{StaticResource H1}" />
+                <TextBlock Style="{StaticResource Dim}" Margin="0,4,0,10" TextWrapping="Wrap"
+                           Text="Перебирает готовые сочетания атаки, применяет каждое и проверяет Discord и YouTube через него. Рабочее сохраняется как обычная стратегия — её потом можно закрепить и открыть здесь же для точной настройки. Если ничего не сработало, панель вернёт прежнюю стратегию." />
+
+                <StackPanel Orientation="Horizontal">
+                    <Button x:Name="BtnTune" Content="Подобрать автоматически" Style="{StaticResource BtnPrimary}" Margin="0,0,10,0" Click="BtnTune_Click" />
+                    <Button x:Name="BtnTuneStop" Content="Остановить" Style="{StaticResource Btn}" IsEnabled="False" Margin="0,0,10,0" Click="BtnTuneStop_Click" />
+                </StackPanel>
+
+                <TextBlock x:Name="TuneProgress" Style="{StaticResource Dim}" Margin="0,10,0,0" TextWrapping="Wrap" />
+
+                <ItemsControl x:Name="TuneItems" Margin="0,10,0,0">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Margin="0,5">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                    <ColumnDefinition Width="Auto" />
+                                </Grid.ColumnDefinitions>
+                                <Ellipse Grid.Column="0" Width="8" Height="8" VerticalAlignment="Center" Margin="0,0,10,0">
+                                    <Ellipse.Style>
+                                        <Style TargetType="Ellipse">
+                                            <Setter Property="Fill" Value="{DynamicResource ErrBrush}" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding ok}" Value="True">
+                                                    <Setter Property="Fill" Value="{DynamicResource OkBrush}" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Ellipse.Style>
+                                </Ellipse>
+                                <TextBlock Grid.Column="1" Text="{Binding label}" Foreground="{DynamicResource TextBrush}"
+                                           FontFamily="Consolas, Cascadia Mono" FontSize="12" TextWrapping="Wrap" />
+                                <TextBlock Grid.Column="2" Text="{Binding detail}" Style="{DynamicResource Dim}"
+                                           Margin="12,0,0,0" VerticalAlignment="Center" TextWrapping="Wrap" />
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <Border x:Name="TuneVerdictBox" Background="{DynamicResource BgHoverBrush}"
+                        BorderBrush="{DynamicResource BorderBrush2}" BorderThickness="1"
+                        CornerRadius="9" Padding="12" Margin="0,12,0,0" Visibility="Collapsed">
+                    <TextBlock x:Name="TuneVerdict" TextWrapping="Wrap" Foreground="{DynamicResource TextBrush}" />
+                </Border>
+            </StackPanel>
+        </Border>
+
+        <!-- ============ ручные флаги ============ -->
+        <Border Style="{StaticResource Card}">
+            <StackPanel>
+                <TextBlock Text="Собрать стратегию вручную" Style="{StaticResource H1}" />
+                <TextBlock Style="{StaticResource Dim}" Margin="0,4,0,10" TextWrapping="Wrap"
+                           Text="Настоящие флаги zapret с расшифровкой. Стратегия сохраняется как .bat и появляется в общем списке — её можно закрепить, протестировать и применить как любую другую." />
+
+                <Grid Margin="0,0,0,10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" Margin="0,0,10,0">
+                        <TextBlock Style="{StaticResource Dim}" Margin="0,0,0,4" Text="Взять флаги из стратегии" />
+                        <ComboBox x:Name="LoadBox" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" Width="230">
+                        <TextBlock Style="{StaticResource Dim}" Margin="0,0,0,4" Text="Имя новой стратегии" />
+                        <TextBox x:Name="NameBox" Text="Мой обход" />
+                    </StackPanel>
+                </Grid>
+
+                <ItemsControl x:Name="FlagHost" />
+
+                <StackPanel Orientation="Horizontal" Margin="0,14,0,0">
+                    <Button x:Name="BtnSave" Content="Сохранить стратегию" Style="{StaticResource BtnPrimary}" Margin="0,0,10,0" Click="BtnSave_Click" />
+                    <Button x:Name="BtnApply" Content="Сохранить и применить" Style="{StaticResource Btn}" Margin="0,0,10,0" Click="BtnApply_Click" />
+                    <Button x:Name="BtnDefaults" Content="Сбросить к рекомендованным" Style="{StaticResource Btn}" Click="BtnDefaults_Click" />
+                </StackPanel>
+
+                <TextBlock x:Name="ExpertNote" Style="{StaticResource Dim}" Margin="0,10,0,0" TextWrapping="Wrap" />
+                <TextBlock x:Name="PreviewText" Style="{StaticResource Mono}" Margin="0,10,0,0"
+                           TextWrapping="Wrap" Foreground="{DynamicResource TextDimBrush}" />
+            </StackPanel>
+        </Border>
+    </StackPanel>
+    </ScrollViewer>
+</UserControl>

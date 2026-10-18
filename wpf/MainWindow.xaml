@@ -229,7 +229,14 @@ Background="{DynamicResource BgBrush}"
                             <TextBlock Style="{StaticResource NavText}" Text="Стратегии" />
                         </StackPanel>
                     </RadioButton>
-                    <RadioButton x:Name="NavFilters" AutomationProperties.Name="Фильтры" Style="{StaticResource NavItem}" GroupName="nav"
+                      <RadioButton x:Name="NavExpert" AutomationProperties.Name="DPI-эксперт" Style="{StaticResource NavItem}" GroupName="nav"
+                                   Tag="expert" Checked="Nav_Checked">
+                          <StackPanel Orientation="Horizontal">
+                              <Path Style="{StaticResource NavIcon}" Data="M2,5 L5,5 L5,2 L8,2 L8,8 L5,8 L5,5 M11,3 L11,11" />
+                              <TextBlock Style="{StaticResource NavText}" Text="DPI-эксперт" />
+                          </StackPanel>
+                      </RadioButton>
+                      <RadioButton x:Name="NavFilters" AutomationProperties.Name="Фильтры" Style="{StaticResource NavItem}" GroupName="nav"
                                  Tag="filters" Checked="Nav_Checked">
                         <StackPanel Orientation="Horizontal">
                             <Path Style="{StaticResource NavIcon}" Data="M0.5,0.8 L9.5,0.8 L6.2,5 V9.8 L3.8,8.6 V5 Z" />
