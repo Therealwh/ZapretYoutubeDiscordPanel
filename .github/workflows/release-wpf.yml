@@ -190,8 +190,7 @@ jobs:
           $rel = $releases | Where-Object { $_.draft -and $_.tag_name -eq $env:RELEASE_TAG } | Select-Object -First 1
           if (-not $rel) { throw "draft release for $env:RELEASE_TAG not found" }
           Write-Host "draft release id=$($rel.id)"
-          foreach ($f in @('dist\YoutubeDiscordPanel-latest.exe','dist\YoutubeDiscordPanel-Setup-latest.exe','dist\zapret-bundled.zip','dist\SHA256SUMS.txt')) {
-            $name = [IO.Path]::GetFileName($f)
+          foreach ($f in (Get-ChildItem dist | ForEach-Object { $_.FullName })) {            $name = [IO.Path]::GetFileName($f)
             # Asset uploads go to uploads.github.com - the release object
             # carries the exact template, so use it instead of building an
             # api.github.com URL (that host returns 404 for uploads).
