@@ -249,6 +249,75 @@ namespace Ydp.Zapret
         }
 
         /// <summary>
+        /// Ask winws to validate a strategy's parameters without touching traffic
+        /// and return the first line it complains about, or null when the
+        /// parameters are fine (or winws cannot be asked).
+        ///
+        /// This is the difference between "winws did not start" and an actual
+        /// diagnosis: winws exits 1 with a specific line such as
+        /// "windivert filter : must specify port or/and partial raw filter", and
+        /// nothing in the sweep was capturing it.
+        /// </summary>
+        public static string LaunchDiagnostics(string rootDir, string strategyFile)
+        {
+            try
+            {
+                var parsed = Strategy.ParseStrategyFile(strategyFile, rootDir);
+                if (parsed.args == null || parsed.args.Count == 0) return "пустой набор аргументов";
+
+                string winws = Path.Combine(rootDir, "bin", "winws.exe");
+                if (!File.Exists(winws)) return null;
+
+                var args = new List<string>(Strategy.RejoinFlagValues(parsed.args));
+                args.Add("--dry-run");
+                string imagePath = Services.ServiceOps.BuildImagePath(winws, args);
+                string argLine = imagePath.Substring(imagePath.IndexOf(' ') + 1);
+
+                var psi = new System.Diagnostics.ProcessStartInfo(winws, argLine)
+                {
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                };
+                using (var p = System.Diagnostics.Process.Start(psi))
+                {
+                    if (p == null) return null;
+                    var outTask = p.StandardOutput.ReadToEndAsync();
+                    var errTask = p.StandardError.ReadToEndAsync();
+                    if (!p.WaitForExit(15000))
+                    {
+                        try { p.Kill(); } catch { }
+                        return null;
+                    }
+                    string err = null, sout = null;
+                    try { err = errTask.Result; } catch { }
+                    try { sout = outTask.Result; } catch { }
+                    foreach (var line in SplitLines(err) )
+                    {
+                        if (!string.IsNullOrWhiteSpace(line)) return line.Trim();
+                    }
+                    foreach (var line in SplitLines(sout))
+                    {
+                        if (line.IndexOf("error", StringComparison.OrdinalIgnoreCase) >= 0
+                            || line.IndexOf("must", StringComparison.OrdinalIgnoreCase) >= 0)
+                            return line.Trim();
+                    }
+                }
+            }
+            catch
+            {
+                // Diagnostics must never turn a failed run into a crashed run.
+            }
+            return null;
+        }
+
+        private static IEnumerable<string> SplitLines(string text)
+        {
+            return (text ?? string.Empty).Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+        }
+
+        /// <summary>
         /// One line explaining why a strategy was judged unusable, naming the
         /// host that actually failed rather than just "nothing works".
         /// </summary>
@@ -643,14 +712,40 @@ public Groups baseline { get; set; }
                 // run; the service only matters for the one strategy that is
                 // finally chosen and installed on demand.
                 var start = ServiceOps.LaunchStrategyProcess(rootDir, strat.file);
-                if (!start.ok || !ServiceOps.WaitWinws(false, 8000))
+                bool up = start.ok && ServiceOps.WaitWinws(false, 8000);
+
+                // One retry. The sweep tears the previous candidate down (kill
+                // winws, unload the driver) and immediately starts the next one;
+                // WinDivert can still be releasing its handle, and winws then exits
+                // in a second or two. Measured: 8 of 21 strategies reported
+                // "winws did not start" while `winws --dry-run` said their
+                // parameters were perfectly fine - a race, not broken configs.
+                // A second attempt separates the two.
+                if (!up)
                 {
+                    ServiceOps.KillWinws();
+                    Thread.Sleep(1500);
+                    start = ServiceOps.LaunchStrategyProcess(rootDir, strat.file);
+                    up = start.ok && ServiceOps.WaitWinws(false, 12000);
+                }
+
+                if (!up)
+                {
+                    // "winws did not start" is useless to whoever has to fix the
+                    // config. winws --dry-run validates the parameters without
+                    // touching traffic and prints exactly what it dislikes, so the
+                    // row can say WHY instead of just that it died.
+                    string reason = start.ok ? "winws_not_started" : (start.reason ?? "not_started");
+                    string detail = LaunchDiagnostics(rootDir, strat.file);
+                    if (!string.IsNullOrEmpty(detail)) reason = reason + " — " + detail;
+
                     result.results.Add(new StrategyRunResult
                     {
                         name = strat.name,
                         file = strat.file,
                         failed = true,
-                        failReason = start.ok ? "winws_not_started" : (start.reason ?? "not_started"),
+                        launchFailed = true,
+                        failReason = reason,
                         score = new Score(),
                     });
                     ServiceOps.KillWinws();
