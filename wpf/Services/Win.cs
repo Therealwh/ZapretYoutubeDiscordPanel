@@ -211,6 +211,17 @@ namespace Ydp.Services
         }
 
         /// <summary>
+        /// Quote an adapter name for a netsh command line. Adapter names are
+        /// user- (and local-malware-) renamable and may contain quotes; a raw
+        /// name="..." splice would let a name with a quote end the quoted token
+        /// early and inject netsh verbs from the elevated panel.
+        /// </summary>
+        private static string NetshName(string adapter)
+        {
+            return "name=\"" + (adapter ?? "").Replace("\"", "'") + "\"";
+        }
+
+        /// <summary>
         /// Point an adapter at fixed DNS servers.
         ///
         /// Some DPI setups break the system resolver while the rest of the
@@ -225,15 +236,26 @@ namespace Ydp.Services
             if (!IsValidDns(primary)) return new ServiceOps.OperationResult { ok = false, reason = "bad_dns" };
             if (!string.IsNullOrWhiteSpace(secondary) && !IsValidDns(secondary)) return new ServiceOps.OperationResult { ok = false, reason = "bad_dns" };
 
-            var first = RunNetsh("interface ip set dns name=\"" + adapter + "\" static " + primary + " primary");
+            // Back up the user's own static DNS once, before the first change:
+            // ResetDns below must restore what the user had, not blindly DHCP.
+            BackupOriginalDns(adapter);
+
+            var name = NetshName(adapter);
+            var first = RunNetsh("interface ip set dns " + name + " static " + primary + " primary");
             if (!first.ok) return first;
             if (!string.IsNullOrWhiteSpace(secondary))
             {
                 // "set dns ... index=2" REPLACES the server at that index; the
                 // second resolver only appears with "add dns". Without this the
                 // panel silently leaves the user with a single DNS server.
-                var second = RunNetsh("interface ip add dns name=\"" + adapter + "\" address=" + secondary + " index=2");
-                if (!second.ok) return second;
+                var second = RunNetsh("interface ip add dns " + name + " address=" + secondary + " index=2");
+                if (!second.ok)
+                {
+                    // Primary is already applied; leaving it half-applied with a
+                    // single resolver is worse than rolling back to the backup.
+                    RestoreOriginalDns(adapter);
+                    return second;
+                }
             }
             // Old cached entries keep the broken resolver alive. The reset lives
             // in ipconfig: netsh has no flushdns verb.
@@ -247,11 +269,70 @@ namespace Ydp.Services
         public static ServiceOps.OperationResult ResetDns(string adapter)
         {
             if (string.IsNullOrWhiteSpace(adapter)) return new ServiceOps.OperationResult { ok = false, reason = "no_adapter" };
-            var result = RunNetsh("interface ip set dns name=\"" + adapter + "\" dhcp");
+            var result = RunNetsh("interface ip set dns " + NetshName(adapter) + " dhcp");
             if (!result.ok) return result;
             FlushDnsCache();
             Logger.Info("DNS: " + adapter + " → DHCP (от провайдера)", "net");
             return new ServiceOps.OperationResult { ok = true };
+        }
+
+        /// <summary>
+        /// Remember the adapter's own static DNS before the panel touches it.
+        /// Stored per adapter id in the config; only saved once, and only when
+        /// the adapter actually has a static resolver (NameServer set) - a DHCP
+        /// adapter has nothing worth restoring.
+        /// </summary>
+        private static void BackupOriginalDns(string adapter)
+        {
+            try
+            {
+                var key = "dnsBackup." + adapter;
+                if (!string.IsNullOrEmpty(Config.Get(key, null))) return; // already backed up
+                if (!HasStaticDnsInRegistry(adapter)) return;             // DHCP - nothing to keep
+                var ns = Microsoft.Win32.Registry.LocalMachine
+                    .OpenSubKey("SYSTEM\\CurrentControlSet\\Services\\Tcpip\\Parameters\\Interfaces\\" + adapter)
+                    ?.GetValue("NameServer") as string ?? "";
+                var parts = ns.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries)
+                              .Select(s => s.Trim()).Where(s => s.Length > 0).ToArray();
+                if (parts.Length == 0) return;
+                Config.Set(key, string.Join("|", parts));
+                Logger.Info("DNS: сохранён исходный резолвер " + adapter + " → " + string.Join(", ", parts), "net");
+            }
+            catch { /* best effort */ }
+        }
+
+        /// <summary>
+        /// Put back the resolver saved by BackupOriginalDns, if any. Used when a
+        /// partial DNS change must be undone without losing the user's settings.
+        /// </summary>
+        public static ServiceOps.OperationResult RestoreOriginalDns(string adapter)
+        {
+            try
+            {
+                var saved = Config.Get("dnsBackup." + adapter, null);
+                if (string.IsNullOrEmpty(saved))
+                {
+                    // No backup - the adapter was on DHCP before the panel, hand
+                    // it back to DHCP.
+                    return ResetDns(adapter);
+                }
+                var parts = saved.Split('|');
+                var name = NetshName(adapter);
+                var first = RunNetsh("interface ip set dns " + name + " static " + parts[0] + " primary");
+                if (!first.ok) return first;
+                for (int i = 1; i < parts.Length && i < 3; i++)
+                {
+                    var more = RunNetsh("interface ip add dns " + name + " address=" + parts[i] + " index=" + (i + 1));
+                    if (!more.ok) return more;
+                }
+                FlushDnsCache();
+                Logger.Info("DNS: восстановлен исходный резолвер " + adapter + " → " + string.Join(", ", parts), "net");
+                return new ServiceOps.OperationResult { ok = true };
+            }
+            catch (Exception ex)
+            {
+                return new ServiceOps.OperationResult { ok = false, reason = "restore_failed", message = ex.Message };
+            }
         }
 
         /// <summary>

@@ -28,3 +28,11 @@ website/
 
 # сайт живёт локально и не должен быть на GitHub
 website/
+
+# Keys, certs and env files must never land in the repo
+*.pem
+*.key
+*.pfx
+*.p12
+.env
+.env.*

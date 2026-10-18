@@ -305,6 +305,44 @@ namespace Ydp.Services
             return sb.ToString();
         }
 
+        /// <summary>
+        /// Escape one argument for embedding inside a Windows command line that
+        /// is itself wrapped in double quotes (the SCM binPath case): backslashes
+        /// before a quote are doubled, quotes are doubled, and the result is
+        /// wrapped in quotes. Without this a parsed .bat token carrying a quote
+        /// (for example a hostlist value like --hostlist="C:\a b\x.txt") can end
+        /// the ImagePath's quoting early and let the rest of the token run as
+        /// new arguments to a service that starts as SYSTEM.
+        /// </summary>
+        public static string EscapeForQuotedCommandLine(string arg)
+        {
+            if (string.IsNullOrEmpty(arg)) return "\"\"";
+            var sb = new StringBuilder(arg.Length + 8);
+            sb.Append('"');
+            int backslashes = 0;
+            foreach (char ch in arg)
+            {
+                if (ch == '\\')
+                {
+                    backslashes++;
+                    continue;
+                }
+                if (ch == '"')
+                {
+                    sb.Append('\\', backslashes * 2 + 1).Append('"');
+                    backslashes = 0;
+                    continue;
+                }
+                sb.Append('\\', backslashes);
+                backslashes = 0;
+                sb.Append(ch);
+            }
+            // Backslashes directly before the closing quote must be doubled.
+            sb.Append('\\', backslashes * 2);
+            sb.Append('"');
+            return sb.ToString();
+        }
+
         /// <summary>Install the zapret service for a strategy and start it.</summary>
         public static OperationResult InstallStrategyAsService(string rootDir, string strategyFile)
         {
@@ -335,7 +373,13 @@ namespace Ydp.Services
             KillWinws();
             WaitWinws(true, 8000);
 
-            string imagePath = BuildImagePath(winws, Strategy.RejoinFlagValues(parsed.args));
+            // The ImagePath is a quoted command line executed as SYSTEM: embed
+            // every argument with full quote/backslash escaping so a parsed
+            // token cannot end the quoting early and inject new arguments.
+            string imagePath = winws.IndexOf(' ') >= 0
+                ? "\"" + winws + "\""
+                : winws;
+            imagePath += " " + string.Join(" ", Strategy.RejoinFlagValues(parsed.args).Select(EscapeForQuotedCommandLine));
 
             using (var manager = OpenManager())
             {

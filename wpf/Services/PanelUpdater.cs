@@ -154,14 +154,35 @@ namespace Ydp.Services
                 // make `/fi` reject the argument and the whole wait loop collapse.
                 // We already stop the Telegram proxy and winws right before, and we
                 // exit immediately after — so a 6-second grace is generous and
-                // safe. Once we are gone, cmd copies the new exe and starts it;
-                // the new instance then finds 127.0.0.1:1443 free.
-                // start "" is required so the path with spaces is not taken as
-                // the window title.
-                string command = string.Format(
-                    "ping -n 7 127.0.0.1 >nul & copy /y \"{0}\" \"{1}\" >nul & start \"\" \"{1}\"",
-                    download, target);
-                var startInfo = new ProcessStartInfo("cmd.exe", "/c " + command)
+                // safe.
+                //
+                // The helper re-verifies the SHA-256 it was handed right before
+                // the copy: the download sat in %TEMP% while this process was
+                // still running, and anything in the user's session could have
+                // swapped it in that window. If it changed, the helper deletes
+                // the file and does NOT start anything.
+                string wantNow = FetchAssetDigest(assetUrl);
+                if (string.IsNullOrEmpty(wantNow))
+                {
+                    // No digest available: fall back to the hash of what we
+                    // verified above, so the helper at least detects any change.
+                    using (var sha = SHA256.Create())
+                        wantNow = BitConverter.ToString(sha.ComputeHash(File.ReadAllBytes(download))).Replace("-", "").ToLowerInvariant();
+                }
+                string helper = Path.Combine(Path.GetTempPath(), "ydp-update-" + Guid.NewGuid().ToString("N").Substring(0, 8) + ".ps1");
+                File.WriteAllText(helper,
+                    "$want='" + wantNow + "';" +
+                    "$f='" + download + "';$t='" + target + "';" +
+                    "$got=[System.BitConverter]::ToString([System.Security.Cryptography.SHA256]::Create().ComputeHash([System.IO.File]::ReadAllBytes($f))).Replace('-','').ToLowerInvariant();" +
+                    "if($got -ne $want){ Remove-Item -LiteralPath $f -Force -EA SilentlyContinue; Remove-Item -LiteralPath '" + helper + "' -Force -EA SilentlyContinue; exit 1 }" +
+                    "Start-Sleep -Seconds 6;" +
+                    "if($got -ne ([System.BitConverter]::ToString([System.Security.Cryptography.SHA256]::Create().ComputeHash([System.IO.File]::ReadAllBytes($f))).Replace('-','').ToLowerInvariant())){ Remove-Item -LiteralPath $f -Force -EA SilentlyContinue; Remove-Item -LiteralPath '" + helper + "' -Force -EA SilentlyContinue; exit 1 }" +
+                    "Copy-Item -LiteralPath $f -Destination $t -Force;" +
+                    "Start-Process -FilePath $t;" +
+                    "Remove-Item -LiteralPath $f -Force -EA SilentlyContinue; Remove-Item -LiteralPath '" + helper + "' -Force -EA SilentlyContinue",
+                    new System.Text.UTF8Encoding(false));
+                var startInfo = new ProcessStartInfo("powershell.exe",
+                    "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File \"" + helper + "\"")
                 {
                     UseShellExecute = false,
                     CreateNoWindow = true,

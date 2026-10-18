@@ -192,7 +192,32 @@ private void BtnTgOpen_Click(object sender, RoutedEventArgs e)
         {
             if (WebServerBox != null && !WebServerBox.IsLoaded) return;
             WebServerBox.Text = Config.Get("tgWebServer", "tgchat.run");
-            WebSecretBox.Text = Config.Get("tgWebSecret", "dd5add7f440f0c60fc46e8b5e8ac69b737");
+            WebSecretBox.Text = Config.Get("tgWebSecret", NewWebSecret());
+        }
+
+        /// <summary>
+        /// A per-install secret for the web proxy link. No hardcoded default:
+        /// a constant compiled into a distributed binary is not a secret, every
+        /// install without a saved value would share it. Generated once per
+        /// install on first use and then stored by the regular save path.
+        /// </summary>
+        private static string NewWebSecret()
+        {
+            try
+            {
+                var bytes = new byte[16];
+                using (var rng = System.Security.Cryptography.RandomNumberGenerator.Create())
+                    rng.GetBytes(bytes);
+                var secret = BitConverter.ToString(bytes).Replace("-", "").ToLowerInvariant();
+                Config.Set("tgWebSecret", secret);
+                return secret;
+            }
+            catch
+            {
+                // Config unavailable: fall back to a random value for this
+                // session rather than a shared constant.
+                return Guid.NewGuid().ToString("N");
+            }
         }
 
         private string WebServer => NormalizeWebServer(WebServerBox.Text);

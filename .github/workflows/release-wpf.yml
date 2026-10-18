@@ -1,4 +1,4 @@
-name: Release (WPF 2.x)
+﻿name: Release (WPF 2.x)
 
 # Version 2 of the panel is a .NET Framework 4.8 WPF app: no Node, no
 # electron-builder, no Chromium. The exe is ~250 KB and runs on the .NET
@@ -9,17 +9,21 @@ on:
     tags: [ 'v2*' ]
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   release:
     runs-on: windows-latest
+    permissions:
+      # Only the release job may create/upload releases; the rest of the
+      # workflow (and any future job) stays read-only.
+      contents: write
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
         with:
           dotnet-version: '8.0.x'
 
@@ -107,6 +111,8 @@ jobs:
       - name: Build panel and installer
         if: steps.ver.outputs.skip != 'true'
         shell: pwsh
+        env:
+          RELEASE_TAG: ${{ steps.ver.outputs.tag }}
         run: |
           # The installer embeds the panel exe and the zapret archive, so it has
           # to be built AFTER both exist. This is what makes a single download
@@ -115,7 +121,7 @@ jobs:
           Copy-Item 'zapret-bundled.zip' 'wpf/setup/Payload/zapret-bundled.zip' -Force
           dotnet build wpf/setup/Setup.csproj -c Release -v minimal
 
-          $v = "${{ steps.ver.outputs.tag }}".TrimStart('v')
+          $v = "$env:RELEASE_TAG".TrimStart('v')
           New-Item -ItemType Directory -Force -Path dist | Out-Null
           Copy-Item 'wpf/bin/Release/net48/YoutubeDiscordPanel.exe' "dist/YoutubeDiscordPanel-$v.exe"
           Copy-Item 'wpf/setup/bin/Release/net48/YoutubeDiscordPanel-Setup.exe' "dist/YoutubeDiscordPanel-Setup-$v.exe"
@@ -142,23 +148,37 @@ jobs:
       - name: Create draft release
         if: steps.ver.outputs.skip != 'true'
         shell: bash
-        run: |
-          tag="${{ steps.ver.outputs.tag }}"
-          notes="${{ steps.notes.outputs.path }}"
-          if [ -n "$notes" ]; then
-            gh release create "$tag" --draft --title "$tag" --notes-file "$notes" --repo ${{ github.repository }}
-          else
-            gh release create "$tag" --draft --title "$tag" --generate-notes --repo ${{ github.repository }}
-          fi
         env:
-          GH_TOKEN: ${{ github.token }}
+          # Tag via env, not ${{ }} in run: - a crafted tag name must not reach
+          # the shell as code.
+          RELEASE_TAG: ${{ steps.ver.outputs.tag }}
+          RELEASE_NOTES: ${{ steps.notes.outputs.path }}
+        run: |
+          if [ -n "$RELEASE_NOTES" ]; then
+            gh release create "$RELEASE_TAG" --draft --title "$RELEASE_TAG" --notes-file "$RELEASE_NOTES" --repo ${{ github.repository }}
+          else
+            gh release create "$RELEASE_TAG" --draft --title "$RELEASE_TAG" --generate-notes --repo ${{ github.repository }}
+          fi
+
+      - name: Generate checksums
+        if: steps.ver.outputs.skip != 'true'
+        shell: pwsh
+        run: |
+          # SHA256SUMS.txt ships with the release so users can verify what they
+          # downloaded without trusting the download channel alone.
+          Get-ChildItem dist | ForEach-Object {
+            $h = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$h  $($_.Name)"
+          } | Set-Content dist/SHA256SUMS.txt -Encoding ascii
+          Get-Content dist/SHA256SUMS.txt
 
       - name: Upload assets and publish
         if: steps.ver.outputs.skip != 'true'
         shell: pwsh
+        env:
+          RELEASE_TAG: ${{ steps.ver.outputs.tag }}
         run: |
-          $tag = "${{ steps.ver.outputs.tag }}"
-          gh release upload $tag 'dist/*.exe' 'dist/zapret-bundled.zip' --clobber --repo ${{ github.repository }}
-          gh release edit $tag --draft=false --repo ${{ github.repository }}
+          gh release upload "$RELEASE_TAG" 'dist/*.exe' 'dist/zapret-bundled.zip' 'dist/SHA256SUMS.txt' --clobber --repo ${{ github.repository }}
+          gh release edit "$RELEASE_TAG" --draft=false --repo ${{ github.repository }}
         env:
           GH_TOKEN: ${{ github.token }}
