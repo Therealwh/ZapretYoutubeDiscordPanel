@@ -192,7 +192,10 @@ jobs:
           Write-Host "draft release id=$($rel.id)"
           foreach ($f in @('dist\YoutubeDiscordPanel-latest.exe','dist\YoutubeDiscordPanel-Setup-latest.exe','dist\zapret-bundled.zip','dist\SHA256SUMS.txt')) {
             $name = [IO.Path]::GetFileName($f)
-            $url = "$env:GITHUB_API_URL/repos/$env:GITHUB_REPOSITORY/releases/$($rel.id)/assets?name=$name"
+            # Asset uploads go to uploads.github.com - the release object
+            # carries the exact template, so use it instead of building an
+            # api.github.com URL (that host returns 404 for uploads).
+            $url = $rel.upload_url -replace '\{\?name,label\}', "?name=$name"
             $up = @{ Authorization = "Bearer $env:GH_TOKEN"; 'Content-Type' = 'application/octet-stream' }
             Invoke-RestMethod -Method Post -Uri $url -Headers $up -InFile $f | Out-Null
             Write-Host "uploaded $name"
