@@ -253,6 +253,16 @@ public sealed class EngineRelease
             if (!Directory.Exists(rootDir)) return new EngineResult { ok = false, reason = "root_missing" };
             if (string.IsNullOrWhiteSpace(zipPath) || !File.Exists(zipPath)) return new EngineResult { ok = false, reason = "zip_missing" };
 
+            // Whole install under the bypass gate: extraction swaps bin\winws.exe
+            // and the driver files, and that must not interleave with a sweep,
+            // a connect or the watchdog tearing winws down.
+            ServiceOps.BypassGate.Wait();
+            try { return InstallLocked(rootDir, zipPath, pendingVersion); }
+            finally { ServiceOps.BypassGate.Release(); }
+        }
+
+        private static EngineResult InstallLocked(string rootDir, string zipPath, string pendingVersion)
+        {
             Logger.Info("Установка движка из " + Path.GetFileName(zipPath), "engine");
             // Clear the old marker first: if the install dies halfway we must not
             // keep claiming the previous version is fully installed.
@@ -282,8 +292,16 @@ public sealed class EngineRelease
                         if (relative.Length == 0) continue;
 
                         string target = Path.Combine(rootDir, relative);
-                        // Refuse to escape the root via "..".
-                        if (!target.StartsWith(rootDir, StringComparison.OrdinalIgnoreCase)) continue;
+                        // Refuse to escape the root via "..". Path.Combine does not
+                        // resolve the segments, so the raw combined string can still
+                        // carry them past a naive prefix check - canonicalize both
+                        // sides and require the root to be a real directory prefix
+                        // (root + separator), not a string prefix that "C:\zapret"
+                        // shares with "C:\zapretEVIL".
+                        if (relative.Split(Path.DirectorySeparatorChar).Any(s => s == "..")) continue;
+                        string fullRoot = Path.GetFullPath(rootDir).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+                        string fullTarget = Path.GetFullPath(target);
+                        if (!fullTarget.StartsWith(fullRoot, StringComparison.OrdinalIgnoreCase)) continue;
 
                         string dir = Path.GetDirectoryName(target);
                         if (!string.IsNullOrEmpty(dir)) Directory.CreateDirectory(dir);

@@ -41,6 +41,12 @@ namespace Ydp
 
 protected override void OnStartup(StartupEventArgs e)
         {
+            // A process-mode winws started by THIS instance has no other owner:
+            // kill it when the panel exits or crashes, so the next start does not
+            // see "off" while an orphan keeps filtering traffic. Service mode is
+            // untouched - the service outlives the panel by design.
+            ServiceOps.InstallProcessExitCleanup();
+
             // One panel at a time. Two instances fight over the Telegram port, and
             // the loser shows "proxy off" while the winner works - which reads as
             // a broken panel. A second launch instead signals the running one to

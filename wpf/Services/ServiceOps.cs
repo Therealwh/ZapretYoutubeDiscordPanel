@@ -308,11 +308,20 @@ namespace Ydp.Services
         /// <summary>Install the zapret service for a strategy and start it.</summary>
         public static OperationResult InstallStrategyAsService(string rootDir, string strategyFile)
         {
+            // Parse/validate outside the gate: parsing does not touch service
+            // state and a bad file must not make the caller wait on the lock.
             ParsedStrategy parsed;
             try { parsed = Strategy.ParseStrategyFile(strategyFile, rootDir); }
             catch (Exception e) { return new OperationResult { ok = false, reason = "parse_failed", message = e.Message }; }
             if (parsed.args.Count == 0) return new OperationResult { ok = false, reason = "parse_failed" };
 
+            BypassGate.Wait();
+            try { return InstallStrategyAsServiceLocked(rootDir, strategyFile, parsed); }
+            finally { BypassGate.Release(); }
+        }
+
+        private static OperationResult InstallStrategyAsServiceLocked(string rootDir, string strategyFile, ParsedStrategy parsed)
+        {
             string winws = Path.Combine(rootDir, "bin", "winws.exe");
             if (!File.Exists(winws)) return new OperationResult { ok = false, reason = "winws_missing" };
             string strategyName = Path.GetFileNameWithoutExtension(strategyFile);
@@ -458,10 +467,18 @@ namespace Ydp.Services
         /// </summary>
         public static OperationResult LaunchStrategyProcess(string rootDir, string strategyFile)
         {
+            // Path checks outside the gate: they do not touch service state.
             string batPath = strategyFile;
             if (!Path.IsPathRooted(batPath)) batPath = Path.Combine(rootDir ?? string.Empty, batPath);
             if (!File.Exists(batPath)) return new OperationResult { ok = false, reason = "strategy_missing" };
 
+            BypassGate.Wait();
+            try { return LaunchStrategyProcessLocked(rootDir, batPath); }
+            finally { BypassGate.Release(); }
+        }
+
+        private static OperationResult LaunchStrategyProcessLocked(string rootDir, string batPath)
+        {
             string bin = Path.Combine(rootDir, "bin");
             string winws = Path.Combine(bin, "winws.exe");
             if (!File.Exists(winws)) return new OperationResult { ok = false, reason = "winws_missing" };
@@ -600,6 +617,18 @@ namespace Ydp.Services
         }
 
         /// <summary>
+        /// Serializes every bypass state transition: strategy launch, service
+        /// install, engine install, reset. Without it the sweep, the watchdog,
+        /// engine update and a user "Connect" click can race each other into a
+        /// half-torn-down WinDivert state - two winws instances fighting over
+        /// the driver, or ResetBypass deleting a service the user just
+        /// installed. Every entry point takes this before touching the service,
+        /// winws or drivers. The nested StopServiceAndWinws call inside these
+        /// methods must NOT lock again (deadlock).
+        /// </summary>
+        public static readonly SemaphoreSlim BypassGate = new SemaphoreSlim(1, 1);
+
+        /// <summary>
         /// Return the machine to a state where no bypass is running at all.
         ///
         /// The strategy sweep needs this between candidates. Stopping the service
@@ -610,7 +639,9 @@ namespace Ydp.Services
         /// </summary>
         public static void ResetBypass()
         {
-            StopServiceAndWinws();
+            BypassGate.Wait();
+            try { StopServiceAndWinws(); }
+            finally { BypassGate.Release(); }
             // Drop the entry so the next install cannot inherit the old command.
             DeleteServiceEntry();
             StopDrivers();
@@ -647,6 +678,38 @@ namespace Ydp.Services
                 using (var p = Process.Start(startInfo)) { if (p != null) p.WaitForExit(8000); }
             }
             catch { /* best effort */ }
+        }
+
+        /// <summary>
+        /// Tear down a process-mode winws when the panel itself is going away.
+        ///
+        /// A service survives the panel on purpose; a process-mode winws does
+        /// not - it was started by this panel instance and nothing else owns
+        /// it. Until now Exit/crash left it running with its WinDivert filter
+        /// while the next panel start reported "off", the Telegram port free
+        /// and the real state invisible. Hooked from App startup via
+        /// ProcessExit, which fires on clean exit AND on unhandled-exception
+        /// shutdown. Service mode is left untouched.
+        /// </summary>
+        public static void InstallProcessExitCleanup()
+        {
+            AppDomain.CurrentDomain.ProcessExit += (s, e) =>
+            {
+                try
+                {
+                    // Only when the bypass is process-mode: a service keeps
+                    // running by design, and killing winws here would take a
+                    // healthy service down with the panel.
+                    var root = Status.ResolveRoot(Config.Get("zapretRoot", null));
+                    if (string.IsNullOrEmpty(root)) return;
+                    bool preferService = !string.Equals(
+                        Config.Get(Ydp.Zapret.AutoConnect.KeyPreferService, "true"), "false", StringComparison.OrdinalIgnoreCase);
+                    if (preferService) return;
+                    if (Tester.SweepActive || AutoConnect.IsConnecting) return;
+                    KillWinws();
+                }
+                catch { /* best effort - never block shutdown */ }
+            };
         }
     }
 }

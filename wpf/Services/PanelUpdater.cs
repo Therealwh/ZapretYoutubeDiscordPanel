@@ -2,6 +2,7 @@ using System;
 using System.Diagnostics;
 using System.IO;
 using System.Net;
+using System.Security.Cryptography;
 using System.Text.RegularExpressions;
 using Ydp.Services;
 
@@ -118,6 +119,34 @@ namespace Ydp.Services
                     return new UpdateResult { ok = false, reason = "asset_too_small", message = size + " байт" };
                 }
 
+                // Integrity: the downloaded exe runs elevated on the next start,
+                // so "it came over HTTPS" is not enough. GitHub stamps every
+                // release asset with a sha256 digest (assets[].digest); require
+                // the downloaded bytes to match what the release API reports.
+                // A mismatch means a swapped or corrupted asset - refuse the
+                // update instead of executing it.
+                string got;
+                using (var sha = SHA256.Create())
+                    got = BitConverter.ToString(sha.ComputeHash(File.ReadAllBytes(download))).Replace("-", "").ToLowerInvariant();
+                string want = FetchAssetDigest(assetUrl);
+                if (!string.IsNullOrEmpty(want) && !string.Equals(got, want, StringComparison.Ordinal))
+                {
+                    try { File.Delete(download); } catch { /* best effort */ }
+                    Logger.Error("Хэш обновления не совпал: получен " + got + ", ожидался " + want, "updater");
+                    return new UpdateResult { ok = false, reason = "hash_mismatch" };
+                }
+                if (string.IsNullOrEmpty(want))
+                {
+                    // No digest reported (older API shapes): fall back to a
+                    // signature check when the binary is Authenticode-signed.
+                    if (!SignatureOk(download))
+                    {
+                        try { File.Delete(download); } catch { /* best effort */ }
+                        Logger.Error("Обновление без digest и без подписи - отклонено", "updater");
+                        return new UpdateResult { ok = false, reason = "unsigned_update" };
+                    }
+                }
+
                 // Wait for this process to be GONE before copying — Windows refuses
                 // to overwrite a running exe. A fixed delay is used on purpose:
                 // polling with `tasklist /fi "PID eq N"` is unreliable here, because
@@ -162,6 +191,73 @@ namespace Ydp.Services
             {
                 Logger.Error("Обновление панели не удалось: " + ex.Message, "updater");
                 return new UpdateResult { ok = false, reason = "install_failed", message = ex.Message };
+            }
+        }
+
+        /// <summary>
+        /// GitHub stamps release assets with a sha256 digest (assets[].digest,
+        /// "sha256:..."). Look the asset up by its download URL and return the
+        /// hex digest, or null when the API does not report one.
+        /// </summary>
+        private static string FetchAssetDigest(string assetUrl)
+        {
+            try
+            {
+                ServicePointManager.SecurityProtocol = SecurityProtocolType.Tls12;
+                var request = (HttpWebRequest)WebRequest.Create("https://api.github.com/repos/Therealwh/ZapretYoutubeDiscordPanel/releases/latest");
+                request.UserAgent = "YoutubeDiscordPanel";
+                request.Timeout = 15000;
+                using (var response = (HttpWebResponse)request.GetResponse())
+                using (var reader = new StreamReader(response.GetResponseStream()))
+                {
+                    string json = reader.ReadToEnd();
+                    // Each asset object carries browser_download_url and digest
+                    // side by side; take the digest of the object that owns the
+                    // URL we downloaded from.
+                    var assets = Regex.Split(json, "\"browser_download_url\"");
+                    foreach (var chunk in assets)
+                    {
+                        var urlMatch = Regex.Match(chunk, ":\\s*\"([^\"]+)\"");
+                        if (!urlMatch.Success) continue;
+                        if (!string.Equals(urlMatch.Groups[1].Value.Replace("\\/", "/"), assetUrl, StringComparison.OrdinalIgnoreCase)) continue;
+                        var digest = Regex.Match(chunk, "\"digest\"\\s*:\\s*\"sha256:([0-9a-fA-F]{64})\"");
+                        if (digest.Success) return digest.Groups[1].Value.ToLowerInvariant();
+                    }
+                }
+            }
+            catch
+            {
+                // Network hiccup: treated as "digest unknown" by the caller,
+                // which then falls back to the signature check.
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// Authenticode check: the file must be signed and the signature valid.
+        /// Used only when no digest is available from the release API.
+        /// </summary>
+        private static bool SignatureOk(string file)
+        {
+            try
+            {
+                var startInfo = new ProcessStartInfo("powershell.exe",
+                    "-NoProfile -Command \"(Get-AuthenticodeSignature -LiteralPath '\" + file + \"').Status -eq 'Valid'\"")
+                {
+                    UseShellExecute = false,
+                    CreateNoWindow = true,
+                    RedirectStandardOutput = true,
+                };
+                using (var p = Process.Start(startInfo))
+                {
+                    string output = p.StandardOutput.ReadToEnd().Trim();
+                    p.WaitForExit(15000);
+                    return output == "True";
+                }
+            }
+            catch
+            {
+                return false;
             }
         }
 

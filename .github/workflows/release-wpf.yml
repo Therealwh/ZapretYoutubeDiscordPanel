@@ -45,6 +45,10 @@ jobs:
       - name: Fetch the current zapret engine for the offline bundle
         if: steps.ver.outputs.skip != 'true'
         shell: pwsh
+        env:
+          # Interpolation via ${{ }} inside run: would let a crafted tag name
+          # break out of the shell string; env: keeps it data.
+          RELEASE_TAG: ${{ steps.ver.outputs.tag }}
         run: |
           # The installer offers a fully offline first run, so the release
           # ships the latest zapret zip next to the setup exe.
@@ -53,6 +57,14 @@ jobs:
           # failed two releases in a row on a plain network blip, taking the
           # whole release down with it. Transient failures are the normal case
           # here, not the exception, so retry before giving up.
+          #
+          # Supply chain: this zip is embedded into every installer and its
+          # winws.exe runs as admin on every user machine. "Whatever upstream
+          # published last" is not a trust anchor - the fetched asset must
+          # match a SHA-256 recorded in the repo (ENGINE_SHA256S.md, one line
+          # per upstream release). Bump that file in a PR when you want a new
+          # engine; a changed upstream asset with the same tag then fails the
+          # build instead of shipping to users.
           $api = 'https://api.github.com/repos/Flowseal/zapret-discord-youtube/releases/latest'
           $json = $null
           $asset = $null
@@ -70,7 +82,18 @@ jobs:
               Start-Sleep -Seconds (5 * $attempt)
             }
           }
-          Write-Host "bundled zapret $($json.tag_name): $($asset.name) (after up to 5 attempts)"
+
+          # Verify the fetched zip against the recorded upstream digest.
+          $sha = (Get-FileHash 'zapret-bundled.zip' -Algorithm SHA256).Hash.ToLowerInvariant()
+          $expectedLine = (Get-Content 'ENGINE_SHA256S.md' | Where-Object { $_ -match $json.tag_name } | Select-Object -First 1)
+          if (-not $expectedLine) {
+            throw "ENGINE_SHA256S.md has no entry for upstream $($json.tag_name). Pin the new engine's SHA-256 in a PR first."
+          }
+          $expected = ($expectedLine -split '\|')[-1].Trim().ToLowerInvariant()
+          if ($sha -ne $expected) {
+            throw "zapret zip SHA-256 mismatch for $($json.tag_name): got $sha, expected $expected. Upstream asset changed under the same tag - do NOT ship it."
+          }
+          Write-Host "bundled zapret $($json.tag_name): $($asset.name), SHA-256 verified"
 
       - name: Run self tests
         if: steps.ver.outputs.skip != 'true'
