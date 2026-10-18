@@ -153,6 +153,7 @@ jobs:
           # the shell as code.
           RELEASE_TAG: ${{ steps.ver.outputs.tag }}
           RELEASE_NOTES: ${{ steps.notes.outputs.path }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           if [ -n "$RELEASE_NOTES" ]; then
             gh release create "$RELEASE_TAG" --draft --title "$RELEASE_TAG" --notes-file "$RELEASE_NOTES" --repo ${{ github.repository }}
