@@ -147,7 +147,6 @@ jobs:
 
       - name: Create draft release
         if: steps.ver.outputs.skip != 'true'
-        id: rel
         shell: bash
         env:
           # Tag via env, not ${{ }} in run: - a crafted tag name must not reach
@@ -161,11 +160,6 @@ jobs:
           else
             gh release create "$RELEASE_TAG" --draft --title "$RELEASE_TAG" --generate-notes --repo ${{ github.repository }}
           fi
-          # A DRAFT release is not resolvable by tag through the releases API
-          # (GET /releases/tags/<tag> returns 404 until the draft is
-          # published), so later steps must talk to it by ID, not by tag.
-          rid=$(gh api "repos/${{ github.repository }}/releases" --jq '.[] | select(.draft and .tag_name=="'"$RELEASE_TAG"'") | .id' | head -n1)
-          echo "id=$rid" >> "$GITHUB_OUTPUT"
 
       - name: Generate checksums
         if: steps.ver.outputs.skip != 'true'
@@ -183,16 +177,27 @@ jobs:
         if: steps.ver.outputs.skip != 'true'
         shell: pwsh
         env:
-          RELEASE_ID: ${{ steps.rel.outputs.id }}
+          RELEASE_TAG: ${{ steps.ver.outputs.tag }}
           GH_TOKEN: ${{ github.token }}
         run: |
-          # Upload by release ID - the draft cannot be found by tag yet.
+          # A DRAFT release is not resolvable by tag through the releases API
+          # (GET /releases/tags/<tag> returns 404 until the draft is
+          # published), which is why plain "gh release upload <tag>" fails with
+          # "release not found". Resolve the draft by listing releases and
+          # then upload/patch everything by its numeric ID.
+          $headers = @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = 'application/vnd.github+json'; 'User-Agent' = 'release-wpf' }
+          $releases = Invoke-RestMethod -Uri "$env:GITHUB_API_URL/repos/$env:GITHUB_REPOSITORY/releases?per_page=20" -Headers $headers
+          $rel = $releases | Where-Object { $_.draft -and $_.tag_name -eq $env:RELEASE_TAG } | Select-Object -First 1
+          if (-not $rel) { throw "draft release for $env:RELEASE_TAG not found" }
+          Write-Host "draft release id=$($rel.id)"
           foreach ($f in @('dist\YoutubeDiscordPanel-latest.exe','dist\YoutubeDiscordPanel-Setup-latest.exe','dist\zapret-bundled.zip','dist\SHA256SUMS.txt')) {
             $name = [IO.Path]::GetFileName($f)
-            $url = "$($env:GITHUB_API_URL -replace '/$','')/repos/$($env:GITHUB_REPOSITORY)/releases/$($env:RELEASE_ID)/assets?name=$name"
-            $headers = @{ Authorization = "Bearer $env:GH_TOKEN"; 'Content-Type' = 'application/octet-stream' }
-            Invoke-RestMethod -Method Post -Uri $url -Headers $headers -InFile $f | Out-Null
+            $url = "$env:GITHUB_API_URL/repos/$env:GITHUB_REPOSITORY/releases/$($rel.id)/assets?name=$name"
+            $up = @{ Authorization = "Bearer $env:GH_TOKEN"; 'Content-Type' = 'application/octet-stream' }
+            Invoke-RestMethod -Method Post -Uri $url -Headers $up -InFile $f | Out-Null
             Write-Host "uploaded $name"
           }
-          gh api -X PATCH "repos/$($env:GITHUB_REPOSITORY)/releases/$($env:RELEASE_ID)" -F draft=false | Out-Null
+          Invoke-RestMethod -Method Patch -Uri "$env:GITHUB_API_URL/repos/$env:GITHUB_REPOSITORY/releases/$($rel.id)" `
+            -Headers $headers -ContentType 'application/json' `
+            -Body (@{ draft = $false } | ConvertTo-Json) | Out-Null
           Write-Host "release published"
