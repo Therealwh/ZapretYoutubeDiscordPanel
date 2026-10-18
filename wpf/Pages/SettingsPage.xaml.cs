@@ -630,5 +630,121 @@ namespace Ydp.Pages
                 BtnProbe.IsEnabled = true;
             }
         }
+        // ---- auto blocked-domain scan -------------------------------------
+
+        private List<DomainProbe> _scanResults;
+
+        private async void BtnScan_Click(object sender, RoutedEventArgs e)
+        {
+            var root = Status.ResolveRoot(Config.Get("zapretRoot", null));
+            if (string.IsNullOrEmpty(root))
+            {
+                ScanNote.Text = "Сначала укажите папку zapret — без неё проверять нечего.";
+                return;
+            }
+            var services = new List<string>();
+            if (ChkScanDiscord.IsChecked == true) services.Add(CategorizedDomains.SectionDiscord);
+            if (ChkScanYouTube.IsChecked == true) services.Add(CategorizedDomains.SectionYouTube);
+            if (ChkScanTelegram.IsChecked == true) services.Add(CategorizedDomains.SectionTelegram);
+            if (services.Count == 0)
+            {
+                ScanNote.Text = "Отметьте хотя бы один сервис.";
+                return;
+            }
+
+            BtnScan.IsEnabled = false;
+            BtnSaveScan.IsEnabled = false;
+            ScanItems.ItemsSource = null;
+            ScanNote.Text = "Проверяю домены через текущий обход…";
+
+            try
+            {
+                _scanResults = await System.Threading.Tasks.Task.Run(() => AutoHostlist.Scan(services, 5));
+                ScanItems.ItemsSource = _scanResults;
+                int bad = _scanResults.Count(p => p.state == "bad");
+                int warn = _scanResults.Count(p => p.state == "warn");
+                ScanNote.Text = bad + warn == 0
+                    ? "Все домены отвечают — обход справляется, список менять не нужно."
+                    : "Не отвечают: " + bad + ", сомнительные: " + warn
+                      + ". Их можно записать в список general, чтобы стратегия била по ним прицельно.";
+                BtnSaveScan.IsEnabled = bad + warn > 0;
+                Logger.Info("Автопоиск доменов: " + bad + " заблокировано, " + warn + " сомнительных", "lists");
+            }
+            catch (Exception ex)
+            {
+                ScanNote.Text = "Проверка не удалась: " + ex.Message;
+            }
+            finally { BtnScan.IsEnabled = true; }
+        }
+
+        private void BtnSaveScan_Click(object sender, RoutedEventArgs e)
+        {
+            var root = Status.ResolveRoot(Config.Get("zapretRoot", null));
+            if (string.IsNullOrEmpty(root) || _scanResults == null || _scanResults.Count == 0) return;
+
+            var existing = Lists.Read(root, "general");
+            var body = AutoHostlist.BuildHostlist(_scanResults, includeWarn: false);
+            // Merge instead of overwrite: the user may have hand-written entries.
+            var merged = string.IsNullOrWhiteSpace(existing)
+                ? body
+                : existing.TrimEnd() + Environment.NewLine + Environment.NewLine + body;
+            if (Lists.Write(root, "general", merged))
+            {
+                ScanNote.Text = "Готово: найденные домены добавлены в список general. "
+                    + "Чтобы они заработали, перезапустите обход.";
+                Logger.Info("Автопоиск: домены записаны в general", "lists");
+            }
+            else
+            {
+                ScanNote.Text = "Не удалось записать список general.";
+            }
+        }
+
+        // ---- speed -------------------------------------------------------
+
+        private double? _speedWithBypass;
+
+        private async void BtnSpeed_Click(object sender, RoutedEventArgs e)
+        {
+            BtnSpeed.IsEnabled = false;
+            SpeedResult.Text = "Замеряю…";
+            var root = Status.ResolveRoot(Config.Get("zapretRoot", null));
+            bool bypassOn = !string.IsNullOrEmpty(root) && Status.GetStatus(root).activeMode != "off";
+            try
+            {
+                var r = await System.Threading.Tasks.Task.Run(() => SpeedTest.Measure(25));
+                if (!r.ok)
+                {
+                    SpeedResult.Text = "Замер не удался: " + (r.error ?? "неизвестная причина");
+                    SpeedCompare.Text = "";
+                    return;
+                }
+                SpeedResult.Text = string.Format("{0:0.0} Мбит/с — {1}", r.mbps, r.verdict);
+                if (bypassOn)
+                {
+                    _speedWithBypass = r.mbps;
+                    SpeedCompare.Text = "Обход сейчас включён. Выключите его и нажмите ещё раз — сравним.";
+                }
+                else if (_speedWithBypass.HasValue)
+                {
+                    double d = r.mbps - _speedWithBypass.Value;
+                    string verdict = Math.Abs(d) < _speedWithBypass.Value * 0.15
+                        ? "Обход скорость не режет."
+                        : (d < 0 ? "Без обхода быстрее — он ускоряет трафик." : "С обходом быстрее.");
+                    SpeedCompare.Text = string.Format(
+                        "С обходом было {0:0.0} Мбит/с, без обхода {1:0.0} Мбит/с ({2:0.0} Мбит/с). {3}",
+                        _speedWithBypass.Value, r.mbps, d, verdict);
+                }
+                else
+                {
+                    SpeedCompare.Text = "Чтобы понять, режет ли обход скорость, включите его и замерьте ещё раз.";
+                }
+            }
+            catch (Exception ex)
+            {
+                SpeedResult.Text = "Замер не удался: " + ex.Message;
+            }
+            finally { BtnSpeed.IsEnabled = true; }
+        }
     }
 }

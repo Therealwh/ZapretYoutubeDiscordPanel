@@ -66,6 +66,63 @@
             </ItemsControl>
         </Border>
 
+        <!--
+             "Почему не работает": an ordered chain instead of one verdict.
+             DNS stub / dead TCP / cut TLS look identical from the outside, but
+             they need different fixes, so the first failing step names the fix.
+        -->
+        <Border Style="{StaticResource Card}" Margin="0,0,0,12">
+            <StackPanel>
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="Почему не работает" Style="{StaticResource H1}" VerticalAlignment="Center" />
+                    <Button x:Name="BtnWhy" Content="Разобрать" Style="{StaticResource BtnPrimary}" Margin="16,0,0,0" Click="BtnWhy_Click" />
+                </StackPanel>
+                <TextBlock Style="{StaticResource Dim}" Margin="0,4,0,10" TextWrapping="Wrap"
+                           Text="Проверяет по порядку: запущен ли обход, отдаёт ли DNS настоящий адрес, проходит ли TCP 443 и завершается ли TLS. Первая упавшая проверка и есть причина." />
+
+                <ItemsControl x:Name="WhyItems">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Margin="0,8">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Ellipse Grid.Column="0" Width="8" Height="8" VerticalAlignment="Top" Margin="2,5,12,0">
+                                    <Ellipse.Style>
+                                        <Style TargetType="Ellipse">
+                                            <Setter Property="Fill" Value="{DynamicResource ErrBrush}" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding state}" Value="good">
+                                                    <Setter Property="Fill" Value="{DynamicResource OkBrush}" />
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding state}" Value="warn">
+                                                    <Setter Property="Fill" Value="{DynamicResource WarnBrush}" />
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding state}" Value="skip">
+                                                    <Setter Property="Fill" Value="{DynamicResource TextDimBrush}" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Ellipse.Style>
+                                </Ellipse>
+                                <StackPanel Grid.Column="1">
+                                    <TextBlock Text="{Binding title}" Foreground="{DynamicResource TextBrush}" FontWeight="SemiBold" />
+                                    <TextBlock Text="{Binding detail}" Style="{StaticResource Dim}" TextWrapping="Wrap" />
+                                </StackPanel>
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <Border x:Name="WhyVerdictBox" Background="{DynamicResource BgHoverBrush}"
+                        BorderBrush="{DynamicResource BorderBrush2}" BorderThickness="1"
+                        CornerRadius="9" Padding="12" Margin="0,12,0,0" Visibility="Collapsed">
+                    <TextBlock x:Name="WhyVerdict" TextWrapping="Wrap" Foreground="{DynamicResource TextBrush}" />
+                </Border>
+            </StackPanel>
+        </Border>
+
         <Border Style="{StaticResource Card}">
             <StackPanel>
                 <TextBlock Text="Полезные команды" Style="{StaticResource H1}" />

@@ -46,6 +46,51 @@ namespace Ydp.Pages
             Run();
         }
 
+        /// <summary>Run an action on the UI thread. The diagnostics run on a
+        /// worker, and touching ItemsSource from there throws.</summary>
+        private void OnUi(Action action)
+        {
+            if (Dispatcher.CheckAccess()) action();
+            else Dispatcher.BeginInvoke(action);
+        }
+
+        private void BtnWhy_Click(object sender, RoutedEventArgs e)
+        {
+            if (string.IsNullOrEmpty(_root))
+            {
+                WhyItems.ItemsSource = new List<Ydp.Zapret.WhyStep>();
+                WhyVerdictBox.Visibility = Visibility.Visible;
+                WhyVerdict.Text = "Сначала укажите папку zapret — без неё проверять нечего.";
+                return;
+            }
+            BtnWhy.IsEnabled = false;
+            WhyVerdictBox.Visibility = Visibility.Collapsed;
+            WhyItems.ItemsSource = new List<Ydp.Zapret.WhyStep>();
+            WhyVerdict.Text = "Проверяю…";
+            // DNS + TCP + three TLS handshakes per host: several seconds of
+            // network work, so it must not run on the UI thread.
+            System.Threading.Tasks.Task.Run(() => Ydp.Zapret.Why.Run(_root, 6))
+                .ContinueWith(t =>
+                {
+                    OnUi(() =>
+                    {
+                        BtnWhy.IsEnabled = true;
+                        if (t.Status != System.Threading.Tasks.TaskStatus.RanToCompletion)
+                        {
+                            WhyVerdictBox.Visibility = Visibility.Visible;
+                            WhyVerdict.Text = "Проверка не удалась: "
+                                + (t.Exception != null ? t.Exception.GetBaseException().Message : "неизвестная ошибка");
+                            return;
+                        }
+                        var report = t.Result;
+                        WhyItems.ItemsSource = report.steps;
+                        WhyVerdict.Text = report.verdict;
+                        WhyVerdictBox.Visibility = Visibility.Visible;
+                        Logger.Info("Разбор: " + report.verdict, "diagnostics");
+                    });
+                });
+        }
+
         private void Run()
         {
             var items = (ObservableCollection<DiagnosticItem>)Items.ItemsSource;

@@ -1,0 +1,72 @@
+<UserControl x:Class="Ydp.Pages.TransparencyPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             Loaded="Page_Loaded">
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,10,0">
+    <StackPanel>
+        <TextBlock Text="Что панель делает и чего не делает" Style="{StaticResource SectionTitle}" Margin="0,0,0,16" />
+
+        <Border Style="{StaticResource Card}" Margin="0,0,0,12">
+            <StackPanel>
+                <TextBlock Text="Зачем эта страница" Style="{StaticResource H1}" />
+                <TextBlock Style="{StaticResource Dim}" Margin="0,6,0,0" TextWrapping="Wrap"
+                           Text="Самый популярный конкурент в этой нише ставил свой корневой сертификат, отключал Defender и отправлял данные устройства в Telegram-чат каждые 30 минут. Обход DPI не требует ни того, ни другого, ни третьего. Ниже — проверки, которые выполняются на вашей машине прямо сейчас, а не обещания." />
+            </StackPanel>
+        </Border>
+
+        <Border Style="{StaticResource Card}" Margin="0,0,0,12">
+            <StackPanel>
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="Проверки на этом компьютере" Style="{StaticResource H1}" VerticalAlignment="Center" />
+                    <Button x:Name="BtnRecheck" Content="Проверить заново" Style="{StaticResource Btn}" Margin="16,0,0,0" Click="BtnRecheck_Click" />
+                </StackPanel>
+                <TextBlock Style="{StaticResource Dim}" Margin="0,4,0,10" TextWrapping="Wrap"
+                           Text="Панель читает хранилища сертификатов и состояние службы защиты только на чтение и ничего в них не пишет." />
+                <ItemsControl x:Name="Items">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Grid Margin="0,10">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="Auto" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
+                                <Ellipse Grid.Column="0" Width="8" Height="8" VerticalAlignment="Top" Margin="2,5,12,0">
+                                    <Ellipse.Style>
+                                        <Style TargetType="Ellipse">
+                                            <Setter Property="Fill" Value="{DynamicResource WarnBrush}" />
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding state}" Value="good">
+                                                    <Setter Property="Fill" Value="{DynamicResource OkBrush}" />
+                                                </DataTrigger>
+                                                <DataTrigger Binding="{Binding state}" Value="bad">
+                                                    <Setter Property="Fill" Value="{DynamicResource ErrBrush}" />
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </Ellipse.Style>
+                                </Ellipse>
+                                <StackPanel Grid.Column="1">
+                                    <TextBlock Text="{Binding title}" Foreground="{DynamicResource TextBrush}" FontWeight="SemiBold" />
+                                    <TextBlock Text="{Binding detail}" Style="{StaticResource Dim}" TextWrapping="Wrap" />
+                                </StackPanel>
+                            </Grid>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </Border>
+
+        <Border Style="{StaticResource Card}">
+            <StackPanel>
+                <TextBlock Text="Честный список возможностей" Style="{StaticResource H1}" />
+                <TextBlock TextWrapping="Wrap" Style="{StaticResource Dim}" Margin="0,8,0,0" Text="Умеет:" />
+                <TextBlock TextWrapping="Wrap" Foreground="{DynamicResource TextBrush}" Margin="0,4,0,0"
+                           Text="• запускать и останавливать zapret, менять стратегию, подбирать рабочую автопроверкой;&#10;• проверять, отвечают ли Discord и YouTube, и объяснять, если не отвечают;&#10;• вести локальный Telegram-прокси и веб-прокси по вашим адресам;&#10;• искать заблокированные домены и складывать их в hostlist;&#10;• обновлять панель и движок zapret с GitHub." />
+                <TextBlock TextWrapping="Wrap" Style="{StaticResource Dim}" Margin="0,12,0,0" Text="Не умеет и не будет:" />
+                <TextBlock TextWrapping="Wrap" Foreground="{DynamicResource TextBrush}" Margin="0,4,0,0"
+                           Text="• ставить сертификаты в доверенные;&#10;• отключать или менять настройки Defender;&#10;• собирать историю браузера, пароли или буфер обмена;&#10;• отправлять телеметрию и рекламу на сторонние сервисы;&#10;• требовать подписку: панель бесплатна и открыта." />
+            </StackPanel>
+        </Border>
+    </StackPanel>
+    </ScrollViewer>
+</UserControl>

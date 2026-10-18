@@ -282,7 +282,14 @@ Background="{DynamicResource BgBrush}"
                             <TextBlock Style="{StaticResource NavText}" Text="Контакты" />
                         </StackPanel>
                     </RadioButton>
-                    <RadioButton x:Name="NavSupport" AutomationProperties.Name="Поддержка" Style="{StaticResource NavItem}" GroupName="nav"
+                      <RadioButton x:Name="NavTransparency" AutomationProperties.Name="Прозрачность" Style="{StaticResource NavItem}" GroupName="nav"
+                                   Tag="transparency" Checked="Nav_Checked">
+                          <StackPanel Orientation="Horizontal">
+                              <Path Style="{StaticResource NavIcon}" Data="M5,1 L5,9 M5,9 L2.5,6.5 M5,9 L7.5,6.5 M9,1.5 L9,14" />
+                              <TextBlock Style="{StaticResource NavText}" Text="Прозрачность" />
+                          </StackPanel>
+                      </RadioButton>
+                      <RadioButton x:Name="NavSupport" AutomationProperties.Name="Поддержка" Style="{StaticResource NavItem}" GroupName="nav"
                                  Tag="support" Checked="Nav_Checked">
                         <StackPanel Orientation="Horizontal">
                             <Path Style="{StaticResource NavIcon}" Data="M5,9 C1.5,6 0.5,4 1.8,2.6 A2.4,2.4 0 0 1 5,3.4 A2.4,2.4 0 0 1 8.2,2.6 C9.5,4 8.5,6 5,9 Z" />

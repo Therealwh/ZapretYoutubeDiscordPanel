@@ -157,16 +157,66 @@
             </StackPanel>
         </Border>
 
-        <!-- Service mode -->
-        <Border Style="{StaticResource Card}">
-            <StackPanel>
-                <TextBlock Text="Режим запуска" Style="{StaticResource H1}" />
-                <CheckBox x:Name="ChkServiceMode" Content="Ставить стратегию как службу Windows (автозапуск с ОС)"
-                          Foreground="{DynamicResource TextBrush}" Margin="0,8,0,4"
-                          Checked="ChkServiceMode_Changed" Unchecked="ChkServiceMode_Changed" />
-                <TextBlock x:Name="AdminNote" Style="{StaticResource Dim}" TextWrapping="Wrap" />
-            </StackPanel>
-        </Border>
-    </StackPanel>
+          <!-- Service mode -->
+          <Border Style="{StaticResource Card}" Margin="0,0,0,12">
+              <StackPanel>
+                  <TextBlock Text="Режим службы" Style="{StaticResource H1}" />
+                  <CheckBox x:Name="ChkServiceMode" Content="Запускать обход через службу Windows (требует установки службы и перезагрузки)"
+                            Foreground="{DynamicResource TextBrush}" Margin="0,8,0,4"
+                            Checked="ChkServiceMode_Changed" Unchecked="ChkServiceMode_Changed" />
+                  <TextBlock x:Name="AdminNote" Style="{StaticResource Dim}" TextWrapping="Wrap" />
+              </StackPanel>
+          </Border>
+
+          <!-- Auto hostlist: measure which domains the network actually breaks -->
+          <Border Style="{StaticResource Card}" Margin="0,0,0,12">
+              <StackPanel>
+                  <TextBlock Text="Автопоиск заблокированных доменов" Style="{StaticResource H1}" />
+                  <TextBlock Style="{StaticResource Dim}" Margin="0,4,0,10" TextWrapping="Wrap"
+                             Text="Проверяет домены Discord, YouTube и Telegram через текущий обход и собирает те, что не отвечают, в список general. Это замер, а не догадка: в список попадает только то, что реально не открылось сейчас." />
+                  <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                      <CheckBox x:Name="ChkScanDiscord" Content="Discord" IsChecked="True" Foreground="{DynamicResource TextBrush}" Margin="0,0,14,0" />
+                      <CheckBox x:Name="ChkScanYouTube" Content="YouTube" IsChecked="True" Foreground="{DynamicResource TextBrush}" Margin="0,0,14,0" />
+                      <CheckBox x:Name="ChkScanTelegram" Content="Telegram" Foreground="{DynamicResource TextBrush}" />
+                  </StackPanel>
+                  <StackPanel Orientation="Horizontal">
+                      <Button x:Name="BtnScan" Content="Найти заблокированные" Style="{StaticResource BtnPrimary}" Margin="0,0,10,0" Click="BtnScan_Click" />
+                      <Button x:Name="BtnSaveScan" Content="Записать в список general" Style="{StaticResource Btn}" IsEnabled="False" Click="BtnSaveScan_Click" />
+                  </StackPanel>
+                  <TextBlock x:Name="ScanNote" Style="{StaticResource Dim}" Margin="0,10,0,0" TextWrapping="Wrap" />
+                  <ItemsControl x:Name="ScanItems" Margin="0,10,0,0">
+                      <ItemsControl.ItemTemplate>
+                          <DataTemplate>
+                              <Grid Margin="0,4">
+                                  <Grid.ColumnDefinitions>
+                                      <ColumnDefinition Width="Auto" />
+                                      <ColumnDefinition Width="*" />
+                                      <ColumnDefinition Width="Auto" />
+                                  </Grid.ColumnDefinitions>
+                                  <TextBlock Grid.Column="0" Text="{Binding service}" Style="{StaticResource Dim}" Width="90" />
+                                  <TextBlock Grid.Column="1" Text="{Binding domain}" Foreground="{DynamicResource TextBrush}" FontFamily="Consolas, Cascadia Mono" FontSize="12" />
+                                  <TextBlock Grid.Column="2" Text="{Binding state}" Style="{StaticResource Dim}" />
+                              </Grid>
+                          </DataTemplate>
+                      </ItemsControl.ItemTemplate>
+                  </ItemsControl>
+              </StackPanel>
+          </Border>
+
+          <!-- Throughput: "works" and "fast" are different questions -->
+          <Border Style="{StaticResource Card}" Margin="0,0,0,12">
+              <StackPanel>
+                  <TextBlock Text="Замер скорости" Style="{StaticResource H1}" />
+                  <TextBlock Style="{StaticResource Dim}" Margin="0,4,0,10" TextWrapping="Wrap"
+                             Text="YouTube может открываться и при этом тормозить — это разные проблемы. Замер идёт через текущий обход: сравните два замера, один с обходом, один без него." />
+                  <StackPanel Orientation="Horizontal">
+                      <Button x:Name="BtnSpeed" Content="Замерить сейчас" Style="{StaticResource BtnPrimary}" Margin="0,0,10,0" Click="BtnSpeed_Click" />
+                      <TextBlock x:Name="SpeedNote" Style="{StaticResource Dim}" VerticalAlignment="Center" />
+                  </StackPanel>
+                  <TextBlock x:Name="SpeedResult" Style="{StaticResource Value}" Margin="0,10,0,0" TextWrapping="Wrap" />
+                  <TextBlock x:Name="SpeedCompare" Style="{StaticResource Dim}" Margin="0,4,0,0" TextWrapping="Wrap" />
+              </StackPanel>
+          </Border>
+      </StackPanel>
     </ScrollViewer>
 </UserControl>

@@ -146,6 +146,7 @@ namespace Ydp
         private SettingsPage _settings;
         private SupportPage _support;
         private ContactsPage _contacts;
+        private TransparencyPage _transparency;
 
         public MainWindow()
         {
@@ -247,6 +248,10 @@ case "support":
                         case "contacts":
                             if (_contacts == null) _contacts = new ContactsPage();
                             PageHost.Content = _contacts;
+                            break;
+                        case "transparency":
+                            if (_transparency == null) _transparency = new TransparencyPage();
+                            PageHost.Content = _transparency;
                             break;
                     default:
                         if (_dashboard == null) _dashboard = new DashboardPage();
