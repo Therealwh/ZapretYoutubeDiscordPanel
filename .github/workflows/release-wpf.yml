@@ -177,8 +177,7 @@ jobs:
         shell: pwsh
         env:
           RELEASE_TAG: ${{ steps.ver.outputs.tag }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           gh release upload "$RELEASE_TAG" 'dist/*.exe' 'dist/zapret-bundled.zip' 'dist/SHA256SUMS.txt' --clobber --repo ${{ github.repository }}
           gh release edit "$RELEASE_TAG" --draft=false --repo ${{ github.repository }}
-        env:
-          GH_TOKEN: ${{ github.token }}
