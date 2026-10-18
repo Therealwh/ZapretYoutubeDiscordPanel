@@ -21,9 +21,9 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <AssemblyTitle>YoutubeDiscordPanel</AssemblyTitle>
     <Product>YoutubeDiscordPanel</Product>
-    <Version>2.1.22</Version>
-    <FileVersion>2.1.22.0</FileVersion>
-    <AssemblyVersion>2.1.22.0</AssemblyVersion>
+    <Version>2.1.23</Version>
+    <FileVersion>2.1.23.0</FileVersion>
+    <AssemblyVersion>2.1.23.0</AssemblyVersion>
     <NeutralLanguage>ru</NeutralLanguage>
     <SatelliteResourceLanguages>en;ru</SatelliteResourceLanguages>
     <DebugType>none</DebugType>
