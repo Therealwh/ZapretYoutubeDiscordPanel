@@ -306,6 +306,26 @@ namespace Ydp.Services
         }
 
         /// <summary>
+        /// Remove the decorative quotes the strategy parser keeps around values
+        /// (--hostlist="C:\a b\x.txt" stores the quotes INSIDE the token). For
+        /// process mode cmd strips them; for an SCM ImagePath they must come
+        /// off first, otherwise escaping turns them into literal quote
+        /// characters in the path winws sees ("cannot access ipset file" with
+        /// quotes in the name) and the service dies with 1067.
+        /// </summary>
+        public static string UnwrapDecorativeQuotes(string arg)
+        {
+            if (string.IsNullOrEmpty(arg)) return arg;
+            int eq = arg.IndexOf('=');
+            if (eq < 0) return arg;
+            string head = arg.Substring(0, eq + 1);
+            string value = arg.Substring(eq + 1);
+            if (value.Length > 1 && value.StartsWith("\"", StringComparison.Ordinal) && value.EndsWith("\"", StringComparison.Ordinal))
+                return head + value.Substring(1, value.Length - 2);
+            return arg;
+        }
+
+        /// <summary>
         /// Escape one argument for embedding inside a Windows command line that
         /// is itself wrapped in double quotes (the SCM binPath case): backslashes
         /// before a quote are doubled, quotes are doubled, and the result is
@@ -373,13 +393,16 @@ namespace Ydp.Services
             KillWinws();
             WaitWinws(true, 8000);
 
-            // The ImagePath is a quoted command line executed as SYSTEM: embed
-            // every argument with full quote/backslash escaping so a parsed
-            // token cannot end the quoting early and inject new arguments.
+            // The ImagePath is a quoted command line executed as SYSTEM: strip
+            // the parser's decorative quotes (cmd would strip them in process
+            // mode; here they would become literal characters in the path),
+            // then embed every argument with full quote/backslash escaping so
+            // a token cannot end the quoting early and inject new arguments.
             string imagePath = winws.IndexOf(' ') >= 0
                 ? "\"" + winws + "\""
                 : winws;
-            imagePath += " " + string.Join(" ", Strategy.RejoinFlagValues(parsed.args).Select(EscapeForQuotedCommandLine));
+            imagePath += " " + string.Join(" ", Strategy.RejoinFlagValues(parsed.args)
+                .Select(a => EscapeForQuotedCommandLine(UnwrapDecorativeQuotes(a))));
 
             using (var manager = OpenManager())
             {

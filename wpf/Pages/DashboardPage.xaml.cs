@@ -192,7 +192,12 @@ private void BtnTgOpen_Click(object sender, RoutedEventArgs e)
         {
             if (WebServerBox != null && !WebServerBox.IsLoaded) return;
             WebServerBox.Text = Config.Get("tgWebServer", "tgchat.run");
-            WebSecretBox.Text = Config.Get("tgWebSecret", NewWebSecret());
+            // Read-only: generate a secret ONLY when the user first opens the
+            // field with nothing saved (handled in the save path). Generating
+            // here would rewrite the user's working secret on every startup -
+            // that bug shipped briefly and overwrote a live proxy secret.
+            var saved = Config.Get("tgWebSecret", null);
+            WebSecretBox.Text = string.IsNullOrEmpty(saved) ? NewWebSecret() : saved;
         }
 
         /// <summary>
