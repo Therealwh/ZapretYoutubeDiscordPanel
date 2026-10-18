@@ -458,39 +458,45 @@ namespace Ydp.Services
         /// </summary>
         public static OperationResult LaunchStrategyProcess(string rootDir, string strategyFile)
         {
-            ParsedStrategy parsed;
-            try { parsed = Strategy.ParseStrategyFile(strategyFile, rootDir); }
-            catch (Exception e) { return new OperationResult { ok = false, reason = "parse_failed", message = e.Message }; }
-            if (parsed.args.Count == 0) return new OperationResult { ok = false, reason = "parse_failed" };
+            string batPath = strategyFile;
+            if (!Path.IsPathRooted(batPath)) batPath = Path.Combine(rootDir ?? string.Empty, batPath);
+            if (!File.Exists(batPath)) return new OperationResult { ok = false, reason = "strategy_missing" };
 
             string bin = Path.Combine(rootDir, "bin");
             string winws = Path.Combine(bin, "winws.exe");
             if (!File.Exists(winws)) return new OperationResult { ok = false, reason = "winws_missing" };
             try { Lists.EnsureUserLists(rootDir); } catch { /* best effort */ }
 
-            var joined = Strategy.RejoinFlagValues(parsed.args);
-            var argString = string.Join(" ", joined.Select(Strategy.QuoteArg));
-
+            // Run the .bat, do not re-assemble its arguments here.
+            //
+            // Strategies are cmd scripts: they set delayed expansion, call
+            // service.bat for %GameFilterTCP%, and write the fake-packet overlay
+            // as "--dpi-desync-fake-tls=0x00000000 --dpi-desync-fake-tls=^!". Flattening
+            // that into tokens first loses the "!" escapes and glues values onto
+            // flag names - winws then rejects it with "Invalid hostfakesplit mod"
+            // and exits within seconds. Letting cmd expand the script is both
+            // simpler and exactly what the strategy author (and zapret's own
+            // service.bat, which does `sc create ... binPath= "winws.exe" !ARGS!`
+            // from inside a delayed-expansion block) intends.
             bool elevated = Win.IsAdmin();
             try
             {
                 var startInfo = new ProcessStartInfo
                 {
-                    FileName = winws,
-                    Arguments = argString,
-                    WorkingDirectory = bin,
-                    UseShellExecute = !elevated,
+                    FileName = "cmd.exe",
+                    // The doubled quotes are the cmd /c form: everything up to the
+                    // first quote is treated as the (possibly empty) title, so a
+                    // path with spaces needs the pair.
+                    Arguments = "/c \"\"" + batPath + "\"\"",
+                    WorkingDirectory = rootDir,
+                    UseShellExecute = false,
                     CreateNoWindow = true,
                     WindowStyle = ProcessWindowStyle.Hidden,
                 };
-                if (!elevated) startInfo.Verb = "runas";
-                // The non-elevated runas path may flash a brief console frame:
-                // CreateNoWindow is ignored under ShellExecute, and a console
-                // app re-elevated through UAC gets a fresh console of its own.
-                // With an elevated panel (the normal case) the
-                // UseShellExecute=false path above hides it completely.
-                Process process = Process.Start(startInfo);
+                var process = Process.Start(startInfo);
                 if (process == null) return new OperationResult { ok = false, reason = "launch_failed" };
+                // The bat starts winws with `start /min` and exits, so this cmd is
+                // short-lived; dispose it instead of leaving a handle around.
                 process.Dispose();
             }
             catch (Exception e)
