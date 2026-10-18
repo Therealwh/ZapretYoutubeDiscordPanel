@@ -143,15 +143,40 @@ namespace Ydp.Services
             };
         }
 
-        public static List<TrustCheck> RunAll()
-        {
-            return new List<TrustCheck>
-            {
-                Certificates(),
-                Defender(),
-                Storage(),
-                Outbound(),
-            };
-        }
-    }
-}
+          public static List<TrustCheck> RunAll()
+          {
+              var list = new List<TrustCheck>
+              {
+                  Certificates(),
+                  Defender(),
+                  Storage(),
+                  Outbound(),
+                  BinaryIntegrity(),
+              };
+              return list;
+          }
+
+          /// <summary>
+          /// Hash of the running panel exe vs the digest GitHub publishes for
+          /// the release. Network-less environment reports "unknown", never a
+          /// false alarm.
+          /// </summary>
+          public static TrustCheck BinaryIntegrity()
+          {
+              try
+              {
+                  var r = PanelUpdater.VerifyRunningBinary();
+                  return new TrustCheck
+                  {
+                      title = "Файл панели соответствует официальному релизу",
+                      state = r.Item1 ? "good" : (r.Item2.Contains("не вернул") || r.Item2.Contains("Нет сети") ? "warn" : "bad"),
+                      detail = r.Item2,
+                  };
+              }
+              catch (Exception ex)
+              {
+                  return new TrustCheck { title = "Файл панели соответствует официальному релизу", state = "warn", detail = "Проверка не выполнена: " + ex.Message };
+              }
+          }
+      }
+  }

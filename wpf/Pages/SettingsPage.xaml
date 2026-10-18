@@ -122,6 +122,39 @@
             </StackPanel>
         </Border>
 
+        <!-- Conditional launch: rules like "when Steam runs, use strategy X" -->
+        <Border Style="{StaticResource Card}" Margin="0,0,0,12">
+            <StackPanel>
+                <TextBlock Text="Условный запуск" Style="{StaticResource CardTitle}" />
+                <TextBlock Style="{StaticResource Hint}" Margin="0,4,0,8" TextWrapping="Wrap"
+                           Text="Панель следит за программами и сама включает нужную стратегию, когда вы запускаете игру или приложение. Формат: имя процесса (например steam.exe) и файл стратегии из папки zapret." />
+                <CheckBox x:Name="ChkCondLaunch" Content="Включить условный запуск" Foreground="{DynamicResource TextBrush}"
+                          Margin="0,0,0,8" Checked="ChkCondLaunch_Changed" Unchecked="ChkCondLaunch_Changed" />
+                <ItemsControl x:Name="CondRules">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal" Margin="0,2">
+                                <TextBox Text="{Binding Process, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="180" Padding="6,4"
+                                         Background="Transparent" Foreground="{DynamicResource TextBrush}" FontFamily="Consolas, Cascadia Mono" FontSize="12"
+                                         ToolTip="Имя процесса: steam.exe" />
+                                <TextBlock Text="→" Margin="8,0" VerticalAlignment="Center" Foreground="{DynamicResource TextBrush}" />
+                                <TextBox Text="{Binding StrategyFile, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="280" Padding="6,4"
+                                         Background="Transparent" Foreground="{DynamicResource TextBrush}" FontFamily="Consolas, Cascadia Mono" FontSize="12"
+                                         ToolTip="Файл стратегии: general (ALT).bat" />
+                                <CheckBox Content="выключать обход при закрытии" IsChecked="{Binding StopWhenClosed, Mode=TwoWay}"
+                                          Foreground="{DynamicResource TextBrush}" Margin="10,0,0,0" VerticalAlignment="Center" />
+                                <Button Content="✕" Margin="8,0,0,0" Click="BtnRuleRemove_Click" Tag="{Binding}" />
+                            </StackPanel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                    <Button Content="Добавить правило" Style="{StaticResource Btn}" Click="BtnRuleAdd_Click" />
+                    <Button Content="Сохранить правила" Style="{StaticResource BtnPrimary}" Margin="10,0,0,0" Click="BtnRulesSave_Click" />
+                    <TextBlock x:Name="CondNote" Style="{StaticResource Hint}" Margin="12,0,0,0" VerticalAlignment="Center" />
+                </StackPanel>
+            </StackPanel>
+        </Border>
         <!-- When the resolver itself is what is being cut -->
         <Border Style="{StaticResource Card}" Margin="0,0,0,12">
             <StackPanel>

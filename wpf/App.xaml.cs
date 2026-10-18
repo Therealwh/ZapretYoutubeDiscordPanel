@@ -47,6 +47,10 @@ protected override void OnStartup(StartupEventArgs e)
             // untouched - the service outlives the panel by design.
             ServiceOps.InstallProcessExitCleanup();
 
+            // Conditional launch watcher: fires only when the user enabled it
+            // and defined rules; otherwise this call is a no-op.
+            Ydp.Zapret.ConditionalLaunch.EnsureStarted();
+
             // One panel at a time. Two instances fight over the Telegram port, and
             // the loser shows "proxy off" while the winner works - which reads as
             // a broken panel. A second launch instead signals the running one to
@@ -152,8 +156,22 @@ base.OnStartup(e);
                 foreach (var arg in e.Args)
                 {
                     if (!string.Equals(arg, "--autoconnect", StringComparison.OrdinalIgnoreCase)) continue;
-                    // Headless "connect working bypass" - the same code path the
-                    // dashboard button uses, useful for autostart and for support.
+                    // Fired by the update helper: the update killed winws, and the
+                    // flag says the bypass WAS on before the update. Clear the
+                    // flag and FALL THROUGH to the normal windowed startup, where
+                    // the ApplyRememberedOnStartup block below reconnects the
+                    // bypass and the user sees the panel instead of a headless
+                    // run that exits. Headless --autoconnect from the login task
+                    // keeps its old behavior (flag not set → return).
+                    if (string.Equals(Config.Get("updateReconnect", "0"), "1", StringComparison.OrdinalIgnoreCase))
+                    {
+                        Config.Set("updateReconnect", "0");
+                        Logger.Info("Обновление завершено: возвращаю обход", "updater");
+                        // Force the remembered-strategy apply on this windowed
+                        // startup regardless of the login autoapply switch.
+                        Config.Set("updateReconnectNow", "1");
+                        break;
+                    }
                     RunAutoConnect();
                     return;
                 }
@@ -214,9 +232,11 @@ var window = new MainWindow();
                 // longer exists, the bypass silently stays down after a reboot.
                 AutoStart.EnsureAutoStartEntry();
 
-                if (AutoStart.StartedWithAutoApply())
-                {
-                    string root = Status.ResolveRoot(Config.Get("zapretRoot", null));
+                  if (AutoStart.StartedWithAutoApply() || string.Equals(Config.Get("updateReconnectNow", "0"), "1", StringComparison.OrdinalIgnoreCase))
+                  {
+                      if (string.Equals(Config.Get("updateReconnectNow", "0"), "1", StringComparison.OrdinalIgnoreCase))
+                          Config.Set("updateReconnectNow", "0");
+                      string root = Status.ResolveRoot(Config.Get("zapretRoot", null));
                     if (!string.IsNullOrEmpty(root))
                     {
                         var boot = System.Threading.Tasks.Task.Run(() =>

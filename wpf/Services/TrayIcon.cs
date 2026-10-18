@@ -8,7 +8,7 @@ namespace Ydp.Services
 {
     /// <summary>
     /// Tray icon. WPF has no built-in tray API on .NET Framework, but
-    /// System.Windows.Forms.NotifyIcon is in the BCL — no package, no extra
+    /// System.Windows.Forms.NotifyIcon is in the BCL РІР‚вЂќ no package, no extra
     /// process, nothing to install.
     /// </summary>
     public sealed class TrayIcon : IDisposable
@@ -22,10 +22,44 @@ namespace Ydp.Services
             _window = window;
 
             var menu = new ContextMenuStrip();
-            menu.Items.Add("Открыть панель", null, (s, e) => Show());
+            menu.Items.Add("Р С›РЎвЂљР С”РЎР‚РЎвЂ№РЎвЂљРЎРЉ Р С—Р В°Р Р…Р ВµР В»РЎРЉ", null, (s, e) => Show());
             menu.Items.Add(new ToolStripSeparator());
-            menu.Items.Add("Подключить рабочий обход", null, async (s, e) => await ConnectWorkingAsync());
-            menu.Items.Add("Выход", null, (s, e) => Environment.Exit(0));
+            // Pinned strategies: one click switches the bypass to that strategy,
+            // no window needed. Built fresh on every open so pins stay current.
+            var pinned = new ToolStripMenuItem("Р РЋРЎвЂљРЎР‚Р В°РЎвЂљР ВµР С–Р С‘Р С‘");
+            pinned.DropDownOpening += (s, e) =>
+            {
+                pinned.DropDownItems.Clear();
+                var root = Ydp.Zapret.Status.ResolveRoot(Config.Get("zapretRoot", null));
+                var current = Config.Get("processStrategyName", null);
+                var pins = (Config.Get(Ydp.Zapret.AutoConnect.KeyPinned, "") ?? "")
+                    .Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries);
+                if (pins.Length == 0)
+                {
+                    var none = pinned.DropDownItems.Add("Р СњР ВµРЎвЂљ Р В·Р В°Р С”РЎР‚Р ВµР С—Р В»РЎвЂР Р…Р Р…РЎвЂ№РЎвЂ¦ РІР‚вЂќ Р В·Р В°Р С”РЎР‚Р ВµР С—Р С‘РЎвЂљР Вµ Р Р…Р В° РЎРѓРЎвЂљРЎР‚Р В°Р Р…Р С‘РЎвЂ Р Вµ Р’В«Р РЋРЎвЂљРЎР‚Р В°РЎвЂљР ВµР С–Р С‘Р С‘Р’В»");
+                    none.Enabled = false;
+                    return;
+                }
+                foreach (var pin in pins)
+                {
+                    var name = pin.Trim();
+                    var file = System.IO.Path.Combine(root, name);
+                    if (!System.IO.File.Exists(file)) file = System.IO.Path.Combine(root, name.EndsWith(".bat", StringComparison.OrdinalIgnoreCase) ? name : name + ".bat");
+                    var item = new ToolStripMenuItem(name)
+                    {
+                        Checked = current != null && string.Equals(
+                            System.IO.Path.GetFileNameWithoutExtension(current),
+                            System.IO.Path.GetFileNameWithoutExtension(name), StringComparison.OrdinalIgnoreCase),
+                    };
+                    var captured = file;
+                    item.Click += (s2, e2) => SwitchToStrategy(root, captured);
+                    pinned.DropDownItems.Add(item);
+                }
+            };
+            menu.Items.Add(pinned);
+            menu.Items.Add("Р СџР С•Р Т‘Р С”Р В»РЎР‹РЎвЂЎР С‘РЎвЂљРЎРЉ РЎР‚Р В°Р В±Р С•РЎвЂЎР С‘Р в„– Р С•Р В±РЎвЂ¦Р С•Р Т‘", null, async (s, e) => await ConnectWorkingAsync());
+            menu.Items.Add(new ToolStripSeparator());
+            menu.Items.Add("Р вЂ™РЎвЂ№РЎвЂ¦Р С•Р Т‘", null, (s, e) => Environment.Exit(0));
 
             _icon = new NotifyIcon
             {
@@ -36,7 +70,7 @@ namespace Ydp.Services
             };
             _icon.DoubleClick += (s, e) => Show();
             // A click on an update balloon should bring the panel up: that is
-            // where the "Обновить" button lives.
+            // where the "Р С›Р В±Р Р…Р С•Р Р†Р С‘РЎвЂљРЎРЉ" button lives.
             _icon.BalloonTipClicked += (s, e) => Show();
         }
 
@@ -58,7 +92,7 @@ namespace Ydp.Services
                 // the thread that owns it (the UI thread). The health monitor and
                 // the engine notifier call this from their own background threads,
                 // and the resulting cross-thread exception was swallowed by the
-                // catch below — the icon silently stopped updating instead of
+                // catch below РІР‚вЂќ the icon silently stopped updating instead of
                 // crashing. Marshal instead.
                 var app = System.Windows.Application.Current;
                 if (app != null && !app.Dispatcher.CheckAccess())
@@ -95,7 +129,7 @@ namespace Ydp.Services
         /// Paint the state dot.
         ///
         /// GetHicon returns a raw GDI handle and Icon.FromHandle does NOT copy
-        /// it — it wraps the same handle. Whoever creates the HICON must call
+        /// it РІР‚вЂќ it wraps the same handle. Whoever creates the HICON must call
         /// DestroyIcon, otherwise every state change leaks a GDI object. This
         /// runs on every health probe (~every 45 s), so the leak reached the
         /// ~10k per-process GDI limit in about two days and killed the panel
@@ -179,12 +213,12 @@ namespace Ydp.Services
         {
             string root = Zapret.Status.ResolveRoot(Config.Get("zapretRoot", null));
             if (string.IsNullOrEmpty(root)) return;
-            Logger.Info("Подключение рабочего обхода из трея", "autoconnect");
+            Logger.Info("Р СџР С•Р Т‘Р С”Р В»РЎР‹РЎвЂЎР ВµР Р…Р С‘Р Вµ РЎР‚Р В°Р В±Р С•РЎвЂЎР ВµР С–Р С• Р С•Р В±РЎвЂ¦Р С•Р Т‘Р В° Р С‘Р В· РЎвЂљРЎР‚Р ВµРЎРЏ", "autoconnect");
             var result = await System.Threading.Tasks.Task.Run(() =>
                 Zapret.AutoConnect.Connect(root, msg => Logger.Info(msg, "autoconnect"), null));
             string text = result.ok
-                ? "Рабочий обход подключён: " + result.strategy
-                : "Не удалось подключить: " + (result.reason ?? "ошибка");
+                ? "Р В Р В°Р В±Р С•РЎвЂЎР С‘Р в„– Р С•Р В±РЎвЂ¦Р С•Р Т‘ Р С—Р С•Р Т‘Р С”Р В»РЎР‹РЎвЂЎРЎвЂР Р…: " + result.strategy
+                : "Р СњР Вµ РЎС“Р Т‘Р В°Р В»Р С•РЎРѓРЎРЉ Р С—Р С•Р Т‘Р С”Р В»РЎР‹РЎвЂЎР С‘РЎвЂљРЎРЉ: " + (result.reason ?? "Р С•РЎв‚¬Р С‘Р В±Р С”Р В°");
             Logger.Info(text, "autoconnect");
             Show();
         }
@@ -218,6 +252,43 @@ namespace Ydp.Services
             _disposed = true;
             _icon.Visible = false;
             _icon.Dispose();
+
+        /// <summary>
+        }
+        /// Tray quick-switch: apply a pinned strategy without opening the
+        /// window. Runs the same code path the Strategies page row uses.
+        /// </summary>
+        private void SwitchToStrategy(string rootDir, string strategyFile)
+        {
+            try
+            {
+                Logger.Info("Р СћРЎР‚Р ВµР в„–: РЎРѓР СР ВµР Р…Р В° РЎРѓРЎвЂљРЎР‚Р В°РЎвЂљР ВµР С–Р С‘Р С‘ Р Р…Р В° " + System.IO.Path.GetFileName(strategyFile), "tray");
+                System.Threading.Tasks.Task.Run(() =>
+                {
+                    bool preferService = string.Equals(
+                        Config.Get(Ydp.Zapret.AutoConnect.KeyPreferService, "true"), "true", StringComparison.OrdinalIgnoreCase);
+                    var r = preferService
+                        ? InstallStrategyAsServiceSafe(rootDir, strategyFile)
+                        : LaunchStrategyProcessSafe(rootDir, strategyFile);
+                    Logger.Info("Р СћРЎР‚Р ВµР в„–: " + (r ? "РЎРѓРЎвЂљРЎР‚Р В°РЎвЂљР ВµР С–Р С‘РЎРЏ Р С—РЎР‚Р С‘Р СР ВµР Р…Р ВµР Р…Р В°" : "Р Р…Р Вµ РЎС“Р Т‘Р В°Р В»Р С•РЎРѓРЎРЉ Р С—РЎР‚Р С‘Р СР ВµР Р…Р С‘РЎвЂљРЎРЉ"), "tray");
+                });
+            }
+            catch (Exception ex)
+            {
+                Logger.Warn("Р СћРЎР‚Р ВµР в„–: " + ex.Message, "tray");
+            }
+        }
+
+        private static bool InstallStrategyAsServiceSafe(string root, string file)
+        {
+            try { return ServiceOps.InstallStrategyAsService(root, file).ok; }
+            catch { return false; }
+        }
+
+        private static bool LaunchStrategyProcessSafe(string root, string file)
+        {
+            try { return ServiceOps.LaunchStrategyProcess(root, file).ok; }
+            catch { return false; }
         }
     }
 }

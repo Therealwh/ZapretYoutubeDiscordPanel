@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using Ydp.Services;
+using Ydp.Zapret;
 
 namespace Ydp.Pages
 {
@@ -30,6 +32,7 @@ namespace Ydp.Pages
         private void Run()
         {
             BtnRecheck.IsEnabled = false;
+            LoadAv();
             Items.ItemsSource = null;
             try
             {
@@ -63,6 +66,41 @@ namespace Ydp.Pages
         {
             if (Dispatcher.CheckAccess()) action();
             else Dispatcher.BeginInvoke(action);
+        }
+
+        // ---- antivirus helper ------------------------------------------
+
+        private void LoadAv()
+        {
+            try
+            {
+                var avs = AvHelper.Detect();
+                AvList.Text = "Обнаружено: " + string.Join(", ", avs.Select(a => a.product));
+                var root = Status.ResolveRoot(Config.Get("zapretRoot", null));
+                var folders = AvHelper.FoldersToWhitelist(root);
+                AvNote.Text = "Папки: " + string.Join("; ", folders);
+            }
+            catch (Exception ex)
+            {
+                AvList.Text = "Не удалось определить антивирус: " + ex.Message;
+            }
+        }
+
+        private void BtnAvExclude_Click(object sender, RoutedEventArgs e)
+        {
+            BtnAvExclude.IsEnabled = false;
+            AvNote.Text = "Применяю…";
+            var root = Status.ResolveRoot(Config.Get("zapretRoot", null));
+            var folders = AvHelper.FoldersToWhitelist(root);
+            System.Threading.Tasks.Task.Run(() => AvHelper.AddDefenderExclusions(folders))
+                .ContinueWith(t =>
+                {
+                    Dispatcher.BeginInvoke(new Action(() =>
+                    {
+                        BtnAvExclude.IsEnabled = true;
+                        AvNote.Text = t.IsFaulted ? "Ошибка: " + t.Exception.GetBaseException().Message : t.Result;
+                    }));
+                });
         }
     }
 }

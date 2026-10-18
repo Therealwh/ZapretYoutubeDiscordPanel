@@ -170,6 +170,13 @@ namespace Ydp.Services
                         wantNow = BitConverter.ToString(sha.ComputeHash(File.ReadAllBytes(download))).Replace("-", "").ToLowerInvariant();
                 }
                 string helper = Path.Combine(Path.GetTempPath(), "ydp-update-" + Guid.NewGuid().ToString("N").Substring(0, 8) + ".ps1");
+                // If the bypass was ON before the update, the new instance must
+                // bring it back up on its own: the update kills winws, and a
+                // panel that starts "off" reads to the user as "updated but now
+                // nothing works". The flag lives in config (written instantly),
+                // not in the process, so it survives the restart.
+                bool bypassWasOn = ServiceOps.IsWinwsRunning();
+                Config.Set("updateReconnect", bypassWasOn ? "1" : "0");
                 File.WriteAllText(helper,
                     "$want='" + wantNow + "';" +
                     "$f='" + download + "';$t='" + target + "';" +
@@ -178,7 +185,7 @@ namespace Ydp.Services
                     "Start-Sleep -Seconds 6;" +
                     "if($got -ne ([System.BitConverter]::ToString([System.Security.Cryptography.SHA256]::Create().ComputeHash([System.IO.File]::ReadAllBytes($f))).Replace('-','').ToLowerInvariant())){ Remove-Item -LiteralPath $f -Force -EA SilentlyContinue; Remove-Item -LiteralPath '" + helper + "' -Force -EA SilentlyContinue; exit 1 }" +
                     "Copy-Item -LiteralPath $f -Destination $t -Force;" +
-                    "Start-Process -FilePath $t;" +
+                    "Start-Process -FilePath $t -ArgumentList '--autoconnect';" +
                     "Remove-Item -LiteralPath $f -Force -EA SilentlyContinue; Remove-Item -LiteralPath '" + helper + "' -Force -EA SilentlyContinue",
                     new System.Text.UTF8Encoding(false));
                 var startInfo = new ProcessStartInfo("powershell.exe",
@@ -212,6 +219,37 @@ namespace Ydp.Services
             {
                 Logger.Error("Обновление панели не удалось: " + ex.Message, "updater");
                 return new UpdateResult { ok = false, reason = "install_failed", message = ex.Message };
+            }
+        }
+
+        /// <summary>
+        /// Public integrity check for the transparency page: hash of the running
+        /// exe vs the digest GitHub reports for the current release asset.
+        /// Returns (match, detail). A null digest means the release API did not
+        /// report one (offline, or the shape changed) - reported as unknown, not
+        /// as a mismatch, so a network hiccup never calls the user's copy fake.
+        /// </summary>
+        public static Tuple<bool, string> VerifyRunningBinary()
+        {
+            try
+            {
+                string exe = AppDomain.CurrentDomain.BaseDirectory + "YoutubeDiscordPanel.exe";
+                if (!File.Exists(exe)) return Tuple.Create(false, "Файл панели не найден: " + exe);
+                string got;
+                using (var sha = SHA256.Create())
+                    got = BitConverter.ToString(sha.ComputeHash(File.ReadAllBytes(exe))).Replace("-", "").ToLowerInvariant();
+                string assetUrl = FindAssetUrl(null) ?? _state.url;
+                if (string.IsNullOrEmpty(assetUrl)) return Tuple.Create<bool, string>(false, "Не удалось определить адрес релиза (нет сети?)");
+                string want = FetchAssetDigest(assetUrl);
+                if (string.IsNullOrEmpty(want)) return Tuple.Create<bool, string>(false, "GitHub не вернул хэш релиза - проверить нечем");
+                bool match = string.Equals(got, want, StringComparison.Ordinal);
+                return Tuple.Create(match, match
+                    ? "SHA-256 совпадает с официальным релизом: " + got.Substring(0, 16) + "…"
+                    : "SHA-256 НЕ совпадает с релизом! Файл изменён или повреждён.");
+            }
+            catch (Exception ex)
+            {
+                return Tuple.Create(false, "Ошибка проверки: " + ex.Message);
             }
         }
 

@@ -67,6 +67,19 @@
                            Text="• ставить сертификаты в доверенные;&#10;• отключать или менять настройки Defender;&#10;• собирать историю браузера, пароли или буфер обмена;&#10;• отправлять телеметрию и рекламу на сторонние сервисы;&#10;• требовать подписку: панель бесплатна и открыта." />
             </StackPanel>
         </Border>
+        <!-- Antivirus helper: WinDivert hooks packets, so AVs flag it. -->
+        <Border Style="{StaticResource Card}" Margin="0,0,0,12">
+            <StackPanel>
+                <TextBlock Text="Антивирус и панель" Style="{StaticResource H1}" />
+                <TextBlock Style="{StaticResource Dim}" Margin="0,4,0,8" TextWrapping="Wrap"
+                           Text="winws.exe перехватывает пакеты драйвером WinDivert — антивирусы часто помечают его как подозрительный и удаляют, из-за чего обход «пропадает». Добавьте папки панели и zapret в исключения." />
+                <TextBlock x:Name="AvList" Style="{StaticResource Dim}" Margin="0,0,0,8" TextWrapping="Wrap" />
+                <StackPanel Orientation="Horizontal">
+                    <Button x:Name="BtnAvExclude" Content="Добавить в исключения Defender" Style="{StaticResource BtnPrimary}" Click="BtnAvExclude_Click" />
+                    <TextBlock x:Name="AvNote" Style="{StaticResource Hint}" Margin="12,0,0,0" VerticalAlignment="Center" TextWrapping="Wrap" />
+                </StackPanel>
+            </StackPanel>
+        </Border>
     </StackPanel>
     </ScrollViewer>
 </UserControl>

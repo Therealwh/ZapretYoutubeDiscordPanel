@@ -6,6 +6,7 @@
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
 
@@ -43,7 +44,29 @@
             </StackPanel>
         </StackPanel>
 
-        <Border Grid.Row="2" Style="{StaticResource Card}" Padding="0">
+        <!-- Quick add: type a site, press the button, it lands in the user list
+             and winws picks it up on the next restart. -->
+        <Border Grid.Row="2" Style="{StaticResource Card}" Margin="0,0,0,10" Padding="12">
+            <StackPanel Orientation="Vertical">
+                <StackPanel Orientation="Horizontal">
+                    <TextBlock Text="Добавить свой сайт в обход:" Style="{StaticResource Dim}" VerticalAlignment="Center" Margin="0,0,10,0" />
+                    <TextBox x:Name="QuickDomain" Width="320" Background="Transparent" Foreground="{DynamicResource TextBrush}"
+                             BorderBrush="{DynamicResource OkBrush}" BorderThickness="1" Padding="6,4"
+                             FontFamily="Consolas, Cascadia Mono" FontSize="13"
+                             KeyDown="QuickDomain_KeyDown"
+                             ToolTip="Например: example.com или https://example.com/page" />
+                    <Button x:Name="BtnQuickAdd" Content="Добавить" Style="{StaticResource BtnPrimary}" Margin="10,0,0,0" Click="BtnQuickAdd_Click" />
+                    <Button x:Name="BtnQuickRemove" Content="Убрать" Style="{StaticResource Btn}" Margin="8,0,0,0" Click="BtnQuickRemove_Click"
+                            ToolTip="Удалить домен из списка своих сайтов" />
+                    <Button x:Name="BtnQuickRestart" Content="Применить (перезапуск обхода)" Style="{StaticResource Btn}" Margin="8,0,0,0" Click="BtnQuickRestart_Click"
+                            ToolTip="Перезапустить обход, чтобы новый сайт начал обходиться прямо сейчас" />
+                </StackPanel>
+                <TextBlock x:Name="QuickNote" Style="{StaticResource Dim}" Margin="0,6,0,0" TextWrapping="Wrap"
+                           Text="Домен попадает в «Пользовательский список» ниже и обрабатывается всеми стратегиями." />
+            </StackPanel>
+        </Border>
+
+        <Border Grid.Row="3" Style="{StaticResource Card}" Padding="0">
             <TextBox x:Name="Editor" Background="Transparent" Foreground="{DynamicResource TextBrush}"
                      BorderThickness="0" AcceptsReturn="True" AcceptsTab="True"
                      FontFamily="Consolas, Cascadia Mono" FontSize="13"

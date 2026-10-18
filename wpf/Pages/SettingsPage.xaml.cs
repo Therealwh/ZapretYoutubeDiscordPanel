@@ -10,6 +10,14 @@ using Ydp.Zapret;
 
 namespace Ydp.Pages
 {
+    /// <summary>Bindable row for the conditional-launch rules editor.</summary>
+    public class CondRuleRow
+    {
+        public string Process { get; set; }
+        public string StrategyFile { get; set; }
+        public bool StopWhenClosed { get; set; }
+    }
+
     public partial class SettingsPage : UserControl
     {
         private bool _loading;
@@ -64,6 +72,7 @@ namespace Ydp.Pages
         private void Page_Loaded(object sender, RoutedEventArgs e)
         {
             Load();
+            LoadCondRules();
             // Listing adapters touches the network stack, so keep it off the UI
             // thread — and hand the result over instead of letting
             // LoadDnsAdapters poll the network again on the UI thread.
@@ -745,6 +754,59 @@ namespace Ydp.Pages
                 SpeedResult.Text = "Замер не удался: " + ex.Message;
             }
             finally { BtnSpeed.IsEnabled = true; }
+        }
+
+        // ---- conditional launch rules ----------------------------------
+
+        private void LoadCondRules()
+        {
+            var enabled = ConditionalLaunch.IsEnabled();
+            ChkCondLaunch.IsChecked = enabled;
+            var rows = ConditionalLaunch.ReadRules()
+                .Select(r => new CondRuleRow { Process = r.process, StrategyFile = r.strategyFile, StopWhenClosed = r.stopWhenClosed })
+                .ToList();
+            if (rows.Count == 0) rows.Add(new CondRuleRow());
+            CondRules.ItemsSource = rows;
+            if (enabled) ConditionalLaunch.EnsureStarted();
+        }
+
+        private void ChkCondLaunch_Changed(object sender, RoutedEventArgs e)
+        {
+            if (ChkCondLaunch == null) return; // XAML init order
+            ConditionalLaunch.SetEnabled(ChkCondLaunch.IsChecked == true);
+            CondNote.Text = ChkCondLaunch.IsChecked == true ? "Работает: панель проверяет процессы каждые 5 секунд." : "";
+        }
+
+        private void BtnRuleAdd_Click(object sender, RoutedEventArgs e)
+        {
+            var rows = (CondRules.ItemsSource as IEnumerable<CondRuleRow> ?? new List<CondRuleRow>()).ToList();
+            rows.Add(new CondRuleRow());
+            CondRules.ItemsSource = rows;
+        }
+
+        private void BtnRuleRemove_Click(object sender, RoutedEventArgs e)
+        {
+            var row = (e.OriginalSource as FrameworkElement)?.Tag as CondRuleRow;
+            if (row == null) return;
+            var rows = (CondRules.ItemsSource as IEnumerable<CondRuleRow> ?? new List<CondRuleRow>()).ToList();
+            rows.Remove(row);
+            if (rows.Count == 0) rows.Add(new CondRuleRow());
+            CondRules.ItemsSource = rows;
+        }
+
+        private void BtnRulesSave_Click(object sender, RoutedEventArgs e)
+        {
+            var rows = (CondRules.ItemsSource as IEnumerable<CondRuleRow> ?? new List<CondRuleRow>())
+                .Where(r => !string.IsNullOrWhiteSpace(r.Process) && !string.IsNullOrWhiteSpace(r.StrategyFile))
+                .Select(r => new ConditionalLaunch.Rule
+                {
+                    process = r.Process,
+                    strategyFile = r.StrategyFile,
+                    stopWhenClosed = r.StopWhenClosed,
+                }).ToList();
+            ConditionalLaunch.WriteRules(rows);
+            CondNote.Text = "Сохранено правил: " + rows.Count + ".";
+            Logger.Info("Условный запуск: сохранено правил " + rows.Count, "cond");
         }
     }
 }

@@ -19,13 +19,13 @@ namespace Ydp.Tests
         private static void Check(string name, bool condition, string detail = null)
         {
             if (condition) _passed++;
-            else Failures.Add(name + (detail == null ? "" : " — " + detail));
+            else Failures.Add(name + (detail == null ? "" : " РІР‚вЂќ " + detail));
         }
 
         private static void Equal(string name, string expected, string actual)
         {
             Check(name, string.Equals(expected, actual, StringComparison.Ordinal),
-                "ожидалось \"" + expected + "\", получено \"" + actual + "\"");
+                "Р С•Р В¶Р С‘Р Т‘Р В°Р В»Р С•РЎРѓРЎРЉ \"" + expected + "\", Р С—Р С•Р В»РЎС“РЎвЂЎР ВµР Р…Р С• \"" + actual + "\"");
         }
 
         private static void Guard(string group, Action body)
@@ -36,7 +36,7 @@ namespace Ydp.Tests
             }
             catch (Exception ex)
             {
-                Failures.Add(group + " — ИСКЛЮЧЕНИЕ: " + ex.GetType().Name + ": " + ex.Message);
+                Failures.Add(group + " РІР‚вЂќ Р ВР РЋР С™Р вЂєР В®Р В§Р вЂўР СњР ВР вЂў: " + ex.GetType().Name + ": " + ex.Message);
             }
         }
 
@@ -52,6 +52,8 @@ namespace Ydp.Tests
             Guard("ui", UiBindingTests);
             Guard("dpi", DpiStrategyTests);
             Guard("verdict", GroupVerdictTests);
+              Guard("userdomains", UserDomainTests);
+              Guard("cond", CondLaunchTests);
 
             var report = new StringBuilder();
             report.Append("tests: ").Append(_passed + Failures.Count)
@@ -169,7 +171,7 @@ namespace Ydp.Tests
             Check("handshake parses with the right secret", parsed != null);
             if (parsed != null)
             {
-                Check("dc id detected", parsed.DcId == 2, "получено " + parsed.DcId);
+                Check("dc id detected", parsed.DcId == 2, "Р С—Р С•Р В»РЎС“РЎвЂЎР ВµР Р…Р С• " + parsed.DcId);
                 Check("not media", parsed.IsMedia == false);
                 Check("proto tag preserved", TgCrypto.IsIntermediate(parsed.ProtoTag));
             }
@@ -197,7 +199,7 @@ namespace Ydp.Tests
                 byte[] decoded = stream.Update(relayInit, 0, 64);
                 Check("relay init carries the proto tag", TgCrypto.IsIntermediate(new[] { decoded[56], decoded[57], decoded[58], decoded[59] }));
                 short dc = BitConverter.ToInt16(decoded, 60);
-                Check("relay init carries the dc id", dc == 2, "получено " + dc);
+                Check("relay init carries the dc id", dc == 2, "Р С—Р С•Р В»РЎС“РЎвЂЎР ВµР Р…Р С• " + dc);
             }
 
             // keystream continuity: the counter must advance between blocks
@@ -330,7 +332,7 @@ namespace Ydp.Tests
             Check("splitter buffers a partial packet", firstHalf.Count == 0);
             var rest = partial.Push(new byte[6], Slice(packetPlain, 6, 6));
             Check("splitter completes the packet", rest.Count == 1 && rest[0].Length == 12,
-                "частей: " + rest.Count);
+                "РЎвЂЎР В°РЎРѓРЎвЂљР ВµР в„–: " + rest.Count);
         }
 
         private static byte[] Slice(byte[] source, int offset, int count)
@@ -393,7 +395,7 @@ namespace Ydp.Tests
         private static void TesterTests()
         {
             // The report parser has to read exactly what the bundled zapret
-            // tester writes (test zapret.ps1 → Set-Content of per-target token
+            // tester writes (test zapret.ps1 РІвЂ вЂ™ Set-Content of per-target token
             // lines). A wrong parse here would show the user probe results that
             // never happened, so it gets checked against a real-shaped sample.
             string sample = string.Join("\n", new[]
@@ -416,15 +418,15 @@ namespace Ydp.Tests
             try
             {
                 var parsed = Tester.ParseOriginalReport(tmp);
-                Check("orig: two configs", parsed.results.Count == 2, "получено " + parsed.results.Count);
+                Check("orig: two configs", parsed.results.Count == 2, "Р С—Р С•Р В»РЎС“РЎвЂЎР ВµР Р…Р С• " + parsed.results.Count);
                 var alt = parsed.results.FirstOrDefault(r => r.name == "general (ALT).bat");
                 Check("orig: config kept", alt != null);
                 if (alt != null)
                 {
-                    Check("orig: three targets", alt.targets.Count == 3, "получено " + alt.targets.Count);
+                    Check("orig: three targets", alt.targets.Count == 3, "Р С—Р С•Р В»РЎС“РЎвЂЎР ВµР Р…Р С• " + alt.targets.Count);
                     var dm = alt.targets[0];
-                    Equal("orig: HTTP token", "OK", dm.results.ContainsKey("HTTP") ? dm.results["HTTP"] : "нет");
-                    Equal("orig: TLS1.3 token", "UNSUP", dm.results.ContainsKey("TLS1.3") ? dm.results["TLS1.3"] : "нет");
+                    Equal("orig: HTTP token", "OK", dm.results.ContainsKey("HTTP") ? dm.results["HTTP"] : "Р Р…Р ВµРЎвЂљ");
+                    Equal("orig: TLS1.3 token", "UNSUP", dm.results.ContainsKey("TLS1.3") ? dm.results["TLS1.3"] : "Р Р…Р ВµРЎвЂљ");
                     Equal("orig: url kind", "url", dm.kind);
                     var dns = alt.targets[2];
                     Equal("orig: ping-only kind", "ping", dns.kind);
@@ -434,10 +436,10 @@ namespace Ydp.Tests
                 var alt2 = parsed.results.FirstOrDefault(r => r.name == "general (ALT2).bat");
                 if (alt2 != null)
                     Check("orig: ERROR is bad state", Tester.TokenState(alt2.targets[0]) == "bad",
-                        "получено " + Tester.TokenState(alt2.targets[0]));
+                        "Р С—Р С•Р В»РЎС“РЎвЂЎР ВµР Р…Р С• " + Tester.TokenState(alt2.targets[0]));
                 Check("orig: UNSUP is warn state",
                     alt != null && Tester.TokenState(alt.targets[0]) == "warn",
-                    alt == null ? "нет конфига" : "получено " + Tester.TokenState(alt.targets[0]));
+                    alt == null ? "Р Р…Р ВµРЎвЂљ Р С”Р С•Р Р…РЎвЂћР С‘Р С–Р В°" : "Р С—Р С•Р В»РЎС“РЎвЂЎР ВµР Р…Р С• " + Tester.TokenState(alt.targets[0]));
             }
             finally
             {
@@ -453,7 +455,7 @@ namespace Ydp.Tests
             {
                 Equal("console: name", "DiscordMain", consoleRow.name);
                 Equal("console: kind", "url", consoleRow.kind);
-                Equal("console: HTTP", "OK", consoleRow.results.ContainsKey("HTTP") ? consoleRow.results["HTTP"] : "нет");
+                Equal("console: HTTP", "OK", consoleRow.results.ContainsKey("HTTP") ? consoleRow.results["HTTP"] : "Р Р…Р ВµРЎвЂљ");
                 Equal("console: ping", "6 ms", consoleRow.result);
             }
             var consolePing = Tester.ParseTargetLine("  CloudflareDNS1111    Ping: 7 ms");
@@ -515,7 +517,7 @@ namespace Ydp.Tests
                 File.WriteAllText(Path.Combine(root, "lists", "list-general-user.txt"),
                     "# comment\n\nexample.com\nexample.com\nbad_domain\n");
                 var stats = Lists.Stats(root, "general");
-                Check("stats count lines", stats.lines == 3, "получено " + stats.lines);
+                Check("stats count lines", stats.lines == 3, "Р С—Р С•Р В»РЎС“РЎвЂЎР ВµР Р…Р С• " + stats.lines);
                 Check("stats count duplicates", stats.duplicates == 1);
                 Check("stats count comments", stats.comments == 1);
 
@@ -539,7 +541,7 @@ namespace Ydp.Tests
         }
 
         /// <summary>
-        /// Regression guard for the "Открыть" bug: RunRow used to raise
+        /// Regression guard for the "Р С›РЎвЂљР С”РЎР‚РЎвЂ№РЎвЂљРЎРЉ" bug: RunRow used to raise
         /// PropertyChanged WITHOUT implementing INotifyPropertyChanged, so WPF
         /// never subscribed and the Expanded-driven Visibility stayed Collapsed
         /// no matter what the property was set to. Binding a real element to a
@@ -712,6 +714,53 @@ namespace Ydp.Tests
                 block.Visibility == System.Windows.Visibility.Collapsed,
                 "visibility=" + block.Visibility);
         }
+        private static void UserDomainTests()
+        {
+            Equal("normalize plain", "example.com", UserDomains.Normalize("https://Example.com/path?q=1"));
+            Equal("normalize port", "example.com", UserDomains.Normalize("example.com:8080"));
+            Equal("normalize wildcard", "*.example.com", UserDomains.Normalize("*.EXAMPLE.com"));
+            Check("reject no-dot", UserDomains.Normalize("localhost") == null);
+            Check("reject empty", UserDomains.Normalize("   ") == null);
+            Check("reject bad chars", UserDomains.Normalize("ex ample.com") == null);
+
+            var root = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "ydp-ut-" + Guid.NewGuid().ToString("N").Substring(0, 6));
+            System.IO.Directory.CreateDirectory(root);
+            try
+            {
+                string err;
+                int n = UserDomains.Add(root, new[] { "a.com", "b.org", "https://c.net/x" }, out err);
+                Check("add 3", n == 3, "got " + n + (err == null ? "" : " err=" + err));
+                n = UserDomains.Add(root, new[] { "a.com", "d.io" }, out err);
+                Check("add dedupes", n == 1, "got " + n);
+                var all = UserDomains.ReadAll(root);
+                Check("read 4", all.Count == 4, "got " + all.Count);
+                Check("c.net stored bare", all.Contains("c.net"));
+                n = UserDomains.Remove(root, "b.org");
+                Check("remove 1", n == 1, "got " + n);
+                Check("read 3 after remove", UserDomains.ReadAll(root).Count == 3);
+            }
+            finally
+            {
+                try { System.IO.Directory.Delete(root, true); } catch { }
+            }
+        }
+
+        private static void CondLaunchTests()
+        {
+            Check("process not running", !ConditionalLaunch.IsProcessRunning("definitely-not-running-xyz-9q"));
+            Check("process normalizes .exe", !ConditionalLaunch.IsProcessRunning("definitely-not-running-xyz-9q.exe"));
+            var rules = new List<ConditionalLaunch.Rule>
+            {
+                new ConditionalLaunch.Rule { process = "steam.exe", strategyFile = "general (ALT).bat", stopWhenClosed = true },
+            };
+            ConditionalLaunch.WriteRules(rules);
+            var back = ConditionalLaunch.ReadRules();
+            Check("rules roundtrip count", back.Count == 1, "got " + back.Count);
+            Check("rules roundtrip proc", back[0].process == "steam.exe");
+            Check("rules roundtrip stop", back[0].stopWhenClosed);
+            ConditionalLaunch.Evaluate();
+            Check("evaluate no-op when disabled", true);
+        }
     }
 
     /// <summary>Small wrappers so the tests can reach internal helpers.</summary>
@@ -720,5 +769,6 @@ namespace Ydp.Tests
         public static List<string> CmdTokenize(string line) => Strategy.CmdTokenize(line);
         public static string ExpandVars(string line, Dictionary<string, string> vars) => Strategy.ExpandVars(line, vars);
         public static string SafeName(string raw) => Strategy.SafeStrategyName(raw);
+
     }
 }

@@ -44,6 +44,7 @@
   <ItemGroup>
     <!-- ServiceController for the SCM queries (no sc.exe child processes). -->
     <Reference Include="System.ServiceProcess" />
+    <Reference Include="System.Management" />
     <!-- FolderBrowserDialog: net48 has no OpenFolderDialog. -->
     <Reference Include="System.Windows.Forms" />
     <!-- ZipArchive / ZipFile for the engine updater (BCL, no NuGet package). -->
