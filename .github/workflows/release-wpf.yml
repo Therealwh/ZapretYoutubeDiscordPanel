@@ -186,8 +186,16 @@ jobs:
           # "release not found". Resolve the draft by listing releases and
           # then upload/patch everything by its numeric ID.
           $headers = @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = 'application/vnd.github+json'; 'User-Agent' = 'release-wpf' }
-          $releases = Invoke-RestMethod -Uri "$env:GITHUB_API_URL/repos/$env:GITHUB_REPOSITORY/releases?per_page=20" -Headers $headers
-          $rel = $releases | Where-Object { $_.draft -and $_.tag_name -eq $env:RELEASE_TAG } | Select-Object -First 1
+          # The listing can omit a brand-new draft for a few seconds
+          # (eventual consistency): retry the lookup before giving up.
+          $rel = $null
+          for ($attempt = 1; $attempt -le 6; $attempt++) {
+            $releases = Invoke-RestMethod -Uri "$env:GITHUB_API_URL/repos/$env:GITHUB_REPOSITORY/releases?per_page=20" -Headers $headers
+            $rel = $releases | Where-Object { $_.draft -and $_.tag_name -eq $env:RELEASE_TAG } | Select-Object -First 1
+            if ($rel) { break }
+            Write-Host "draft not listed yet (attempt $attempt), waiting 5s..."
+            Start-Sleep -Seconds 5
+          }
           if (-not $rel) { throw "draft release for $env:RELEASE_TAG not found" }
           Write-Host "draft release id=$($rel.id)"
           foreach ($f in (Get-ChildItem dist | ForEach-Object { $_.FullName })) {            $name = [IO.Path]::GetFileName($f)
