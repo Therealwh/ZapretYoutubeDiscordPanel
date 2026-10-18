@@ -51,6 +51,7 @@ namespace Ydp.Tests
             Guard("lists", ListTests);
             Guard("ui", UiBindingTests);
             Guard("dpi", DpiStrategyTests);
+            Guard("verdict", GroupVerdictTests);
 
             var report = new StringBuilder();
             report.Append("tests: ").Append(_passed + Failures.Count)
@@ -629,6 +630,58 @@ namespace Ydp.Tests
             for (int i = 0; i < args.Count - 1; i++)
                 if (args[i] == flag) return args[i + 1];
             return null;
+        }
+
+        /// <summary>
+        /// A group verdict must follow its DECISIVE target.
+        ///
+        /// This is the "no strategy ever turns red" bug: YouTube's group holds
+        /// four hosts and the image/video ones usually answer even when the main
+        /// page is DNS-blocked, so "any target ok" reported YouTube as working.
+        /// </summary>
+        private static void GroupVerdictTests()
+        {
+            Func<string, string, TargetResult> mk = (name, verdict) =>
+            {
+                var t = new TargetResult { name = name, kind = "url", url = "https://" + name };
+                t.results["HTTP"] = verdict;
+                return t;
+            };
+
+            // Main page dead, satellites alive - the exact shape that hid the bug.
+            var mixed = new List<TargetResult>
+            {
+                mk("DiscordMain", "OK"),
+                mk("YouTubeWeb", "DNS"),
+                mk("YouTubeImage", "OK"),
+                mk("YouTubeVideoRedirect", "OK"),
+            };
+            var g1 = Tester.GroupStats(mixed);
+            Check("verdict: Discord works when its main host answers", g1.discord.works);
+            Check("verdict: YouTube is dead when its main page is dead", !g1.youtube.works,
+                "state=" + g1.youtube.state);
+            Check("verdict: YouTube state is dead, not ok", g1.youtube.state == "dead");
+            Check("verdict: the decisive target is named", g1.youtube.decisiveName == "YouTubeWeb");
+            Check("verdict: IsWorking refuses a half-broken pair", !Tester.IsWorking(g1));
+
+            // Everything fine - must stay green.
+            var good = new List<TargetResult>
+            {
+                mk("DiscordMain", "OK"), mk("YouTubeWeb", "OK"),
+                mk("YouTubeImage", "OK"), mk("YouTubeVideoRedirect", "OK"),
+            };
+            var g2 = Tester.GroupStats(good);
+            Check("verdict: healthy pair still works", Tester.IsWorking(g2));
+            Check("verdict: healthy YouTube is ok", g2.youtube.state == "ok");
+
+            // Custom target file without the decisive name falls back to any-target.
+            var noDecisive = new List<TargetResult>
+            {
+                mk("YouTubeCustom", "OK"), mk("DiscordCustom", "OK"),
+            };
+            var g3 = Tester.GroupStats(noDecisive);
+            Check("verdict: missing decisive target falls back to any-target",
+                g3.youtube.works && g3.discord.works && !g3.youtube.hasDecisive);
         }
 
         private static void UiBindingTests()

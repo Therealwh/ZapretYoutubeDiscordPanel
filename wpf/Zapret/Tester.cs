@@ -55,6 +55,11 @@ namespace Ydp.Zapret
         public int probesAll { get; set; }
         public bool works { get; set; }
         public string state { get; set; }
+        /// <summary>Name of the target the verdict came from (e.g. YouTubeWeb).</summary>
+        public string decisiveName { get; set; }
+        /// <summary>That target was actually present in the run.</summary>
+        public bool hasDecisive { get; set; }
+        public bool decisiveOk { get; set; }
     }
 
     public sealed class Groups
@@ -198,10 +203,73 @@ namespace Ydp.Zapret
                 g.probesAll += t.results.Count;
                 if (okProbes > 0) g.okTargets++;
             }
-            groups.discord.works = groups.discord.okTargets > 0;
-            groups.youtube.state = groups.youtube.okTargets > 0 ? "ok" : "dead";
-            groups.youtube.works = groups.youtube.state == "ok";
+
+            // The verdict is decided by the DECISIVE target, not by "any target
+            // answered".
+            //
+            // YouTube's group is four targets: the main page, youtu.be, image
+            // hosts and the video redirect. The image and redirect hosts live on
+            // Google addresses that usually stay reachable even when the main
+            // page is blocked, so "okTargets > 0" reported YouTube as working
+            // while www.youtube.com was dead in DNS - which is why no strategy
+            // ever turned red and why the sweep could "confirm" a broken one.
+            // Same shape for Discord. Falls back to the old any-target rule only
+            // when the decisive target is absent (custom target files).
+            ApplyDecisive(groups.discord, results, "DiscordMain");
+            ApplyDecisive(groups.youtube, results, "YouTubeWeb");
+
+            groups.discord.works = groups.discord.hasDecisive
+                ? groups.discord.decisiveOk
+                : groups.discord.okTargets > 0;
+            groups.youtube.decisiveName = "YouTubeWeb";
+            groups.youtube.works = groups.youtube.hasDecisive
+                ? groups.youtube.decisiveOk
+                : groups.youtube.okTargets > 0;
+            groups.youtube.state = groups.youtube.works ? "ok" : "dead";
             return groups;
+        }
+
+        /// <summary>
+        /// Resolve a group's verdict from its decisive target and remember what
+        /// that target was, so the UI can say WHICH host failed instead of only
+        /// that the service did.
+        /// </summary>
+        private static void ApplyDecisive(GroupStat group, IEnumerable<TargetResult> results, string decisiveName)
+        {
+            group.decisiveName = decisiveName;
+            TargetResult decisive = null;
+            foreach (var t in results)
+            {
+                if (t == null || t.kind != "url") continue;
+                if (string.Equals(t.name, decisiveName, StringComparison.OrdinalIgnoreCase)) { decisive = t; break; }
+            }
+            if (decisive == null) return;
+            group.hasDecisive = true;
+            group.decisiveOk = decisive.results != null && decisive.results.Values.Any(v => v == "OK");
+        }
+
+        /// <summary>
+        /// One line explaining why a strategy was judged unusable, naming the
+        /// host that actually failed rather than just "nothing works".
+        /// </summary>
+        public static string DescribeGroups(Groups groups)
+        {
+            if (groups == null) return "нет данных о проверке";
+            var parts = new List<string>();
+            if (groups.discord != null && !groups.discord.works)
+                parts.Add("Discord: " + HostLabel(groups.discord));
+            if (groups.youtube != null && !groups.youtube.works)
+                parts.Add("YouTube: " + HostLabel(groups.youtube));
+            if (parts.Count == 0) return "ничего не разблокировано";
+            return "не разблокирует — " + string.Join("; ", parts);
+        }
+
+        private static string HostLabel(GroupStat g)
+        {
+            if (g == null) return "нет данных";
+            if (g.hasDecisive && !string.IsNullOrEmpty(g.decisiveName))
+                return g.decisiveName + " не отвечает";
+            return "ни одна цель не отвечает (" + g.okTargets + "/" + g.total + ")";
         }
 
         public static Score ScoreResults(IEnumerable<TargetResult> results)
@@ -443,6 +511,12 @@ public static Reachability CheckReachability(string rootDir, int timeoutSec = 6)
             public bool failed { get; set; }
             public string failReason { get; set; }
 
+            /// <summary>The strategy never got winws running, as opposed to
+            /// running and not unblocking anything. The UI words those
+            /// differently: "did not start" is a broken config, "does not
+            /// unblock" is a config that simply does not fit this network.</summary>
+            public bool launchFailed { get; set; }
+
             /// <summary>
             /// The probes were cut short by an abort.
             ///
@@ -599,6 +673,7 @@ var targets = OrderTargets(LoadTargets(rootDir));
                         name = strat.name,
                         file = strat.file,
                         failed = true,
+                        launchFailed = true,
                         failReason = "winws_не_запустился",
                         score = new Score(),
                         targets = collected,
@@ -611,6 +686,7 @@ var targets = OrderTargets(LoadTargets(rootDir));
 
                 var score = ScoreResults(collected);
                 var groups = GroupStats(collected);
+                bool works = IsWorking(groups);
                 var runResult = new StrategyRunResult
                 {
                     name = strat.name,
@@ -619,6 +695,17 @@ var targets = OrderTargets(LoadTargets(rootDir));
                     groups = groups,
                     targets = new List<TargetResult>(collected),
                     partial = _aborted,
+                    // The tester DOES judge the config now.
+                    //
+                    // It used to leave `failed` false for every strategy that
+                    // merely started, so a full sweep painted them all green even
+                    // when they unblocked nothing - the row colour came from the
+                    // per-target dots, which stayed yellow ("Discord ok, YouTube
+                    // partially"). With the decisive-target verdict that verdict
+                    // is trustworthy, so a strategy that does not unblock Discord
+                    // AND YouTube is marked failed, with the reason.
+                    failed = !works,
+                    failReason = works ? null : DescribeGroups(groups),
                 };
                 result.results.Add(runResult);
                 onProgress?.Invoke(runResult, i, strategies.Count);

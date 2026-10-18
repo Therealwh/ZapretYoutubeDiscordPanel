@@ -764,7 +764,9 @@ public void Execute(object parameter)
             CompactSummary(run, out dotState, out verdict);
 
             StatusNote.Text = run.failed
-                ? $"{run.name} ({(index + 1)}/{total}): не запустилась — {run.failReason}"
+                ? (run.launchFailed
+                    ? $"{run.name} ({(index + 1)}/{total}): не запустилась — {run.failReason}"
+                    : $"{run.name} ({(index + 1)}/{total}): не разблокирует — {run.failReason}")
                 : $"{run.name} ({(index + 1)}/{total}): {verdict}";
 
                         var row = new RunRow
