@@ -24,7 +24,13 @@ namespace Ydp.Zapret
         public const string KeyEnabled = "watchdogEnabled";        // auto-recover
         public const string KeyNotify = "watchdogNotify";          // tray notification
         private const int IntervalMs = 45000;
-        private const int RequiredFails = 2;
+        // 4 consecutive failures (~3 min) before touching the connection.
+        // It was 2 (~90 s), which was short enough that a transient network
+        // blip made the panel reconnect a perfectly working bypass and cut
+        // Telegram for everyone on the machine. The health probe now also runs
+        // every interval just to tint the tray icon, so the streak sees far more
+        // probes than before and has to be correspondingly more patient.
+        private const int RequiredFails = 4;
 
         private static Thread _thread;
         private static volatile bool _stop;
@@ -48,7 +54,10 @@ namespace Ydp.Zapret
 
         public static void Start()
         {
-            if (_thread != null) return;
+            // _thread was left set by a previous Stop(), so a restart would
+            // silently no-op and the panel would lose its health monitor until
+            // restart. Clear it so Start really starts.
+            _thread = null;
             _stop = false;
             _thread = new Thread(Loop) { IsBackground = true, Name = "BypassWatchdog" };
             _thread.Start();
@@ -109,8 +118,14 @@ namespace Ydp.Zapret
                 if (Tester.SweepActive || AutoConnect.IsConnecting) { Reset(); return; }
 
                 // One probe feeds the tray icon and this decision alike.
+                // Probe returns null when another probe is already in flight (the
+                // manual "Проверить обход" button, another watchdog tick). That is
+                // NOT evidence the bypass works: counting it as healthy reset the
+                // failure streak and could mask a real outage forever, so leave the
+                // streak untouched and try again on the next tick.
                 var health = BypassHealth.Probe(root, 4);
-                if (health == null || health.ok) { Reset(); return; }
+                if (health == null) return;
+                if (health.ok) { Reset(); return; }
 
                 int fails = Interlocked.Increment(ref _fails);
                 if (fails < RequiredFails)

@@ -1,5 +1,6 @@
 using System;
 using System.Drawing;
+using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Forms;
 
@@ -52,7 +53,33 @@ namespace Ydp.Services
                 if (state == "ok") c = Color.FromArgb(0x2E, 0xD5, 0x73);       // green
                 else if (state == "err") c = Color.FromArgb(0xE8, 0x4A, 0x4A);  // red
                 else c = Color.FromArgb(0x8A, 0x94, 0xA6);                    // grey
+
+                // NotifyIcon is a WinForms control: it may only be touched from
+                // the thread that owns it (the UI thread). The health monitor and
+                // the engine notifier call this from their own background threads,
+                // and the resulting cross-thread exception was swallowed by the
+                // catch below — the icon silently stopped updating instead of
+                // crashing. Marshal instead.
+                var app = System.Windows.Application.Current;
+                if (app != null && !app.Dispatcher.CheckAccess())
+                {
+                    app.Dispatcher.BeginInvoke(new Action(() => ApplyState(c, tip)));
+                    return;
+                }
+                ApplyState(c, tip);
+            }
+            catch { /* a bad icon must never crash the panel */ }
+        }
+
+        private void ApplyState(Color c, string tip)
+        {
+            try
+            {
+                // Drop the outgoing icon: NotifyIcon does not dispose it, and
+                // SetState runs on every health probe (~every 45 s).
+                var old = _icon.Icon;
                 _icon.Icon = MakeDotIcon(c);
+                if (old != null && !old.Equals(_icon.Icon)) old.Dispose();
                 _icon.Text = string.IsNullOrEmpty(tip) ? "Zapret Panel" : Trim(tip);
             }
             catch { /* a bad icon must never crash the panel */ }
@@ -64,6 +91,17 @@ namespace Ydp.Services
             return s.Length > 127 ? s.Substring(0, 127) : s;   // NotifyIcon limit
         }
 
+        /// <summary>
+        /// Paint the state dot.
+        ///
+        /// GetHicon returns a raw GDI handle and Icon.FromHandle does NOT copy
+        /// it — it wraps the same handle. Whoever creates the HICON must call
+        /// DestroyIcon, otherwise every state change leaks a GDI object. This
+        /// runs on every health probe (~every 45 s), so the leak reached the
+        /// ~10k per-process GDI limit in about two days and killed the panel
+        /// with OutOfMemoryException. Clone into a private Icon, then destroy
+        /// the temporary handle immediately.
+        /// </summary>
         private static Icon MakeDotIcon(Color color)
         {
             using (var bmp = new Bitmap(32, 32))
@@ -77,9 +115,22 @@ namespace Ydp.Services
                     using (var pen = new Pen(Color.FromArgb(0x20, 0x20, 0x28), 2))
                         g.DrawEllipse(pen, 4, 4, 24, 24);
                 }
-                return Icon.FromHandle(bmp.GetHicon());
+                IntPtr hIcon = bmp.GetHicon();
+                try
+                {
+                    using (var tmp = Icon.FromHandle(hIcon))
+                    using (var clone = (Icon)tmp.Clone())
+                    {
+                        return clone;
+                    }
+                }
+                finally { DestroyIcon(hIcon); }
             }
         }
+
+        [DllImport("user32.dll", SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool DestroyIcon(IntPtr hIcon);
 
         private static Icon LoadIcon()
         {

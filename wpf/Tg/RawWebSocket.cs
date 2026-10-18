@@ -58,7 +58,10 @@ namespace Ydp.Tg
                 var connect = tcp.ConnectAsync(connectHost, 443);
                 if (await Task.WhenAny(connect, Task.Delay(timeoutMs)) != connect)
                 {
-                    log?.Invoke("tcp timeout " + connectHost, "warn");
+                    // No log here on purpose: every caller already logs the
+                    // failure with its own context (DC id, host, route), so
+                    // logging here too wrote every Cloudflare relay failure
+                    // twice — once bare, once prefixed — and drowned the log.
                     throw new IOException("tcp_timeout");
                 }
                 await connect;

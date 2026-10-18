@@ -52,10 +52,14 @@ namespace Ydp.Services
             var dicts = app.Resources.MergedDictionaries;
             if (dicts.Count == 0) return;
 
-            // Index 0 is the palette by construction (see App.xaml).
-            if (_palette == null) _palette = dicts[0];
+            // Index 0 is the palette by construction (see App.xaml). Read it
+            // from the live list every time instead of trusting a cached
+            // reference: if anything else replaced index 0, the stale cache
+            // would make Apply() think the theme is already active and the
+            // switch would silently do nothing.
+            var current = dicts[0];
 
-            string currentPath = SourceOf(_palette);
+            string currentPath = SourceOf(current);
             string wantedPath = theme == Light ? LightPaletteUri : DarkPaletteUri;
             if (string.Equals(currentPath, wantedPath, StringComparison.OrdinalIgnoreCase)) return;
 
