@@ -48,13 +48,29 @@ jobs:
         run: |
           # The installer offers a fully offline first run, so the release
           # ships the latest zapret zip next to the setup exe.
-          $json = Invoke-RestMethod `
-            -Uri 'https://api.github.com/repos/Flowseal/zapret-discord-youtube/releases/latest' `
-            -Headers @{ 'User-Agent' = 'YoutubeDiscordPanel' }
-          $asset = $json.assets | Where-Object { $_.name -like '*.zip' } | Select-Object -First 1
-          if (-not $asset) { throw 'No zapret .zip asset in the latest release' }
-          Invoke-WebRequest -Uri $asset.browser_download_url -OutFile 'zapret-bundled.zip'
-          Write-Host "bundled zapret $($json.tag_name): $($asset.name)"
+          #
+          # Retried on purpose: this step depends on a THIRD-PARTY repo and it
+          # failed two releases in a row on a plain network blip, taking the
+          # whole release down with it. Transient failures are the normal case
+          # here, not the exception, so retry before giving up.
+          $api = 'https://api.github.com/repos/Flowseal/zapret-discord-youtube/releases/latest'
+          $json = $null
+          $asset = $null
+          for ($attempt = 1; $attempt -le 5; $attempt++) {
+            try {
+              $json = Invoke-RestMethod -Uri $api -Headers @{ 'User-Agent' = 'YoutubeDiscordPanel' }
+              $asset = $json.assets | Where-Object { $_.name -like '*.zip' } | Select-Object -First 1
+              if (-not $asset) { throw 'No zapret .zip asset in the latest release' }
+              Invoke-WebRequest -Uri $asset.browser_download_url -OutFile 'zapret-bundled.zip'
+              if ((Get-Item 'zapret-bundled.zip').Length -lt 100000) { throw 'zapret zip is suspiciously small' }
+              break
+            } catch {
+              Write-Host "attempt $attempt failed: $($_.Exception.Message)"
+              if ($attempt -eq 5) { throw }
+              Start-Sleep -Seconds (5 * $attempt)
+            }
+          }
+          Write-Host "bundled zapret $($json.tag_name): $($asset.name) (after up to 5 attempts)"
 
       - name: Run self tests
         if: steps.ver.outputs.skip != 'true'
