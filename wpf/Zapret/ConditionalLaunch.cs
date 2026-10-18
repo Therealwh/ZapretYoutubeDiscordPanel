@@ -122,7 +122,7 @@ namespace Ydp.Zapret
                                      && string.Equals(current, want, StringComparison.OrdinalIgnoreCase);
                         if (!active)
                         {
-                            Logger.Info("РЈСЃР»РѕРІРЅС‹Р№ Р·Р°РїСѓСЃРє: " + rule.process + " СЂР°Р±РѕС‚Р°РµС‚ в†’ СЃС‚СЂР°С‚РµРіРёСЏ " + want, "cond");
+                            Logger.Info("Условный запуск: " + rule.process + " работает → стратегия " + want, "cond");
                             if (string.Equals(Config.Get(AutoConnect.KeyPreferService, "true"), "true", StringComparison.OrdinalIgnoreCase))
                                 ServiceOps.InstallStrategyAsService(root, rule.strategyFile);
                             else
@@ -137,7 +137,7 @@ namespace Ydp.Zapret
                         var want = System.IO.Path.GetFileNameWithoutExtension(rule.strategyFile);
                         if (current != null && string.Equals(current, want, StringComparison.OrdinalIgnoreCase))
                         {
-                            Logger.Info("РЈСЃР»РѕРІРЅС‹Р№ Р·Р°РїСѓСЃРє: " + rule.process + " Р·Р°РєСЂС‹С‚ в†’ РѕСЃС‚Р°РЅРѕРІРєР° РѕР±С…РѕРґР°", "cond");
+                            Logger.Info("Условный запуск: " + rule.process + " закрыт → остановка обхода", "cond");
                             ServiceOps.ResetBypass();
                         }
                     }
@@ -145,7 +145,7 @@ namespace Ydp.Zapret
             }
             catch (Exception ex)
             {
-                Logger.Warn("РЈСЃР»РѕРІРЅС‹Р№ Р·Р°РїСѓСЃРє: " + ex.Message, "cond");
+                Logger.Warn("Условный запуск: " + ex.Message, "cond");
             }
             finally
             {

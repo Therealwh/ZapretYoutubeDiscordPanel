@@ -28,6 +28,10 @@ namespace Ydp.Services
 
         private static ResourceDictionary _palette;
 
+        /// <summary>Raised after the palette actually changed. The tray menu
+        /// uses it to restyle itself to the new theme.</summary>
+        public static event Action ThemeChanged;
+
         /// <summary>Current theme, as stored. Always Dark or Light.</summary>
         public static string Current
         {
@@ -69,6 +73,7 @@ namespace Ydp.Services
             // that window would fall back to system defaults (white flashes).
             dicts[0] = replacement;
             _palette = replacement;
+            try { ThemeChanged?.Invoke(); } catch { /* a restyle listener must not break the switch */ }
         }
 
         /// <summary>Apply and remember. Used by the settings selector.</summary>

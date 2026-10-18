@@ -1,4 +1,4 @@
-// Antivirus helper: detects which AV products watch the process, explains the
+﻿// Antivirus helper: detects which AV products watch the process, explains the
 // false-positive (WinDivert hooks packets, so every AV flags it), and offers a
 // one-click Defender exclusion. Third-party AVs cannot be configured from
 // code on purpose - we only show the folder path to whitelist.

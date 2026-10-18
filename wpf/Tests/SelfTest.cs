@@ -1,4 +1,4 @@
-// Self-tests for the ported logic: crypto, strategy parsing, scoring, list ops.
+﻿// Self-tests for the ported logic: crypto, strategy parsing, scoring, list ops.
 // Plain console runner (no NuGet test framework) so the 1-3 MB build stays
 // dependency-free; exit code 1 on any failure.
 using System;
@@ -25,7 +25,7 @@ namespace Ydp.Tests
         private static void Equal(string name, string expected, string actual)
         {
             Check(name, string.Equals(expected, actual, StringComparison.Ordinal),
-                "Р С•Р В¶Р С‘Р Т‘Р В°Р В»Р С•РЎРѓРЎРЉ \"" + expected + "\", Р С—Р С•Р В»РЎС“РЎвЂЎР ВµР Р…Р С• \"" + actual + "\"");
+                "ожидалось \"" + expected + "\", получено \"" + actual + "\"");
         }
 
         private static void Guard(string group, Action body)
@@ -36,7 +36,7 @@ namespace Ydp.Tests
             }
             catch (Exception ex)
             {
-                Failures.Add(group + " РІР‚вЂќ Р ВР РЋР С™Р вЂєР В®Р В§Р вЂўР СњР ВР вЂў: " + ex.GetType().Name + ": " + ex.Message);
+                Failures.Add(group + " — ИСКЛЮЧЕНИЕ: " + ex.GetType().Name + ": " + ex.Message);
             }
         }
 
@@ -171,7 +171,7 @@ namespace Ydp.Tests
             Check("handshake parses with the right secret", parsed != null);
             if (parsed != null)
             {
-                Check("dc id detected", parsed.DcId == 2, "Р С—Р С•Р В»РЎС“РЎвЂЎР ВµР Р…Р С• " + parsed.DcId);
+                Check("dc id detected", parsed.DcId == 2, "получено " + parsed.DcId);
                 Check("not media", parsed.IsMedia == false);
                 Check("proto tag preserved", TgCrypto.IsIntermediate(parsed.ProtoTag));
             }
@@ -199,7 +199,7 @@ namespace Ydp.Tests
                 byte[] decoded = stream.Update(relayInit, 0, 64);
                 Check("relay init carries the proto tag", TgCrypto.IsIntermediate(new[] { decoded[56], decoded[57], decoded[58], decoded[59] }));
                 short dc = BitConverter.ToInt16(decoded, 60);
-                Check("relay init carries the dc id", dc == 2, "Р С—Р С•Р В»РЎС“РЎвЂЎР ВµР Р…Р С• " + dc);
+                Check("relay init carries the dc id", dc == 2, "получено " + dc);
             }
 
             // keystream continuity: the counter must advance between blocks
@@ -332,7 +332,7 @@ namespace Ydp.Tests
             Check("splitter buffers a partial packet", firstHalf.Count == 0);
             var rest = partial.Push(new byte[6], Slice(packetPlain, 6, 6));
             Check("splitter completes the packet", rest.Count == 1 && rest[0].Length == 12,
-                "РЎвЂЎР В°РЎРѓРЎвЂљР ВµР в„–: " + rest.Count);
+                "частей: " + rest.Count);
         }
 
         private static byte[] Slice(byte[] source, int offset, int count)
@@ -418,15 +418,15 @@ namespace Ydp.Tests
             try
             {
                 var parsed = Tester.ParseOriginalReport(tmp);
-                Check("orig: two configs", parsed.results.Count == 2, "Р С—Р С•Р В»РЎС“РЎвЂЎР ВµР Р…Р С• " + parsed.results.Count);
+                Check("orig: two configs", parsed.results.Count == 2, "получено " + parsed.results.Count);
                 var alt = parsed.results.FirstOrDefault(r => r.name == "general (ALT).bat");
                 Check("orig: config kept", alt != null);
                 if (alt != null)
                 {
-                    Check("orig: three targets", alt.targets.Count == 3, "Р С—Р С•Р В»РЎС“РЎвЂЎР ВµР Р…Р С• " + alt.targets.Count);
+                    Check("orig: three targets", alt.targets.Count == 3, "получено " + alt.targets.Count);
                     var dm = alt.targets[0];
-                    Equal("orig: HTTP token", "OK", dm.results.ContainsKey("HTTP") ? dm.results["HTTP"] : "Р Р…Р ВµРЎвЂљ");
-                    Equal("orig: TLS1.3 token", "UNSUP", dm.results.ContainsKey("TLS1.3") ? dm.results["TLS1.3"] : "Р Р…Р ВµРЎвЂљ");
+                    Equal("orig: HTTP token", "OK", dm.results.ContainsKey("HTTP") ? dm.results["HTTP"] : "нет");
+                    Equal("orig: TLS1.3 token", "UNSUP", dm.results.ContainsKey("TLS1.3") ? dm.results["TLS1.3"] : "нет");
                     Equal("orig: url kind", "url", dm.kind);
                     var dns = alt.targets[2];
                     Equal("orig: ping-only kind", "ping", dns.kind);
@@ -436,10 +436,10 @@ namespace Ydp.Tests
                 var alt2 = parsed.results.FirstOrDefault(r => r.name == "general (ALT2).bat");
                 if (alt2 != null)
                     Check("orig: ERROR is bad state", Tester.TokenState(alt2.targets[0]) == "bad",
-                        "Р С—Р С•Р В»РЎС“РЎвЂЎР ВµР Р…Р С• " + Tester.TokenState(alt2.targets[0]));
+                        "получено " + Tester.TokenState(alt2.targets[0]));
                 Check("orig: UNSUP is warn state",
                     alt != null && Tester.TokenState(alt.targets[0]) == "warn",
-                    alt == null ? "Р Р…Р ВµРЎвЂљ Р С”Р С•Р Р…РЎвЂћР С‘Р С–Р В°" : "Р С—Р С•Р В»РЎС“РЎвЂЎР ВµР Р…Р С• " + Tester.TokenState(alt.targets[0]));
+                    alt == null ? "нет конфига" : "получено " + Tester.TokenState(alt.targets[0]));
             }
             finally
             {
@@ -455,7 +455,7 @@ namespace Ydp.Tests
             {
                 Equal("console: name", "DiscordMain", consoleRow.name);
                 Equal("console: kind", "url", consoleRow.kind);
-                Equal("console: HTTP", "OK", consoleRow.results.ContainsKey("HTTP") ? consoleRow.results["HTTP"] : "Р Р…Р ВµРЎвЂљ");
+                Equal("console: HTTP", "OK", consoleRow.results.ContainsKey("HTTP") ? consoleRow.results["HTTP"] : "нет");
                 Equal("console: ping", "6 ms", consoleRow.result);
             }
             var consolePing = Tester.ParseTargetLine("  CloudflareDNS1111    Ping: 7 ms");
@@ -517,7 +517,7 @@ namespace Ydp.Tests
                 File.WriteAllText(Path.Combine(root, "lists", "list-general-user.txt"),
                     "# comment\n\nexample.com\nexample.com\nbad_domain\n");
                 var stats = Lists.Stats(root, "general");
-                Check("stats count lines", stats.lines == 3, "Р С—Р С•Р В»РЎС“РЎвЂЎР ВµР Р…Р С• " + stats.lines);
+                Check("stats count lines", stats.lines == 3, "получено " + stats.lines);
                 Check("stats count duplicates", stats.duplicates == 1);
                 Check("stats count comments", stats.comments == 1);
 
@@ -541,7 +541,7 @@ namespace Ydp.Tests
         }
 
         /// <summary>
-        /// Regression guard for the "Р С›РЎвЂљР С”РЎР‚РЎвЂ№РЎвЂљРЎРЉ" bug: RunRow used to raise
+        /// Regression guard for the "Открыть" bug: RunRow used to raise
         /// PropertyChanged WITHOUT implementing INotifyPropertyChanged, so WPF
         /// never subscribed and the Expanded-driven Visibility stayed Collapsed
         /// no matter what the property was set to. Binding a real element to a

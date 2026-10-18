@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Drawing;
 using System.Runtime.InteropServices;
 using System.Windows;
@@ -20,13 +20,15 @@ namespace Ydp.Services
         public TrayIcon(Window window)
         {
             _window = window;
+            ThemeManager.ThemeChanged += OnThemeChanged;
 
             var menu = new ContextMenuStrip();
-            menu.Items.Add("Р С›РЎвЂљР С”РЎР‚РЎвЂ№РЎвЂљРЎРЉ Р С—Р В°Р Р…Р ВµР В»РЎРЉ", null, (s, e) => Show());
-            menu.Items.Add(new ToolStripSeparator());
+            StyleMenu(menu);
+            menu.Items.Add(MenuItem("Открыть панель", null, (s, e) => Show()));
+            menu.Items.Add(Separator());
             // Pinned strategies: one click switches the bypass to that strategy,
             // no window needed. Built fresh on every open so pins stay current.
-            var pinned = new ToolStripMenuItem("Р РЋРЎвЂљРЎР‚Р В°РЎвЂљР ВµР С–Р С‘Р С‘");
+            var pinned = MenuItem("Стратегии", null, null);
             pinned.DropDownOpening += (s, e) =>
             {
                 pinned.DropDownItems.Clear();
@@ -36,8 +38,9 @@ namespace Ydp.Services
                     .Split(new[] { '|' }, StringSplitOptions.RemoveEmptyEntries);
                 if (pins.Length == 0)
                 {
-                    var none = pinned.DropDownItems.Add("Р СњР ВµРЎвЂљ Р В·Р В°Р С”РЎР‚Р ВµР С—Р В»РЎвЂР Р…Р Р…РЎвЂ№РЎвЂ¦ РІР‚вЂќ Р В·Р В°Р С”РЎР‚Р ВµР С—Р С‘РЎвЂљР Вµ Р Р…Р В° РЎРѓРЎвЂљРЎР‚Р В°Р Р…Р С‘РЎвЂ Р Вµ Р’В«Р РЋРЎвЂљРЎР‚Р В°РЎвЂљР ВµР С–Р С‘Р С‘Р’В»");
+                    var none = MenuItem("Нет закреплённых — закрепите на странице «Стратегии»", null, null);
                     none.Enabled = false;
+                    pinned.DropDownItems.Add(none);
                     return;
                 }
                 foreach (var pin in pins)
@@ -45,21 +48,19 @@ namespace Ydp.Services
                     var name = pin.Trim();
                     var file = System.IO.Path.Combine(root, name);
                     if (!System.IO.File.Exists(file)) file = System.IO.Path.Combine(root, name.EndsWith(".bat", StringComparison.OrdinalIgnoreCase) ? name : name + ".bat");
-                    var item = new ToolStripMenuItem(name)
-                    {
-                        Checked = current != null && string.Equals(
-                            System.IO.Path.GetFileNameWithoutExtension(current),
-                            System.IO.Path.GetFileNameWithoutExtension(name), StringComparison.OrdinalIgnoreCase),
-                    };
+                    var item = MenuItem(name, null, null);
+                    item.Checked = current != null && string.Equals(
+                        System.IO.Path.GetFileNameWithoutExtension(current),
+                        System.IO.Path.GetFileNameWithoutExtension(name), StringComparison.OrdinalIgnoreCase);
                     var captured = file;
                     item.Click += (s2, e2) => SwitchToStrategy(root, captured);
                     pinned.DropDownItems.Add(item);
                 }
             };
             menu.Items.Add(pinned);
-            menu.Items.Add("Р СџР С•Р Т‘Р С”Р В»РЎР‹РЎвЂЎР С‘РЎвЂљРЎРЉ РЎР‚Р В°Р В±Р С•РЎвЂЎР С‘Р в„– Р С•Р В±РЎвЂ¦Р С•Р Т‘", null, async (s, e) => await ConnectWorkingAsync());
-            menu.Items.Add(new ToolStripSeparator());
-            menu.Items.Add("Р вЂ™РЎвЂ№РЎвЂ¦Р С•Р Т‘", null, (s, e) => Environment.Exit(0));
+            menu.Items.Add(MenuItem("Подключить рабочий обход", null, async (s, e) => await ConnectWorkingAsync()));
+            menu.Items.Add(Separator());
+            menu.Items.Add(MenuItem("Выход", null, (s, e) => Environment.Exit(0)));
 
             _icon = new NotifyIcon
             {
@@ -70,7 +71,7 @@ namespace Ydp.Services
             };
             _icon.DoubleClick += (s, e) => Show();
             // A click on an update balloon should bring the panel up: that is
-            // where the "Р С›Р В±Р Р…Р С•Р Р†Р С‘РЎвЂљРЎРЉ" button lives.
+            // where the "Обновить" button lives.
             _icon.BalloonTipClicked += (s, e) => Show();
         }
 
@@ -213,18 +214,188 @@ namespace Ydp.Services
         {
             string root = Zapret.Status.ResolveRoot(Config.Get("zapretRoot", null));
             if (string.IsNullOrEmpty(root)) return;
-            Logger.Info("Р СџР С•Р Т‘Р С”Р В»РЎР‹РЎвЂЎР ВµР Р…Р С‘Р Вµ РЎР‚Р В°Р В±Р С•РЎвЂЎР ВµР С–Р С• Р С•Р В±РЎвЂ¦Р С•Р Т‘Р В° Р С‘Р В· РЎвЂљРЎР‚Р ВµРЎРЏ", "autoconnect");
+            Logger.Info("Подключение рабочего обхода из трея", "autoconnect");
             var result = await System.Threading.Tasks.Task.Run(() =>
                 Zapret.AutoConnect.Connect(root, msg => Logger.Info(msg, "autoconnect"), null));
             string text = result.ok
-                ? "Р В Р В°Р В±Р С•РЎвЂЎР С‘Р в„– Р С•Р В±РЎвЂ¦Р С•Р Т‘ Р С—Р С•Р Т‘Р С”Р В»РЎР‹РЎвЂЎРЎвЂР Р…: " + result.strategy
-                : "Р СњР Вµ РЎС“Р Т‘Р В°Р В»Р С•РЎРѓРЎРЉ Р С—Р С•Р Т‘Р С”Р В»РЎР‹РЎвЂЎР С‘РЎвЂљРЎРЉ: " + (result.reason ?? "Р С•РЎв‚¬Р С‘Р В±Р С”Р В°");
+                ? "Рабочий обход подключён: " + result.strategy
+                : "Не удалось подключить: " + (result.reason ?? "ошибка");
             Logger.Info(text, "autoconnect");
             Show();
         }
 
         /// <summary>Lets the window really close instead of hiding to the tray.</summary>
         public Action AllowClose { get; set; }
+
+        // ---- tray menu styling (matches the panel theme) ----------------
+
+        private ToolStripMenuItem MenuItem(string text, Image img, EventHandler onClick)
+        {
+            var item = new ToolStripMenuItem(text, img, onClick);
+            StyleItem(item);
+            return item;
+        }
+
+        private ToolStripSeparator Separator()
+        {
+            var sep = new ToolStripSeparator();
+            StyleSeparator(sep);
+            return sep;
+        }
+
+        /// <summary>
+        /// Read the current palette's hex colors straight from the merged
+        /// dictionary so the menu always matches whatever theme is active.
+        /// Falls back to the dark values when a key is missing.
+        /// </summary>
+        private System.Drawing.Color PaletteColor(string key, string fallbackHex)
+        {
+            try
+            {
+                var app = System.Windows.Application.Current;
+                if (app != null && app.Resources.Contains(key))
+                {
+                    var c = (System.Windows.Media.Color)app.Resources[key];
+                    return System.Drawing.Color.FromArgb(c.A, c.R, c.G, c.B);
+                }
+            }
+            catch { /* fall through to the fallback */ }
+            var hex = fallbackHex.TrimStart('#');
+            return System.Drawing.Color.FromArgb(
+                Convert.ToByte(hex.Substring(0, 2), 16),
+                Convert.ToByte(hex.Substring(2, 2), 16),
+                Convert.ToByte(hex.Substring(4, 2), 16));
+        }
+
+        private void StyleMenu(ContextMenuStrip menu)
+        {
+            menu.Renderer = new PanelMenuRenderer(
+                () => PaletteColor("BgCardColor", "#1B2336"),
+                () => PaletteColor("BgHoverColor", "#252D42"),
+                () => PaletteColor("BorderColor", "#334155"));
+            menu.ShowImageMargin = false;
+            menu.ShowCheckMargin = true;
+            menu.BackColor = PaletteColor("BgCardColor", "#1B2336");
+            menu.ForeColor = PaletteColor("TextColor", "#F8FAFC");
+            menu.Font = new Font("Segoe UI", 9.5f);
+        }
+
+        private void StyleItem(ToolStripMenuItem item)
+        {
+            item.BackColor = PaletteColor("BgCardColor", "#1B2336");
+            item.ForeColor = PaletteColor("TextColor", "#F8FAFC");
+            // Hover: the accent-tinted hover color from the palette.
+            item.MouseEnter += (s, e) =>
+            {
+                item.BackColor = PaletteColor("BgHoverColor", "#252D42");
+                item.ForeColor = PaletteColor("TextColor", "#F8FAFC");
+            };
+            item.MouseLeave += (s, e) =>
+            {
+                item.BackColor = PaletteColor("BgCardColor", "#1B2336");
+                item.ForeColor = PaletteColor("TextColor", "#F8FAFC");
+            };
+        }
+
+        private void StyleSeparator(ToolStripSeparator sep)
+        {
+            sep.BackColor = PaletteColor("BgCardColor", "#1B2336");
+            sep.ForeColor = PaletteColor("BorderColor", "#334155");
+        }
+
+        private void OnThemeChanged()
+        {
+            try
+            {
+                if (_icon.ContextMenuStrip is ContextMenuStrip menu)
+                {
+                    StyleMenu(menu);
+                    foreach (ToolStripItem it in menu.Items) StyleItems(it);
+                }
+            }
+            catch { /* restyle must never crash the tray */ }
+        }
+
+        private void StyleItems(ToolStripItem item)
+        {
+            if (item is ToolStripMenuItem mi)
+            {
+                StyleItem(mi);
+                foreach (ToolStripItem child in mi.DropDownItems) StyleItems(child);
+            }
+            else if (item is ToolStripSeparator sep)
+            {
+                StyleSeparator(sep);
+            }
+        }
+
+        /// <summary>ToolStripRenderer that paints the menu in the panel's card
+        /// color with a subtle border, instead of the default blue Windows look.</summary>
+        private sealed class PanelMenuRenderer : ToolStripProfessionalRenderer
+        {
+            private readonly Func<System.Drawing.Color> _bg;
+            private readonly Func<System.Drawing.Color> _hover;
+            private readonly Func<System.Drawing.Color> _border;
+
+            public PanelMenuRenderer(Func<System.Drawing.Color> bg, Func<System.Drawing.Color> hover, Func<System.Drawing.Color> border)
+                : base(new PanelMenuColors(bg, hover, border))
+            {
+                _bg = bg;
+                _hover = hover;
+                _border = border;
+                RoundedEdges = false;
+            }
+
+            protected override void OnRenderMenuItemBackground(ToolStripItemRenderEventArgs e)
+            {
+                var rect = new System.Drawing.Rectangle(System.Drawing.Point.Empty, e.Item.Size);
+                // Selected items get the palette hover tint; the rest the card color.
+                var fill = e.Item.Selected ? _hover() : _bg();
+                using (var b = new System.Drawing.SolidBrush(fill))
+                {
+                    e.Graphics.FillRectangle(b, rect);
+                }
+            }
+
+            protected override void OnRenderToolStripBorder(ToolStripRenderEventArgs e)
+            {
+                var border = _border();
+                using (var p = new System.Drawing.Pen(border))
+                {
+                    e.Graphics.DrawRectangle(p, 0, 0, e.ToolStrip.Width - 1, e.ToolStrip.Height - 1);
+                }
+            }
+        }
+
+        private sealed class PanelMenuColors : ProfessionalColorTable
+        {
+            private readonly Func<System.Drawing.Color> _bg;
+            private readonly Func<System.Drawing.Color> _hover;
+            private readonly Func<System.Drawing.Color> _border;
+            public PanelMenuColors(Func<System.Drawing.Color> bg, Func<System.Drawing.Color> hover, Func<System.Drawing.Color> border)
+            {
+                _bg = bg;
+                _hover = hover;
+                _border = border;
+            }
+
+            public override System.Drawing.Color ToolStripDropDownBackground => _bg();
+            public override System.Drawing.Color ImageMarginGradientBegin => _bg();
+            public override System.Drawing.Color ImageMarginGradientMiddle => _bg();
+            public override System.Drawing.Color ImageMarginGradientEnd => _bg();
+            public override System.Drawing.Color MenuBorder => _border();
+            public override System.Drawing.Color MenuItemBorder => System.Drawing.Color.Transparent;
+            public override System.Drawing.Color MenuItemSelected => _hover();
+            public override System.Drawing.Color MenuItemSelectedGradientBegin => _hover();
+            public override System.Drawing.Color MenuItemSelectedGradientEnd => _hover();
+            public override System.Drawing.Color MenuItemPressedGradientBegin => _bg();
+            public override System.Drawing.Color MenuItemPressedGradientEnd => _bg();
+            public override System.Drawing.Color SeparatorDark => System.Drawing.Color.FromArgb(51, 65, 85);
+            public override System.Drawing.Color SeparatorLight => System.Drawing.Color.FromArgb(51, 65, 85);
+            public override System.Drawing.Color CheckBackground => System.Drawing.Color.Transparent;
+            public override System.Drawing.Color CheckSelectedBackground => System.Drawing.Color.Transparent;
+            public override System.Drawing.Color CheckPressedBackground => System.Drawing.Color.Transparent;
+        }
 
         private void Exit()
         {
@@ -262,7 +433,7 @@ namespace Ydp.Services
         {
             try
             {
-                Logger.Info("Р СћРЎР‚Р ВµР в„–: РЎРѓР СР ВµР Р…Р В° РЎРѓРЎвЂљРЎР‚Р В°РЎвЂљР ВµР С–Р С‘Р С‘ Р Р…Р В° " + System.IO.Path.GetFileName(strategyFile), "tray");
+                Logger.Info("Трей: смена стратегии на " + System.IO.Path.GetFileName(strategyFile), "tray");
                 System.Threading.Tasks.Task.Run(() =>
                 {
                     bool preferService = string.Equals(
@@ -270,12 +441,12 @@ namespace Ydp.Services
                     var r = preferService
                         ? InstallStrategyAsServiceSafe(rootDir, strategyFile)
                         : LaunchStrategyProcessSafe(rootDir, strategyFile);
-                    Logger.Info("Р СћРЎР‚Р ВµР в„–: " + (r ? "РЎРѓРЎвЂљРЎР‚Р В°РЎвЂљР ВµР С–Р С‘РЎРЏ Р С—РЎР‚Р С‘Р СР ВµР Р…Р ВµР Р…Р В°" : "Р Р…Р Вµ РЎС“Р Т‘Р В°Р В»Р С•РЎРѓРЎРЉ Р С—РЎР‚Р С‘Р СР ВµР Р…Р С‘РЎвЂљРЎРЉ"), "tray");
+                    Logger.Info("Трей: " + (r ? "стратегия применена" : "не удалось применить"), "tray");
                 });
             }
             catch (Exception ex)
             {
-                Logger.Warn("Р СћРЎР‚Р ВµР в„–: " + ex.Message, "tray");
+                Logger.Warn("Трей: " + ex.Message, "tray");
             }
         }
 

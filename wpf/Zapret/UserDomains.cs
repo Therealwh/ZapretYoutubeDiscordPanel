@@ -68,10 +68,10 @@ namespace Ydp.Zapret
             foreach (var d in domains ?? Enumerable.Empty<string>())
             {
                 var n = Normalize(d);
-                if (n == null) { error = "РќРµРєРѕСЂСЂРµРєС‚РЅС‹Р№ Р°РґСЂРµСЃ: " + d; return 0; }
+                if (n == null) { error = "Некорректный адрес: " + d; return 0; }
                 if (!normalized.Contains(n, StringComparer.OrdinalIgnoreCase)) normalized.Add(n);
             }
-            if (normalized.Count == 0) { error = "РџСѓСЃС‚РѕР№ СЃРїРёСЃРѕРє"; return 0; }
+            if (normalized.Count == 0) { error = "Пустой список"; return 0; }
 
             var existing = ReadAll(rootDir);
             var toAdd = normalized.Where(n => !existing.Contains(n, StringComparer.OrdinalIgnoreCase)).ToList();

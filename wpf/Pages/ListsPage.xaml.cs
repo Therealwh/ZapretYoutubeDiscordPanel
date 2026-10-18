@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -24,7 +24,7 @@ namespace Ydp.Pages
             _root = Status.ResolveRoot(Config.Get("zapretRoot", null));
             if (string.IsNullOrEmpty(_root))
             {
-                Editor.Text = "Р СџР В°Р С—Р С”Р В° zapret Р Р…Р Вµ Р Р…Р В°Р в„–Р Т‘Р ВµР Р…Р В° РІР‚вЂќ РЎС“Р С”Р В°Р В¶Р С‘РЎвЂљР Вµ Р ВµРЎвЂ Р Р† Р Р…Р В°РЎРѓРЎвЂљРЎР‚Р С•Р в„–Р С”Р В°РЎвЂ¦.";
+                Editor.Text = "Папка zapret не найдена — укажите её в настройках.";
                 Editor.IsEnabled = false;
                 return;
             }
@@ -59,19 +59,19 @@ namespace Ydp.Pages
         private void UpdateStats()
         {
             var stats = Lists.Stats(_root, _key);
-            Stats.Text = $"РЎРѓРЎвЂљРЎР‚Р С•Р С”: {stats.lines} Р’В· Р С”Р С•Р СР СР ВµР Р…РЎвЂљР В°РЎР‚Р С‘Р ВµР Р†: {stats.comments} Р’В· Р С—РЎС“РЎРѓРЎвЂљРЎвЂ№РЎвЂ¦: {stats.blank} Р’В· Р Т‘РЎС“Р В±Р В»Р ВµР в„–: {stats.duplicates} Р’В· Р Р…Р ВµР С”Р С•РЎР‚РЎР‚Р ВµР С”РЎвЂљР Р…РЎвЂ№РЎвЂ¦: {stats.invalid}";
+            Stats.Text = $"строк: {stats.lines} · комментариев: {stats.comments} · пустых: {stats.blank} · дублей: {stats.duplicates} · некорректных: {stats.invalid}";
         }
 
         private void BtnSave_Click(object sender, RoutedEventArgs e)
         {
             if (Lists.Write(_root, _key, Editor.Text))
             {
-                Logger.Info("Р РЋР С—Р С‘РЎРѓР С•Р С” РЎРѓР С•РЎвЂ¦РЎР‚Р В°Р Р…РЎвЂР Р…: " + _key, "lists");
+                Logger.Info("Список сохранён: " + _key, "lists");
                 UpdateStats();
             }
             else
             {
-                Stats.Text = "Р СњР Вµ РЎС“Р Т‘Р В°Р В»Р С•РЎРѓРЎРЉ РЎРѓР С•РЎвЂ¦РЎР‚Р В°Р Р…Р С‘РЎвЂљРЎРЉ (Р Р…Р ВµРЎвЂљ Р С—РЎР‚Р В°Р Р† Р Р…Р В° Р В·Р В°Р С—Р С‘РЎРѓРЎРЉ?).";
+                Stats.Text = "Не удалось сохранить (нет прав на запись?).";
             }
         }
 
@@ -128,14 +128,14 @@ namespace Ydp.Pages
             {
                 // Defensive: guarantee the proxy domains are present.
                 Zapret.FirstRun.EnsureTelegramDomains(_root);
-                Logger.Info("Р вЂњР С•РЎвЂљР С•Р Р†РЎвЂ№Р в„– РЎРѓР С—Р С‘РЎРѓР С•Р С”: Р С”Р В°РЎвЂљР ВµР С–Р С•РЎР‚Р С‘РЎРЏ Р’В«" + category + "Р’В» Р С•Р В±Р Р…Р С•Р Р†Р В»Р ВµР Р…Р В°", "lists");
+                Logger.Info("Готовый список: категория «" + category + "» обновлена", "lists");
                 TabGeneral.IsChecked = true;
                 _key = "general";
                 Load();
             }
             else
             {
-                Stats.Text = "Р СњР Вµ РЎС“Р Т‘Р В°Р В»Р С•РЎРѓРЎРЉ РЎРѓР С•РЎвЂ¦РЎР‚Р В°Р Р…Р С‘РЎвЂљРЎРЉ РЎРѓР С—Р С‘РЎРѓР С•Р С” (Р Р…Р ВµРЎвЂљ Р С—РЎР‚Р В°Р Р† Р Р…Р В° Р В·Р В°Р С—Р С‘РЎРѓРЎРЉ?).";
+                Stats.Text = "Не удалось сохранить список (нет прав на запись?).";
             }
         }
 
@@ -147,14 +147,14 @@ namespace Ydp.Pages
                 existing, DiscordPreset, YouTubePreset, Zapret.FirstRun.TelegramDomains());
             if (Lists.Write(_root, "general", organized))
             {
-                Logger.Info("Р РЋР С—Р С‘РЎРѓР С•Р С” РЎР‚Р В°Р В·Р В»Р С•Р В¶Р ВµР Р… Р С—Р С• Р С”Р В°РЎвЂљР ВµР С–Р С•РЎР‚Р С‘РЎРЏР С", "lists");
+                Logger.Info("Список разложен по категориям", "lists");
                 TabGeneral.IsChecked = true;
                 _key = "general";
                 Load();
             }
             else
             {
-                Stats.Text = "Р СњР Вµ РЎС“Р Т‘Р В°Р В»Р С•РЎРѓРЎРЉ РЎР‚Р В°Р В·Р В»Р С•Р В¶Р С‘РЎвЂљРЎРЉ Р С—Р С• Р С”Р В°РЎвЂљР ВµР С–Р С•РЎР‚Р С‘РЎРЏР С (Р Р…Р ВµРЎвЂљ Р С—РЎР‚Р В°Р Р† Р Р…Р В° Р В·Р В°Р С—Р С‘РЎРѓРЎРЉ?).";
+                Stats.Text = "Не удалось разложить по категориям (нет прав на запись?).";
             }
         }
 
@@ -167,7 +167,7 @@ namespace Ydp.Pages
         private void BtnPresetTelegram_Click(object sender, RoutedEventArgs e)
         {
             int added = Zapret.FirstRun.EnsureTelegramDomains(_root);
-            Logger.Info("Р С™Р В°РЎвЂљР ВµР С–Р С•РЎР‚Р С‘РЎРЏ Р’В«TelegramР’В»: " + (added > 0 ? "Р Т‘Р С•Р В±Р В°Р Р†Р В»Р ВµР Р…Р С• Р Т‘Р С•Р СР ВµР Р…Р С•Р Р† " + added : "Р Т‘Р С•Р СР ВµР Р…РЎвЂ№ РЎС“Р В¶Р Вµ Р Р…Р В° Р СР ВµРЎРѓРЎвЂљР Вµ"), "lists");
+            Logger.Info("Категория «Telegram»: " + (added > 0 ? "добавлено доменов " + added : "домены уже на месте"), "lists");
             TabGeneral.IsChecked = true;
             _key = "general";
             Load();
@@ -176,8 +176,8 @@ namespace Ydp.Pages
         private void BtnPresetClear_Click(object sender, RoutedEventArgs e)
         {
             if (MessageBox.Show(Window.GetWindow(this),
-                    "Р С›РЎвЂЎР С‘РЎРѓРЎвЂљР С‘РЎвЂљРЎРЉ Р С•РЎРѓР Р…Р С•Р Р†Р Р…Р С•Р в„– РЎРѓР С—Р С‘РЎРѓР С•Р С” Р Т‘Р С•Р СР ВµР Р…Р С•Р Р†?\n\nР вЂќР С•Р СР ВµР Р…РЎвЂ№ Telegram-Р С—РЎР‚Р С•Р С”РЎРѓР С‘ Р С—РЎР‚Р С‘ РЎРЊРЎвЂљР С•Р С Р С•РЎРѓРЎвЂљР В°Р Р…РЎС“РЎвЂљРЎРѓРЎРЏ РІР‚вЂќ Р С—Р В°Р Р…Р ВµР В»РЎРЉ Р Р†Р ВµРЎР‚Р Р…РЎвЂРЎвЂљ Р С‘РЎвЂ¦ Р В°Р Р†РЎвЂљР С•Р СР В°РЎвЂљР С‘РЎвЂЎР ВµРЎРѓР С”Р С‘.",
-                    "Р С›РЎвЂЎР С‘РЎРѓРЎвЂљР С‘РЎвЂљРЎРЉ РЎРѓР С—Р С‘РЎРѓР С•Р С”", MessageBoxButton.YesNo, MessageBoxImage.Question)
+                    "Очистить основной список доменов?\n\nДомены Telegram-прокси при этом останутся — панель вернёт их автоматически.",
+                    "Очистить список", MessageBoxButton.YesNo, MessageBoxImage.Question)
                 == MessageBoxResult.Yes)
             {
                 if (Lists.Write(_root, "general", string.Empty))
@@ -189,7 +189,7 @@ namespace Ydp.Pages
                 }
                 else
                 {
-                    Stats.Text = "Р СњР Вµ РЎС“Р Т‘Р В°Р В»Р С•РЎРѓРЎРЉ Р С•РЎвЂЎР С‘РЎРѓРЎвЂљР С‘РЎвЂљРЎРЉ РЎРѓР С—Р С‘РЎРѓР С•Р С” (Р Р…Р ВµРЎвЂљ Р С—РЎР‚Р В°Р Р† Р Р…Р В° Р В·Р В°Р С—Р С‘РЎРѓРЎРЉ?).";
+                    Stats.Text = "Не удалось очистить список (нет прав на запись?).";
                 }
             }
 
@@ -204,34 +204,34 @@ namespace Ydp.Pages
         private void BtnQuickAdd_Click(object sender, RoutedEventArgs e)
         {
             var raw = QuickDomain.Text;
-            if (string.IsNullOrWhiteSpace(raw)) { QuickNote.Text = "Р вЂ™Р Р†Р ВµР Т‘Р С‘РЎвЂљР Вµ Р В°Р Т‘РЎР‚Р ВµРЎРѓ РЎРѓР В°Р в„–РЎвЂљР В°."; return; }
+            if (string.IsNullOrWhiteSpace(raw)) { QuickNote.Text = "Введите адрес сайта."; return; }
             string error;
             int added = UserDomains.Add(_root, raw.Split(new[] { ',', ';', ' ' }, StringSplitOptions.RemoveEmptyEntries), out error);
             if (added > 0)
             {
-                QuickNote.Text = "Р вЂќР С•Р В±Р В°Р Р†Р В»Р ВµР Р…Р С•: " + added + ". Р СњР В°Р В¶Р СР С‘РЎвЂљР Вµ Р’В«Р СџРЎР‚Р С‘Р СР ВµР Р…Р С‘РЎвЂљРЎРЉР’В», РЎвЂЎРЎвЂљР С•Р В±РЎвЂ№ РЎРѓР В°Р в„–РЎвЂљ Р Р…Р В°РЎвЂЎР В°Р В» Р С•Р В±РЎвЂ¦Р С•Р Т‘Р С‘РЎвЂљРЎРЉРЎРѓРЎРЏ РЎРѓРЎР‚Р В°Р В·РЎС“.";
+                QuickNote.Text = "Добавлено: " + added + ". Нажмите «Применить», чтобы сайт начал обходиться сразу.";
                 QuickDomain.Text = "";
                 Load();
             }
             else
             {
-                QuickNote.Text = error ?? "Р Р€Р В¶Р Вµ Р Р† РЎРѓР С—Р С‘РЎРѓР С”Р Вµ.";
+                QuickNote.Text = error ?? "Уже в списке.";
             }
         }
 
         private void BtnQuickRemove_Click(object sender, RoutedEventArgs e)
         {
             var raw = QuickDomain.Text;
-            if (string.IsNullOrWhiteSpace(raw)) { QuickNote.Text = "Р вЂ™Р Р†Р ВµР Т‘Р С‘РЎвЂљР Вµ Р В°Р Т‘РЎР‚Р ВµРЎРѓ РЎРѓР В°Р в„–РЎвЂљР В°, Р С”Р С•РЎвЂљР С•РЎР‚РЎвЂ№Р в„– Р Р…Р В°Р Т‘Р С• РЎС“Р В±РЎР‚Р В°РЎвЂљРЎРЉ."; return; }
+            if (string.IsNullOrWhiteSpace(raw)) { QuickNote.Text = "Введите адрес сайта, который надо убрать."; return; }
             int removed = UserDomains.Remove(_root, raw);
-            QuickNote.Text = removed > 0 ? "Р Р€Р В±РЎР‚Р В°Р Р…Р С•. Р СњР В°Р В¶Р СР С‘РЎвЂљР Вµ Р’В«Р СџРЎР‚Р С‘Р СР ВµР Р…Р С‘РЎвЂљРЎРЉР’В»." : "Р СњР Вµ Р Р…Р В°Р в„–Р Т‘Р ВµР Р…Р С• Р Р† РЎРѓР С—Р С‘РЎРѓР С”Р Вµ.";
+            QuickNote.Text = removed > 0 ? "Убрано. Нажмите «Применить»." : "Не найдено в списке.";
             if (removed > 0) { QuickDomain.Text = ""; Load(); }
         }
 
         private void BtnQuickRestart_Click(object sender, RoutedEventArgs e)
         {
             BtnQuickRestart.IsEnabled = false;
-            QuickNote.Text = "Р СџР ВµРЎР‚Р ВµР В·Р В°Р С—РЎС“РЎРѓР С”Р В°РЎР‹ Р С•Р В±РЎвЂ¦Р С•Р Т‘РІР‚В¦";
+            QuickNote.Text = "Перезапускаю обход…";
             System.Threading.Tasks.Task.Run(() =>
             {
                 var root = Status.ResolveRoot(Config.Get("zapretRoot", null));
@@ -245,7 +245,7 @@ namespace Ydp.Pages
                 Dispatcher.BeginInvoke(new Action(() =>
                 {
                     BtnQuickRestart.IsEnabled = true;
-                    QuickNote.Text = t.IsFaulted ? "Р С›РЎв‚¬Р С‘Р В±Р С”Р В°: " + t.Exception.GetBaseException().Message : "Р вЂњР С•РЎвЂљР С•Р Р†Р С•.";
+                    QuickNote.Text = t.IsFaulted ? "Ошибка: " + t.Exception.GetBaseException().Message : "Готово.";
                 }));
             });
         }
