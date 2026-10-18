@@ -147,6 +147,7 @@ jobs:
 
       - name: Create draft release
         if: steps.ver.outputs.skip != 'true'
+        id: rel
         shell: bash
         env:
           # Tag via env, not ${{ }} in run: - a crafted tag name must not reach
@@ -160,6 +161,11 @@ jobs:
           else
             gh release create "$RELEASE_TAG" --draft --title "$RELEASE_TAG" --generate-notes --repo ${{ github.repository }}
           fi
+          # A DRAFT release is not resolvable by tag through the releases API
+          # (GET /releases/tags/<tag> returns 404 until the draft is
+          # published), so later steps must talk to it by ID, not by tag.
+          rid=$(gh api "repos/${{ github.repository }}/releases" --jq '.[] | select(.draft and .tag_name=="'"$RELEASE_TAG"'") | .id' | head -n1)
+          echo "id=$rid" >> "$GITHUB_OUTPUT"
 
       - name: Generate checksums
         if: steps.ver.outputs.skip != 'true'
@@ -177,8 +183,16 @@ jobs:
         if: steps.ver.outputs.skip != 'true'
         shell: pwsh
         env:
-          RELEASE_TAG: ${{ steps.ver.outputs.tag }}
+          RELEASE_ID: ${{ steps.rel.outputs.id }}
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release upload "$RELEASE_TAG" 'dist/*.exe' 'dist/zapret-bundled.zip' 'dist/SHA256SUMS.txt' --clobber --repo ${{ github.repository }}
-          gh release edit "$RELEASE_TAG" --draft=false --repo ${{ github.repository }}
+          # Upload by release ID - the draft cannot be found by tag yet.
+          foreach ($f in @('dist\YoutubeDiscordPanel-latest.exe','dist\YoutubeDiscordPanel-Setup-latest.exe','dist\zapret-bundled.zip','dist\SHA256SUMS.txt')) {
+            $name = [IO.Path]::GetFileName($f)
+            $url = "$($env:GITHUB_API_URL -replace '/$','')/repos/$($env:GITHUB_REPOSITORY)/releases/$($env:RELEASE_ID)/assets?name=$name"
+            $headers = @{ Authorization = "Bearer $env:GH_TOKEN"; 'Content-Type' = 'application/octet-stream' }
+            Invoke-RestMethod -Method Post -Uri $url -Headers $headers -InFile $f | Out-Null
+            Write-Host "uploaded $name"
+          }
+          gh api -X PATCH "repos/$($env:GITHUB_REPOSITORY)/releases/$($env:RELEASE_ID)" -F draft=false | Out-Null
+          Write-Host "release published"
