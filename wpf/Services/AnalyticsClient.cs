@@ -1,9 +1,11 @@
 using System;
 using System.Globalization;
+using System.IO;
 using System.Net;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using System.Text.RegularExpressions;
 
 namespace Ydp.Services
 {
@@ -159,16 +161,27 @@ namespace Ydp.Services
             using (var stream = request.GetRequestStream())
                 stream.Write(bytes, 0, bytes.Length);
 
+            string acceptedDay = clientDay;
             using (var response = (HttpWebResponse)request.GetResponse())
             {
                 int status = (int)response.StatusCode;
                 if (status < 200 || status >= 300)
                     throw new WebException("Analytics endpoint returned HTTP " + status);
+
+                // The server is authoritative for the Moscow day. This also handles
+                // a Windows clock that is a little ahead or behind.
+                using (var reader = new StreamReader(response.GetResponseStream()))
+                {
+                    string responseBody = reader.ReadToEnd();
+                    var match = Regex.Match(responseBody ?? string.Empty,
+                        "\"moscow_date\"\\s*:\\s*\"(\\d{4}-\\d{2}-\\d{2})\"");
+                    if (match.Success) acceptedDay = match.Groups[1].Value;
+                }
             }
 
-            // Save only after the server accepted the event. If the request fails,
-            // the same day can be retried on the next ordinary app opening.
-            Config.Set(LastSentDayKey, clientDay);
+            // Save only after the server accepted the event. Failed requests are
+            // retried later; duplicate posts are idempotent on the server.
+            Config.Set(LastSentDayKey, acceptedDay);
         }
 
         private static string GetInstallId()
