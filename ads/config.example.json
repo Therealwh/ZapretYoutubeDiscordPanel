@@ -1,0 +1,39 @@
+{
+  "partners": [
+    {
+      "image": "https://zapretyoutubediscordpanel.top/ads/partner-1.webp",
+      "url": "https://advertiser.example/",
+      "active": false
+    },
+    {
+      "image": "https://zapretyoutubediscordpanel.top/ads/partner-2.webp",
+      "url": "https://advertiser.example/",
+      "active": false
+    },
+    {
+      "image": "https://zapretyoutubediscordpanel.top/ads/partner-3.webp",
+      "url": "https://advertiser.example/",
+      "active": false
+    },
+    {
+      "image": "https://zapretyoutubediscordpanel.top/ads/partner-4.webp",
+      "url": "https://advertiser.example/",
+      "active": false
+    },
+    {
+      "image": "https://zapretyoutubediscordpanel.top/ads/partner-5.webp",
+      "url": "https://advertiser.example/",
+      "active": false
+    }
+  ],
+  "popup": {
+    "image": "https://zapretyoutubediscordpanel.top/ads/popup.webp",
+    "url": "https://advertiser.example/",
+    "active": false
+  },
+  "bottom": {
+    "image": "https://zapretyoutubediscordpanel.top/ads/bottom.webp",
+    "url": "https://advertiser.example/",
+    "active": false
+  }
+}

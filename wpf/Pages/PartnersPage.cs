@@ -20,6 +20,8 @@ namespace Ydp.Pages
             var grid = new UniformGrid { Columns = 3, Rows = 2 };
             for (int i = 0; i < 5; i++) grid.Children.Add(CreatePlaceholder(i + 1));
             root.Children.Add(grid);
+            AdsService.Updated += RefreshPartnerBanners;
+            Unloaded += (s, e) => AdsService.Updated -= RefreshPartnerBanners;
             root.Children.Add(new TextBlock { Text = "Хотите разместить свою рекламу? Нажмите на любой баннер — откроется страница для рекламодателей.",
                 TextWrapping = TextWrapping.Wrap, Foreground = Brush("#9AA8C7"), FontSize = 12, Margin = new Thickness(2, 16, 2, 0) });
             Content = new ScrollViewer { VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
@@ -44,8 +46,24 @@ namespace Ydp.Pages
             body.Children.Add(cta);
             grid.Children.Add(body);
             card.Child = grid;
-            card.MouseLeftButtonUp += (s, e) => MainWindow.OpenAdvertisingLanding();
+            card.MouseLeftButtonUp += (s, e) => MainWindow.OpenAdvertisingLanding(AdsService.PartnerUrl(number - 1));
+            var ad = AdsService.Partner(number - 1);
+            if (ad != null && !string.IsNullOrWhiteSpace(ad.Image))
+            {
+                try { grid.Children.Insert(0, new Image { Source = AdsService.LoadImage(ad.Image), Stretch = Stretch.UniformToFill, Opacity = 0.92 }); }
+                catch { }
+            }
             return card;
+        }
+
+        private void RefreshPartnerBanners()
+        {
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                if (!IsLoaded) return;
+                var parent = Parent as ContentControl;
+                if (parent != null) parent.Content = new PartnersPage();
+            }));
         }
 
         private static SolidColorBrush Brush(string value)

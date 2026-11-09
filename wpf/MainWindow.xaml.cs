@@ -161,7 +161,11 @@ namespace Ydp
             {
                 if (arg.StartsWith("--page=", StringComparison.OrdinalIgnoreCase)) start = arg.Substring(7);
             }
+            AdsService.LoadCached();
             Navigate(start ?? "dashboard");
+            RefreshAdsUi();
+            AdsService.RefreshAsync();
+            Loaded += (s, e) => { if (!AdsService.PopupShownThisRun) { AdsService.PopupShownThisRun = true; var popup = new AdPopupWindow(); popup.Owner = this; popup.Show(); } };
             UpdateFooter();
             StartUpdateCheck();
             // A panel that sits in the tray for days would otherwise only ever
@@ -340,14 +344,25 @@ case "support":
 
         private void BottomAd_Click(object sender, MouseButtonEventArgs e)
         {
-            OpenAdvertisingLanding();
+            OpenAdvertisingLanding(AdsService.Current.BottomUrl);
         }
 
-        internal static void OpenAdvertisingLanding()
+        private void RefreshAdsUi()
+        {
+            var ad = AdsService.Current;
+            if (BottomAdImage == null || ad == null || string.IsNullOrWhiteSpace(ad.BottomImage)) return;
+            try { BottomAdImage.Source = AdsService.LoadImage(ad.BottomImage); BottomAdImage.Visibility = Visibility.Visible; }
+            catch { BottomAdImage.Visibility = Visibility.Collapsed; }
+        }
+
+        internal static void OpenAdvertisingLanding(string url = null)
         {
             try
             {
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("https://zapretyoutubediscordpanel.top/") { UseShellExecute = true });
+                if (string.IsNullOrWhiteSpace(url)) url = "https://zapretyoutubediscordpanel.top/";
+                var uri = new Uri(url);
+                if (uri.Scheme != Uri.UriSchemeHttps) return;
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(uri.AbsoluteUri) { UseShellExecute = true });
             }
             catch (Exception ex) { Logger.Warn("Не удалось открыть страницу рекламы: " + ex.Message, "ads"); }
         }
