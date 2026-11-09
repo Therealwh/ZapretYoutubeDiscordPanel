@@ -325,8 +325,8 @@ Background="{DynamicResource BgBrush}"
                 Height="90" CornerRadius="12" BorderThickness="1" BorderBrush="{DynamicResource BorderBrush2}"
                 Background="#101D45" Cursor="Hand" MouseLeftButtonUp="BottomAd_Click">
             <Grid ClipToBounds="True">
-                <Image x:Name="BottomAdImage" Stretch="Fill" Visibility="Collapsed"/>
                 <Grid.Background><LinearGradientBrush StartPoint="0,0" EndPoint="1,0"><GradientStop Color="#24105D"/><GradientStop Color="#102D70" Offset="0.55"/><GradientStop Color="#071A36" Offset="1"/></LinearGradientBrush></Grid.Background>
+                <Image x:Name="BottomAdImage" Stretch="Fill" Visibility="Collapsed"/>
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="22,0">
                     <Border Width="58" Height="58" CornerRadius="29" Background="#18265C" BorderBrush="#818CF8" BorderThickness="2">
                         <TextBlock Text="↗" FontSize="34" Foreground="#67E8F9" HorizontalAlignment="Center" VerticalAlignment="Center"/>
