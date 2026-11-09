@@ -29,10 +29,15 @@ jobs:
         shell: pwsh
         run: |
           $exe = 'wpf/bin/Release/net48/YoutubeDiscordPanel.exe'
-          $output = & $exe --selftest
-          $output | Out-Host
-          $combined = $output -join "`n"
-          if ($LASTEXITCODE -ne 0 -or $combined -notmatch 'fail: 0') {
+          & $exe --selftest
+          $exitCode = $LASTEXITCODE
+          $reportPath = 'wpf/bin/Release/net48/selftest.txt'
+          if (-not (Test-Path $reportPath)) {
+            throw 'Self-test report was not created'
+          }
+          $report = Get-Content $reportPath -Raw
+          Write-Host $report
+          if ($exitCode -ne 0 -or $report -notmatch 'fail: 0') {
             throw 'Self tests failed'
           }
 
