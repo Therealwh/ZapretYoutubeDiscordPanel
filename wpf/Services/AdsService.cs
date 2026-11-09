@@ -30,11 +30,12 @@ namespace Ydp
     /// <summary>Remote ad manifest with local cache and safe HTTPS-only links.</summary>
     public static class AdsService
     {
-        private const string ManifestUrl = "https://zapretyoutubediscordpanel.top/ads/config.json";
+        private const string ManifestUrl = "https://ads.zapretyoutubediscordpanel.top/config.json";
         private static readonly string CachePath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "YoutubeDiscordPanel", "ads-cache.json");
         public static AdConfiguration Current { get; private set; } = new AdConfiguration();
         public static bool PopupShownThisRun;
         public static event Action Updated;
+        private static int _refreshing;
 
         public static void LoadCached()
         {
@@ -43,13 +44,14 @@ namespace Ydp
 
         public static async void RefreshAsync()
         {
+            if (System.Threading.Interlocked.Exchange(ref _refreshing, 1) != 0) return;
             try
             {
                 string json = await Task.Run(() =>
                 {
                     using (var wc = new WebClient())
                     {
-                        wc.Headers[HttpRequestHeader.UserAgent] = "YoutubeDiscordPanel/2.2.3";
+                        wc.Headers[HttpRequestHeader.UserAgent] = "YoutubeDiscordPanel/2.2.5";
                         wc.Encoding = System.Text.Encoding.UTF8;
                         return wc.DownloadString(ManifestUrl);
                     }
@@ -60,6 +62,7 @@ namespace Ydp
                 Updated?.Invoke();
             }
             catch { /* advertising is optional; cached/default content remains available */ }
+            finally { System.Threading.Interlocked.Exchange(ref _refreshing, 0); }
         }
 
         private static void Apply(string json)
@@ -72,16 +75,27 @@ namespace Ydp
             if (Current.Popup != null && !Current.Popup.Active) Current.Popup = null;
             if (Current.Bottom != null && !Current.Bottom.Active) Current.Bottom = null;
             foreach (var item in Current.Partners)
+            {
                 if (!string.IsNullOrWhiteSpace(item.Image) && !IsHttps(item.Image)) item.Image = null;
-            if (Current.Popup != null && !string.IsNullOrWhiteSpace(Current.Popup.Image) && !IsHttps(Current.Popup.Image)) Current.Popup.Image = null;
-            if (Current.Bottom != null && !string.IsNullOrWhiteSpace(Current.Bottom.Image) && !IsHttps(Current.Bottom.Image)) Current.Bottom.Image = null;
+                item.Url = SafeUrl(item.Url);
+            }
+            if (Current.Popup != null)
+            {
+                if (!string.IsNullOrWhiteSpace(Current.Popup.Image) && !IsHttps(Current.Popup.Image)) Current.Popup.Image = null;
+                Current.Popup.Url = SafeUrl(Current.Popup.Url);
+            }
+            if (Current.Bottom != null)
+            {
+                if (!string.IsNullOrWhiteSpace(Current.Bottom.Image) && !IsHttps(Current.Bottom.Image)) Current.Bottom.Image = null;
+                Current.Bottom.Url = SafeUrl(Current.Bottom.Url);
+            }
         }
 
         private static bool IsHttps(string value)
         {
             Uri uri; return Uri.TryCreate(value, UriKind.Absolute, out uri) && uri.Scheme == Uri.UriSchemeHttps;
         }
-        private static string SafeUrl(string value) { return IsHttps(value) ? value : "https://zapretyoutubediscordpanel.top/"; }
+        private static string SafeUrl(string value) { return IsHttps(value) ? value : "https://ads.zapretyoutubediscordpanel.top/"; }
         public static AdCampaign Partner(int index) { return Current.Partners != null && index >= 0 && index < Current.Partners.Count ? Current.Partners[index] : null; }
         public static string PartnerUrl(int index) { var ad = Partner(index); return ad == null ? null : ad.Url; }
         public static BitmapImage LoadImage(string url)

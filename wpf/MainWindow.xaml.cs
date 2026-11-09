@@ -166,6 +166,9 @@ namespace Ydp
             RefreshAdsUi();
             AdsService.Updated += () => Dispatcher.BeginInvoke(new Action(RefreshAdsUi));
             AdsService.RefreshAsync();
+            _adsRefreshTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(30) };
+            _adsRefreshTimer.Tick += (s, e) => AdsService.RefreshAsync();
+            _adsRefreshTimer.Start();
             Loaded += (s, e) => { if (!AdsService.PopupShownThisRun) { AdsService.PopupShownThisRun = true; var popup = new AdPopupWindow(); popup.Owner = this; popup.Show(); } };
             UpdateFooter();
             StartUpdateCheck();
@@ -351,18 +354,24 @@ case "support":
         private void RefreshAdsUi()
         {
             var ad = AdsService.Current;
-            if (BottomAdImage == null || ad == null || string.IsNullOrWhiteSpace(ad.BottomImage)) return;
+            if (BottomAdImage == null) return;
+            if (ad == null || string.IsNullOrWhiteSpace(ad.BottomImage))
+            {
+                BottomAdImage.Source = null;
+                BottomAdImage.Visibility = Visibility.Collapsed;
+                return;
+            }
             try { BottomAdImage.Source = AdsService.LoadImage(ad.BottomImage); BottomAdImage.Visibility = Visibility.Visible; }
-            catch { BottomAdImage.Visibility = Visibility.Collapsed; }
+            catch { BottomAdImage.Source = null; BottomAdImage.Visibility = Visibility.Collapsed; }
         }
 
         internal static void OpenAdvertisingLanding(string url = null)
         {
             try
             {
-                if (string.IsNullOrWhiteSpace(url)) url = "https://zapretyoutubediscordpanel.top/";
-                var uri = new Uri(url);
-                if (uri.Scheme != Uri.UriSchemeHttps) return;
+                Uri uri;
+                if (!Uri.TryCreate(url, UriKind.Absolute, out uri) || uri.Scheme != Uri.UriSchemeHttps)
+                    uri = new Uri("https://ads.zapretyoutubediscordpanel.top/");
                 System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(uri.AbsoluteUri) { UseShellExecute = true });
             }
             catch (Exception ex) { Logger.Warn("Не удалось открыть страницу рекламы: " + ex.Message, "ads"); }
@@ -407,6 +416,7 @@ case "support":
         private UpdateToastWindow _updateToast;
         private readonly DispatcherTimer _updateTimer;
         private readonly DispatcherTimer _updateReminderTimer;
+        private readonly DispatcherTimer _adsRefreshTimer;
 
         private void StartUpdateCheck()
         {

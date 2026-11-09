@@ -1,39 +1,39 @@
 {
   "partners": [
     {
-      "image": "https://zapretyoutubediscordpanel.top/ads/partner-1.webp",
-      "url": "https://advertiser.example/",
+      "image": "https://ads.zapretyoutubediscordpanel.top/banners/partner-1.png",
+      "url": "https://ads.zapretyoutubediscordpanel.top/",
       "active": false
     },
     {
-      "image": "https://zapretyoutubediscordpanel.top/ads/partner-2.webp",
-      "url": "https://advertiser.example/",
+      "image": "https://ads.zapretyoutubediscordpanel.top/banners/partner-2.png",
+      "url": "https://ads.zapretyoutubediscordpanel.top/",
       "active": false
     },
     {
-      "image": "https://zapretyoutubediscordpanel.top/ads/partner-3.webp",
-      "url": "https://advertiser.example/",
+      "image": "https://ads.zapretyoutubediscordpanel.top/banners/partner-3.png",
+      "url": "https://ads.zapretyoutubediscordpanel.top/",
       "active": false
     },
     {
-      "image": "https://zapretyoutubediscordpanel.top/ads/partner-4.webp",
-      "url": "https://advertiser.example/",
+      "image": "https://ads.zapretyoutubediscordpanel.top/banners/partner-4.png",
+      "url": "https://ads.zapretyoutubediscordpanel.top/",
       "active": false
     },
     {
-      "image": "https://zapretyoutubediscordpanel.top/ads/partner-5.webp",
-      "url": "https://advertiser.example/",
+      "image": "https://ads.zapretyoutubediscordpanel.top/banners/partner-5.png",
+      "url": "https://ads.zapretyoutubediscordpanel.top/",
       "active": false
     }
   ],
   "popup": {
-    "image": "https://zapretyoutubediscordpanel.top/ads/popup.webp",
-    "url": "https://advertiser.example/",
+    "image": "https://ads.zapretyoutubediscordpanel.top/banners/popup.png",
+    "url": "https://ads.zapretyoutubediscordpanel.top/",
     "active": false
   },
   "bottom": {
-    "image": "https://zapretyoutubediscordpanel.top/ads/bottom.webp",
-    "url": "https://advertiser.example/",
+    "image": "https://ads.zapretyoutubediscordpanel.top/banners/bottom.png",
+    "url": "https://ads.zapretyoutubediscordpanel.top/",
     "active": false
   }
 }
