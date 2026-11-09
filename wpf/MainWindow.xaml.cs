@@ -164,6 +164,7 @@ namespace Ydp
             AdsService.LoadCached();
             Navigate(start ?? "dashboard");
             RefreshAdsUi();
+            AdsService.Updated += () => Dispatcher.BeginInvoke(new Action(RefreshAdsUi));
             AdsService.RefreshAsync();
             Loaded += (s, e) => { if (!AdsService.PopupShownThisRun) { AdsService.PopupShownThisRun = true; var popup = new AdPopupWindow(); popup.Owner = this; popup.Show(); } };
             UpdateFooter();
