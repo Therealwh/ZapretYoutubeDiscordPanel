@@ -24,6 +24,20 @@
               </StackPanel>
           </Border>
 
+        <!-- Optional privacy-minimal analytics -->
+        <Border Style="{StaticResource Card}" Margin="0,0,0,12">
+            <StackPanel>
+                <TextBlock Text="Обезличенная статистика" Style="{StaticResource H1}" />
+                <TextBlock Style="{StaticResource Dim}" Margin="0,4,0,10" TextWrapping="Wrap"
+                           Text="Помогает автору понимать, сколько уникальных установок и активных установок за день использует Zapret Panel. Передаётся случайный ID установки и версия приложения. Не более одного запуска на установку за московские сутки; повторные открытия не увеличивают счётчик. Логи, имя ПК, имя Windows-пользователя и сетевой трафик не собираются." />
+                <CheckBox x:Name="ChkAnalytics" Content="Разрешить отправку обезличенной статистики"
+                          Foreground="{DynamicResource TextBrush}" Checked="ChkAnalytics_Changed"
+                          Unchecked="ChkAnalytics_Changed" />
+                <TextBlock x:Name="AnalyticsNote" Style="{StaticResource Dim}" Margin="0,6,0,0"
+                           Text="Отправка выключена. Изменение не влияет на работу обхода." />
+            </StackPanel>
+        </Border>
+
         <!-- Autostart: the feature the user asked for -->
         <Border Style="{StaticResource Card}" Margin="0,0,0,12">
             <StackPanel>
