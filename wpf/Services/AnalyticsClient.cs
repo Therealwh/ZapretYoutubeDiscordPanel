@@ -120,9 +120,10 @@ namespace Ydp.Services
             return value;
         }
 
-        private static string MoscowToday()
+        internal static string MoscowDateKey(DateTime utcNow)
         {
-            DateTime utcNow = DateTime.UtcNow;
+            if (utcNow.Kind != DateTimeKind.Utc)
+                utcNow = DateTime.SpecifyKind(utcNow, DateTimeKind.Utc);
             try
             {
                 // Windows time-zone identifier for Moscow (UTC+03:00).
@@ -133,6 +134,11 @@ namespace Ydp.Services
             {
                 return utcNow.AddHours(3).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
             }
+        }
+
+        private static string MoscowToday()
+        {
+            return MoscowDateKey(DateTime.UtcNow);
         }
 
         private static string EscapeJson(string value)
