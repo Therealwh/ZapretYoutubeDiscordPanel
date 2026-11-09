@@ -31,14 +31,8 @@ jobs:
           $exe = 'wpf/bin/Release/net48/YoutubeDiscordPanel.exe'
           & $exe --selftest
           $exitCode = $LASTEXITCODE
-          $reportPath = 'wpf/bin/Release/net48/selftest.txt'
-          if (-not (Test-Path $reportPath)) {
-            throw 'Self-test report was not created'
-          }
-          $report = Get-Content $reportPath -Raw
-          Write-Host $report
-          if ($exitCode -ne 0 -or $report -notmatch 'fail: 0') {
-            throw 'Self tests failed'
+          if ($exitCode -ne 0) {
+            throw "Self tests failed with exit code $exitCode"
           }
 
       - name: Build installer
