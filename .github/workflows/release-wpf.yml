@@ -12,7 +12,7 @@ on:
       release_tag:
         description: "Existing or new v2 release tag (for example v2.2.3)"
         required: true
-        default: "v2.2.4"
+        default: "v2.2.5"
         type: string
 
 permissions:
