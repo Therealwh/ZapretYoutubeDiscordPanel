@@ -28,13 +28,17 @@ jobs:
       - name: Run self tests
         shell: pwsh
         run: |
-          $exe = 'wpf/bin/Release/net48/YoutubeDiscordPanel.exe'
-          & $exe --selftest
-          $exitCode = $LASTEXITCODE
-          if ($exitCode -ne 0) {
-            throw "Self tests failed with exit code $exitCode"
+          $exe = (Resolve-Path 'wpf/bin/Release/net48/YoutubeDiscordPanel.exe').Path
+          $process = Start-Process -FilePath $exe -ArgumentList '--selftest' -Wait -PassThru
+          $reportPath = Join-Path (Split-Path $exe) 'selftest.txt'
+          if (-not (Test-Path $reportPath)) {
+            throw 'Self-test report was not created'
           }
-
+          $report = Get-Content $reportPath -Raw
+          Write-Host $report
+          if ($process.ExitCode -ne 0 -or $report -notmatch 'fail: 0') {
+            throw "Self tests failed with exit code $($process.ExitCode)"
+          }
       - name: Build installer
         shell: pwsh
         run: dotnet build wpf/setup/Setup.csproj -c Release -v minimal
