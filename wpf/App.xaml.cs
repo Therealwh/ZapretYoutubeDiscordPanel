@@ -183,6 +183,9 @@ base.OnStartup(e);
 
                 Logger.Info("Панель запущена (админ=" + Win.IsAdmin() + ")", "panel");
 
+                // Ask for explicit consent before sending the one-per-day anonymous activity event.
+                AnalyticsClient.EnsureConsentAndTrack();
+
 var window = new MainWindow();
                 MainWindow = window;
                 window.SourceInitialized += (s, args) => WindowChrome.ApplyDarkTitleBar(window);
