@@ -10,9 +10,9 @@ on:
   workflow_dispatch:
     inputs:
       release_tag:
-        description: "Existing or new v2 release tag (for example v2.2.2)"
+        description: "Existing or new v2 release tag (for example v2.2.3)"
         required: true
-        default: "v2.2.2"
+        default: "v2.2.3"
         type: string
 
 permissions:
