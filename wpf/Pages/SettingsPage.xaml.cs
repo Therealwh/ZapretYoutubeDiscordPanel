@@ -106,6 +106,10 @@ namespace Ydp.Pages
                 ChkAutoApply.IsChecked = AutoStart.AutoApplyEnabled();
                 ChkWatchdog.IsChecked = BypassWatchdog.Enabled;
                 ChkNotify.IsChecked = BypassWatchdog.Notify;
+                ChkAnalytics.IsChecked = AnalyticsClient.IsEnabled;
+                AnalyticsNote.Text = AnalyticsClient.IsEnabled
+                    ? "Метрика включена. Не более одного учёта установки за московские сутки."
+                    : "Метрика выключена. Новые события не отправляются.";
                 ChkHotkey.IsChecked = MainWindow.HotkeyEnabled;
                 ChkServiceMode.IsChecked = !string.Equals(Config.Get(AutoConnect.KeyPreferService, "true"), "false", StringComparison.OrdinalIgnoreCase);
 // Ship pre-filled: a fresh install works immediately, and anyone with their
@@ -177,6 +181,16 @@ namespace Ydp.Pages
         {
             if (_loading) return;
             BypassWatchdog.Notify = ChkNotify.IsChecked == true;
+        }
+
+        private void ChkAnalytics_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_loading) return;
+            bool enabled = ChkAnalytics.IsChecked == true;
+            AnalyticsClient.SetEnabled(enabled);
+            AnalyticsNote.Text = enabled
+                ? "Статистика включена: не более одного учёта этой установки за сутки по Москве."
+                : "Отправка статистики выключена. Ранее собранные агрегированные данные не удаляются.";
         }
 
         private void ChkHotkey_Changed(object sender, RoutedEventArgs e)

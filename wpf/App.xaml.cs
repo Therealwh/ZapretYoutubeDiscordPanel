@@ -183,6 +183,9 @@ base.OnStartup(e);
 
                 Logger.Info("Панель запущена (админ=" + Win.IsAdmin() + ")", "panel");
 
+                // Metrics are enabled by default; a daily active-install event is sent in the background.
+                AnalyticsClient.StartTracking();
+
 var window = new MainWindow();
                 MainWindow = window;
                 window.SourceInitialized += (s, args) => WindowChrome.ApplyDarkTitleBar(window);

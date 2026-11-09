@@ -7,6 +7,7 @@ using System.IO;
 using System.Linq;
 using System.Text;
 using Ydp.Tg;
+using Ydp.Services;
 using Ydp.Zapret;
 
 namespace Ydp.Tests
@@ -54,6 +55,7 @@ namespace Ydp.Tests
             Guard("verdict", GroupVerdictTests);
               Guard("userdomains", UserDomainTests);
               Guard("cond", CondLaunchTests);
+            Guard("analytics", AnalyticsDateTests);
 
             var report = new StringBuilder();
             report.Append("tests: ").Append(_passed + Failures.Count)
@@ -74,6 +76,18 @@ namespace Ydp.Tests
                 // Writing the report is optional.
             }
             return Failures.Count == 0 ? 0 : 1;
+        }
+
+        private static void AnalyticsDateTests()
+        {
+            var beforeMidnightUtc = new DateTime(2026, 11, 9, 20, 59, 59, DateTimeKind.Utc);
+            var atMidnightUtc = new DateTime(2026, 11, 9, 21, 0, 0, DateTimeKind.Utc);
+            Equal("analytics: before Moscow midnight", "2026-11-09",
+                AnalyticsClient.MoscowDateKey(beforeMidnightUtc));
+            Equal("analytics: exactly Moscow midnight", "2026-11-10",
+                AnalyticsClient.MoscowDateKey(atMidnightUtc));
+            Equal("analytics: same local day stays one bucket", "2026-11-09",
+                AnalyticsClient.MoscowDateKey(beforeMidnightUtc.AddHours(-10)));
         }
 
         // ---- crypto ------------------------------------------------------

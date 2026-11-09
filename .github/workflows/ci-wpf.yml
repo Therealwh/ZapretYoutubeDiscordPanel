@@ -1,0 +1,44 @@
+name: WPF CI
+
+on:
+  push:
+    branches: [main, feature/daily-anonymous-analytics]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  build-and-test:
+    runs-on: windows-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@67a3573c9a986a3f9c594539f4ab511d57bb3ce9 # v4
+        with:
+          dotnet-version: '8.0.x'
+
+      - name: Build panel
+        shell: pwsh
+        run: dotnet build wpf/YoutubeDiscordPanel.csproj -c Release -v minimal
+
+      - name: Run self tests
+        shell: pwsh
+        run: |
+          $exe = (Resolve-Path 'wpf/bin/Release/net48/YoutubeDiscordPanel.exe').Path
+          $process = Start-Process -FilePath $exe -ArgumentList '--selftest' -Wait -PassThru
+          $reportPath = Join-Path (Split-Path $exe) 'selftest.txt'
+          if (-not (Test-Path $reportPath)) {
+            throw 'Self-test report was not created'
+          }
+          $report = Get-Content $reportPath -Raw
+          Write-Host $report
+          if ($process.ExitCode -ne 0 -or $report -notmatch 'fail: 0') {
+            throw "Self tests failed with exit code $($process.ExitCode)"
+          }
+      - name: Build installer
+        shell: pwsh
+        run: dotnet build wpf/setup/Setup.csproj -c Release -v minimal
