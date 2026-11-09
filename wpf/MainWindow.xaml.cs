@@ -383,10 +383,18 @@ case "support":
                     {
                         if (!info.available)
                         {
-                            _updateReminderTimer?.Stop();
-                            CloseUpdateToast();
-                            UpdateBanner.Visibility = Visibility.Collapsed;
-                            _lastNotifiedVersion = null;
+                            // A confirmed latest release equal to (or older
+                            // than) this build means there is nothing to install.
+                            // If the request failed, keep the already-known
+                            // reminder alive instead of silently losing it.
+                            if (!string.IsNullOrEmpty(info.latest)
+                                && info.latest != _lastNotifiedVersion)
+                            {
+                                _updateReminderTimer?.Stop();
+                                CloseUpdateToast();
+                                UpdateBanner.Visibility = Visibility.Collapsed;
+                                _lastNotifiedVersion = null;
+                            }
                             return;
                         }
 
