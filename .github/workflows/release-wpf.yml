@@ -1,4 +1,4 @@
-﻿name: Release (WPF 2.x)
+name: Release (WPF 2.x)
 
 # Version 2 of the panel is a .NET Framework 4.8 WPF app: no Node, no
 # electron-builder, no Chromium. The exe is ~250 KB and runs on the .NET
@@ -7,6 +7,13 @@
 on:
   push:
     tags: [ 'v2*' ]
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Existing or new v2 release tag (for example v2.2.2)"
+        required: true
+        default: "v2.2.2"
+        type: string
 
 permissions:
   contents: read
@@ -35,16 +42,22 @@ jobs:
         id: ver
         shell: bash
         run: |
-          tag="${GITHUB_REF_NAME}"
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
-          if gh release view "$tag" --repo ${{ github.repository }} >/dev/null 2>&1; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "Release $tag already exists, nothing to do."
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            tag="$RELEASE_TAG_INPUT"
           else
-            echo "skip=false" >> "$GITHUB_OUTPUT"
+            tag="$GITHUB_REF_NAME"
           fi
+          if [[ ! "$tag" =~ ^v2\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Invalid release tag: $tag (expected v2.x.y)" >&2
+            exit 1
+          fi
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          # Existing releases are intentionally NOT skipped: the build can
+          # populate a manually-published release that currently has no assets.
+          echo "skip=false" >> "$GITHUB_OUTPUT"
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG_INPUT: ${{ inputs.release_tag }}
 
       - name: Fetch the current zapret engine for the offline bundle
         if: steps.ver.outputs.skip != 'true'
@@ -137,7 +150,7 @@ jobs:
         id: notes
         shell: bash
         run: |
-          tag="${GITHUB_REF_NAME}"
+          tag="${{ steps.ver.outputs.tag }}"
           file=".github/release-notes/${tag}.md"
           if [ -f "$file" ]; then
             echo "path=$file" >> "$GITHUB_OUTPUT"
@@ -155,7 +168,11 @@ jobs:
           RELEASE_NOTES: ${{ steps.notes.outputs.path }}
           GH_TOKEN: ${{ github.token }}
         run: |
-          if [ -n "$RELEASE_NOTES" ]; then
+          # A manually published release may already exist. Reuse it instead
+          # of failing or silently skipping the build.
+          if gh release view "$RELEASE_TAG" --repo ${{ github.repository }} >/dev/null 2>&1; then
+            echo "Release $RELEASE_TAG already exists; reusing it."
+          elif [ -n "$RELEASE_NOTES" ]; then
             gh release create "$RELEASE_TAG" --draft --title "$RELEASE_TAG" --notes-file "$RELEASE_NOTES" --repo ${{ github.repository }}
           else
             gh release create "$RELEASE_TAG" --draft --title "$RELEASE_TAG" --generate-notes --repo ${{ github.repository }}
@@ -180,34 +197,38 @@ jobs:
           RELEASE_TAG: ${{ steps.ver.outputs.tag }}
           GH_TOKEN: ${{ github.token }}
         run: |
-          # A DRAFT release is not resolvable by tag through the releases API
-          # (GET /releases/tags/<tag> returns 404 until the draft is
-          # published), which is why plain "gh release upload <tag>" fails with
-          # "release not found". Resolve the draft by listing releases and
-          # then upload/patch everything by its numeric ID.
+          # Resolve either an existing published release or a draft by tag.
+          # This also supports repairing a release that was published manually
+          # before its build had uploaded any assets.
           $headers = @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = 'application/vnd.github+json'; 'User-Agent' = 'release-wpf' }
-          # The listing can omit a brand-new draft for a few seconds
-          # (eventual consistency): retry the lookup before giving up.
           $rel = $null
           for ($attempt = 1; $attempt -le 6; $attempt++) {
-            $releases = Invoke-RestMethod -Uri "$env:GITHUB_API_URL/repos/$env:GITHUB_REPOSITORY/releases?per_page=20" -Headers $headers
-            $rel = $releases | Where-Object { $_.draft -and $_.tag_name -eq $env:RELEASE_TAG } | Select-Object -First 1
+            $releases = Invoke-RestMethod -Uri "$env:GITHUB_API_URL/repos/$env:GITHUB_REPOSITORY/releases?per_page=100" -Headers $headers
+            $rel = $releases | Where-Object { $_.tag_name -eq $env:RELEASE_TAG } | Select-Object -First 1
             if ($rel) { break }
-            Write-Host "draft not listed yet (attempt $attempt), waiting 5s..."
+            Write-Host "release not listed yet (attempt $attempt), waiting 5s..."
             Start-Sleep -Seconds 5
           }
-          if (-not $rel) { throw "draft release for $env:RELEASE_TAG not found" }
-          Write-Host "draft release id=$($rel.id)"
-          foreach ($f in (Get-ChildItem dist | ForEach-Object { $_.FullName })) {            $name = [IO.Path]::GetFileName($f)
-            # Asset uploads go to uploads.github.com - the release object
-            # carries the exact template, so use it instead of building an
-            # api.github.com URL (that host returns 404 for uploads).
+          if (-not $rel) { throw "release for $env:RELEASE_TAG not found" }
+          Write-Host "release id=$($rel.id), draft=$($rel.draft)"
+          foreach ($f in (Get-ChildItem dist | ForEach-Object { $_.FullName })) {
+            $name = [IO.Path]::GetFileName($f)
+            # Replace same-named assets on retries instead of failing with 422.
+            $existing = $rel.assets | Where-Object { $_.name -eq $name } | Select-Object -First 1
+            if ($existing) {
+              Invoke-RestMethod -Method Delete -Uri "$env:GITHUB_API_URL/repos/$env:GITHUB_REPOSITORY/releases/assets/$($existing.id)" -Headers $headers | Out-Null
+              Write-Host "replaced existing asset $name"
+            }
             $url = $rel.upload_url -replace '\{\?name,label\}', "?name=$name"
             $up = @{ Authorization = "Bearer $env:GH_TOKEN"; 'Content-Type' = 'application/octet-stream' }
             Invoke-RestMethod -Method Post -Uri $url -Headers $up -InFile $f | Out-Null
             Write-Host "uploaded $name"
           }
-          Invoke-RestMethod -Method Patch -Uri "$env:GITHUB_API_URL/repos/$env:GITHUB_REPOSITORY/releases/$($rel.id)" `
-            -Headers $headers -ContentType 'application/json' `
-            -Body (@{ draft = $false } | ConvertTo-Json) | Out-Null
-          Write-Host "release published"
+          if ($rel.draft) {
+            Invoke-RestMethod -Method Patch -Uri "$env:GITHUB_API_URL/repos/$env:GITHUB_REPOSITORY/releases/$($rel.id)" `
+              -Headers $headers -ContentType 'application/json' `
+              -Body (@{ draft = $false } | ConvertTo-Json) | Out-Null
+            Write-Host "draft release published"
+          } else {
+            Write-Host "existing published release updated with assets"
+          }
