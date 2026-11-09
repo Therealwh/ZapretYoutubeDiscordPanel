@@ -24,13 +24,13 @@
               </StackPanel>
           </Border>
 
-        <!-- Optional privacy-minimal analytics -->
+        <!-- Metrics: enabled by default; users can opt out -->
         <Border Style="{StaticResource Card}" Margin="0,0,0,12">
             <StackPanel>
-                <TextBlock Text="Обезличенная статистика" Style="{StaticResource H1}" />
+                <TextBlock Text="Метрика" Style="{StaticResource H1}" />
                 <TextBlock Style="{StaticResource Dim}" Margin="0,4,0,10" TextWrapping="Wrap"
-                           Text="Помогает автору понимать, сколько уникальных установок и активных установок за день использует Zapret Panel. Передаётся случайный ID установки и версия приложения. Не более одного запуска на установку за московские сутки; повторные открытия не увеличивают счётчик. Логи, имя ПК, имя Windows-пользователя и сетевой трафик не собираются." />
-                <CheckBox x:Name="ChkAnalytics" Content="Разрешить отправку обезличенной статистики"
+                           Text="Метрика включена по умолчанию. Программа отправляет случайный ID установки, версию и один факт активности за календарные сутки по Москве. Повторные открытия в тот же день не увеличивают счётчик. ID является псевдонимным идентификатором, а не полной анонимизацией. Можно отключить отправку в любой момент — работа программы не изменится. Содержимое логов, имя компьютера, имя Windows-пользователя и посещаемые сайты не отправляются." />
+                <CheckBox x:Name="ChkAnalytics" Content="Отправлять статистику использования"
                           Foreground="{DynamicResource TextBrush}" Checked="ChkAnalytics_Changed"
                           Unchecked="ChkAnalytics_Changed" />
                 <TextBlock x:Name="AnalyticsNote" Style="{StaticResource Dim}" Margin="0,6,0,0"
