@@ -15,6 +15,21 @@ namespace Ydp
         [DataMember(Name = "image")] public string Image;
         [DataMember(Name = "url")] public string Url;
         [DataMember(Name = "active")] public bool Active = true;
+        // ISO date (YYYY-MM-DD), inclusive. Empty/null means no expiration.
+        [DataMember(Name = "expires", EmitDefaultValue = false)] public string Expires;
+        public bool IsAvailable
+        {
+            get
+            {
+                if (!Active) return false;
+                if (string.IsNullOrWhiteSpace(Expires)) return true;
+                DateTime expiry;
+                if (!DateTime.TryParseExact(Expires.Trim(), "yyyy-MM-dd",
+                    System.Globalization.CultureInfo.InvariantCulture,
+                    System.Globalization.DateTimeStyles.None, out expiry)) return false;
+                return DateTime.UtcNow.Date <= expiry.Date;
+            }
+        }
     }
 
     [DataContract]
@@ -72,8 +87,8 @@ namespace Ydp
                 Current = (AdConfiguration)serializer.ReadObject(stream) ?? new AdConfiguration();
             if (Current.Partners == null) Current.Partners = new List<AdCampaign>();
             Current.Partners = Current.Partners.FindAll(x => x != null);
-            if (Current.Popup != null && !Current.Popup.Active) Current.Popup = null;
-            if (Current.Bottom != null && !Current.Bottom.Active) Current.Bottom = null;
+            if (Current.Popup != null && !Current.Popup.IsAvailable) Current.Popup = null;
+            if (Current.Bottom != null && !Current.Bottom.IsAvailable) Current.Bottom = null;
             foreach (var item in Current.Partners)
             {
                 if (!string.IsNullOrWhiteSpace(item.Image) && !IsHttps(item.Image)) item.Image = null;
@@ -96,7 +111,7 @@ namespace Ydp
             Uri uri; return Uri.TryCreate(value, UriKind.Absolute, out uri) && uri.Scheme == Uri.UriSchemeHttps;
         }
         private static string SafeUrl(string value) { return IsHttps(value) ? value : "https://ads.zapretyoutubediscordpanel.top/"; }
-        public static AdCampaign Partner(int index) { return Current.Partners != null && index >= 0 && index < Current.Partners.Count && Current.Partners[index] != null && Current.Partners[index].Active ? Current.Partners[index] : null; }
+        public static AdCampaign Partner(int index) { return Current.Partners != null && index >= 0 && index < Current.Partners.Count && Current.Partners[index] != null && Current.Partners[index].IsAvailable ? Current.Partners[index] : null; }
         public static string PartnerUrl(int index) { var ad = Partner(index); return ad == null ? null : ad.Url; }
         public static BitmapImage LoadImage(string url)
         {
