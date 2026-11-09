@@ -1,11 +1,9 @@
 using System;
 using System.Globalization;
-using System.IO;
 using System.Net;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
-using System.Windows;
 
 namespace Ydp.Services
 {
@@ -21,6 +19,8 @@ namespace Ydp.Services
         private const string InstallIdKey = "analyticsInstallId";
         private const string LastSentDayKey = "analyticsLastSentMskDay";
         private static int _sending;
+        private static readonly object TimerGate = new object();
+        private static Timer _dailyTimer;
 
         public static bool IsEnabled
         {
@@ -28,19 +28,82 @@ namespace Ydp.Services
         }
 
         /// <summary>
-        /// Metrics are enabled on a fresh installation. There is no first-run prompt;
-        /// users can disable collection at any time from Settings → Metrics.
-        /// An explicit stored "no" always wins.
+        /// Start daily activity tracking. A one-shot timer checks at Moscow midnight
+        /// and retries every five minutes only while today's event has not been accepted.
+        /// It remains alive while the app is minimized to the tray.
         /// </summary>
-        public static void EnsureConsentAndTrack()
+        public static void StartTracking()
         {
-            if (IsEnabled) TrackDailyLaunch();
+            if (!IsEnabled)
+            {
+                StopTracking();
+                return;
+            }
+
+            TrackDailyLaunch();
+            ScheduleNextCheck();
         }
 
         public static void SetEnabled(bool enabled)
         {
             Config.Set(AnalyticsEnabledKey, enabled ? "yes" : "no");
-            if (enabled) TrackDailyLaunch();
+            if (enabled) StartTracking();
+            else StopTracking();
+        }
+
+        private static void StopTracking()
+        {
+            lock (TimerGate)
+            {
+                if (_dailyTimer != null)
+                    _dailyTimer.Change(Timeout.Infinite, Timeout.Infinite);
+            }
+        }
+
+        private static void ScheduleNextCheck()
+        {
+            if (!IsEnabled) return;
+
+            string today = MoscowToday();
+            bool counted = string.Equals(
+                Config.Get(LastSentDayKey, string.Empty), today, StringComparison.Ordinal);
+
+            // Once today's event has been accepted, wait for the next Moscow midnight.
+            // If it failed (or we're crossing midnight), retry in five minutes.
+            TimeSpan due = counted ? TimeUntilNextMoscowMidnight() : TimeSpan.FromMinutes(5);
+            if (due < TimeSpan.FromSeconds(1)) due = TimeSpan.FromSeconds(1);
+
+            lock (TimerGate)
+            {
+                if (_dailyTimer == null)
+                    _dailyTimer = new Timer(DailyTimerTick, null, due, Timeout.InfiniteTimeSpan);
+                else
+                    _dailyTimer.Change(due, Timeout.InfiniteTimeSpan);
+            }
+        }
+
+        private static void DailyTimerTick(object state)
+        {
+            if (!IsEnabled)
+            {
+                StopTracking();
+                return;
+            }
+
+            TrackDailyLaunch();
+            ScheduleNextCheck();
+        }
+
+        private static TimeSpan TimeUntilNextMoscowMidnight()
+        {
+            DateTime utcNow = DateTime.UtcNow;
+            TimeZoneInfo zone = MoscowTimeZone();
+            DateTime localNow = TimeZoneInfo.ConvertTimeFromUtc(utcNow, zone);
+            DateTime nextLocalMidnight = DateTime.SpecifyKind(
+                localNow.Date.AddDays(1), DateTimeKind.Unspecified);
+            DateTime nextUtc = TimeZoneInfo.ConvertTimeToUtc(nextLocalMidnight, zone);
+            TimeSpan remaining = nextUtc - utcNow;
+            return remaining > TimeSpan.Zero ? remaining : TimeSpan.FromSeconds(1);
         }
 
         /// <summary>
@@ -124,15 +187,22 @@ namespace Ydp.Services
         {
             if (utcNow.Kind != DateTimeKind.Utc)
                 utcNow = DateTime.SpecifyKind(utcNow, DateTimeKind.Utc);
+            TimeZoneInfo zone = MoscowTimeZone();
+            return TimeZoneInfo.ConvertTimeFromUtc(utcNow, zone).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        }
+
+        private static TimeZoneInfo MoscowTimeZone()
+        {
             try
             {
                 // Windows time-zone identifier for Moscow (UTC+03:00).
-                TimeZoneInfo zone = TimeZoneInfo.FindSystemTimeZoneById("Russian Standard Time");
-                return TimeZoneInfo.ConvertTimeFromUtc(utcNow, zone).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+                return TimeZoneInfo.FindSystemTimeZoneById("Russian Standard Time");
             }
             catch
             {
-                return utcNow.AddHours(3).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+                // Fixed UTC+03:00 fallback for Windows images without that zone entry.
+                return TimeZoneInfo.CreateCustomTimeZone("Moscow UTC+3", TimeSpan.FromHours(3),
+                    "Moscow UTC+3", "Moscow UTC+3");
             }
         }
 
