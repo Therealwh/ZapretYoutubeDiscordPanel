@@ -173,9 +173,9 @@ namespace Ydp
             UpdateFooter();
             StartUpdateCheck();
             // A panel that sits in the tray for days would otherwise only ever
-            // see updates that were out when it started. Re-check every 30 min so
+            // see updates that were out when it started. Re-check every 5 min so
             // a new release raises a tray notification on its own.
-            _updateTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(30) };
+            _updateTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(5) };
             _updateTimer.Tick += (s, e) => StartUpdateCheck();
             _updateTimer.Start();
 
