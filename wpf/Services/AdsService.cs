@@ -71,7 +71,7 @@ namespace Ydp
             using (var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(json)))
                 Current = (AdConfiguration)serializer.ReadObject(stream) ?? new AdConfiguration();
             if (Current.Partners == null) Current.Partners = new List<AdCampaign>();
-            Current.Partners = Current.Partners.FindAll(x => x != null && x.Active);
+            Current.Partners = Current.Partners.FindAll(x => x != null);
             if (Current.Popup != null && !Current.Popup.Active) Current.Popup = null;
             if (Current.Bottom != null && !Current.Bottom.Active) Current.Bottom = null;
             foreach (var item in Current.Partners)
@@ -96,7 +96,7 @@ namespace Ydp
             Uri uri; return Uri.TryCreate(value, UriKind.Absolute, out uri) && uri.Scheme == Uri.UriSchemeHttps;
         }
         private static string SafeUrl(string value) { return IsHttps(value) ? value : "https://ads.zapretyoutubediscordpanel.top/"; }
-        public static AdCampaign Partner(int index) { return Current.Partners != null && index >= 0 && index < Current.Partners.Count ? Current.Partners[index] : null; }
+        public static AdCampaign Partner(int index) { return Current.Partners != null && index >= 0 && index < Current.Partners.Count && Current.Partners[index] != null && Current.Partners[index].Active ? Current.Partners[index] : null; }
         public static string PartnerUrl(int index) { var ad = Partner(index); return ad == null ? null : ad.Url; }
         public static BitmapImage LoadImage(string url)
         {

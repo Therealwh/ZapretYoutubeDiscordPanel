@@ -164,12 +164,12 @@ namespace Ydp
             AdsService.LoadCached();
             Navigate(start ?? "dashboard");
             RefreshAdsUi();
-            AdsService.Updated += () => Dispatcher.BeginInvoke(new Action(RefreshAdsUi));
+            AdsService.Updated += () => Dispatcher.BeginInvoke(new Action(() => { RefreshAdsUi(); ShowPopupIfConfigured(); }));
             AdsService.RefreshAsync();
             _adsRefreshTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(30) };
             _adsRefreshTimer.Tick += (s, e) => AdsService.RefreshAsync();
             _adsRefreshTimer.Start();
-            Loaded += (s, e) => { if (!AdsService.PopupShownThisRun) { AdsService.PopupShownThisRun = true; var popup = new AdPopupWindow(); popup.Owner = this; popup.Show(); } };
+            Loaded += (s, e) => ShowPopupIfConfigured();
             UpdateFooter();
             StartUpdateCheck();
             // A panel that sits in the tray for days would otherwise only ever
@@ -349,6 +349,14 @@ case "support":
         private void BottomAd_Click(object sender, MouseButtonEventArgs e)
         {
             OpenAdvertisingLanding(AdsService.Current.BottomUrl);
+        }
+
+        private void ShowPopupIfConfigured()
+        {
+            if (AdsService.PopupShownThisRun || AdsService.Current == null || AdsService.Current.Popup == null) return;
+            AdsService.PopupShownThisRun = true;
+            var popup = new AdPopupWindow { Owner = this };
+            popup.Show();
         }
 
         private void RefreshAdsUi()
