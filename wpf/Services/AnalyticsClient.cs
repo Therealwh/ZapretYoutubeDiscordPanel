@@ -17,14 +17,14 @@ namespace Ydp.Services
     public static class AnalyticsClient
     {
         private const string Endpoint = "https://status.zapretyoutubediscordpanel.top/api/event.php";
-        private const string ConsentKey = "analyticsEnabled"; // legacy key, now stores user enabled/disabled preference
+        private const string AnalyticsEnabledKey = "analyticsEnabled";
         private const string InstallIdKey = "analyticsInstallId";
         private const string LastSentDayKey = "analyticsLastSentMskDay";
         private static int _sending;
 
         public static bool IsEnabled
         {
-            get { return string.Equals(Config.Get(ConsentKey, "yes"), "yes", StringComparison.OrdinalIgnoreCase); }
+            get { return string.Equals(Config.Get(AnalyticsEnabledKey, "yes"), "yes", StringComparison.OrdinalIgnoreCase); }
         }
 
         /// <summary>
@@ -39,7 +39,7 @@ namespace Ydp.Services
 
         public static void SetEnabled(bool enabled)
         {
-            Config.Set(ConsentKey, enabled ? "yes" : "no");
+            Config.Set(AnalyticsEnabledKey, enabled ? "yes" : "no");
             if (enabled) TrackDailyLaunch();
         }
 
