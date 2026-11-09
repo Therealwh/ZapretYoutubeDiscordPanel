@@ -148,6 +148,7 @@ namespace Ydp
         private ContactsPage _contacts;
         private TransparencyPage _transparency;
         private ExpertPage _expert;
+        private PartnersPage _partners;
 
         public MainWindow()
         {
@@ -263,6 +264,10 @@ case "support":
                             if (_support == null) _support = new SupportPage();
                             PageHost.Content = _support;
                             break;
+                    case "partners":
+                        if (_partners == null) _partners = new PartnersPage();
+                        PageHost.Content = _partners;
+                        break;
                         case "contacts":
                             if (_contacts == null) _contacts = new ContactsPage();
                             PageHost.Content = _contacts;
@@ -297,6 +302,7 @@ case "support":
                 case "diagnostics": NavDiagnostics.IsChecked = true; break;
                 case "logs": NavLogs.IsChecked = true; break;
             case "support": NavSupport.IsChecked = true; break;
+                case "partners": NavPartners.IsChecked = true; break;
                 case "contacts": NavContacts.IsChecked = true; break;
                 default: NavDashboard.IsChecked = true; break;
             }
@@ -330,6 +336,20 @@ case "support":
         private void Close_Click(object sender, RoutedEventArgs e)
         {
             Close();
+        }
+
+        private void BottomAd_Click(object sender, MouseButtonEventArgs e)
+        {
+            OpenAdvertisingLanding();
+        }
+
+        internal static void OpenAdvertisingLanding()
+        {
+            try
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo("https://zapretyoutubediscordpanel.top/") { UseShellExecute = true });
+            }
+            catch (Exception ex) { Logger.Warn("Не удалось открыть страницу рекламы: " + ex.Message, "ads"); }
         }
 
         private void Nav_Checked(object sender, RoutedEventArgs e)
