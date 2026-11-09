@@ -3,23 +3,26 @@ using System.Collections.Generic;
 using System.IO;
 using System.Net;
 using System.Threading.Tasks;
-using System.Web.Script.Serialization;
+using System.Runtime.Serialization;
+using System.Runtime.Serialization.Json;
 using System.Windows.Media.Imaging;
 
 namespace Ydp
 {
+    [DataContract]
     public sealed class AdCampaign
     {
-        public string Image;
-        public string Url;
-        public bool Active = true;
+        [DataMember(Name = "image")] public string Image;
+        [DataMember(Name = "url")] public string Url;
+        [DataMember(Name = "active")] public bool Active = true;
     }
 
+    [DataContract]
     public sealed class AdConfiguration
     {
-        public List<AdCampaign> Partners = new List<AdCampaign>();
-        public AdCampaign Popup = new AdCampaign();
-        public AdCampaign Bottom = new AdCampaign();
+        [DataMember(Name = "partners")] public List<AdCampaign> Partners = new List<AdCampaign>();
+        [DataMember(Name = "popup")] public AdCampaign Popup = new AdCampaign();
+        [DataMember(Name = "bottom")] public AdCampaign Bottom = new AdCampaign();
         public string BottomImage { get { return Bottom == null ? null : Bottom.Image; } }
         public string BottomUrl { get { return Bottom == null ? null : Bottom.Url; } }
     }
@@ -61,26 +64,17 @@ namespace Ydp
 
         private static void Apply(string json)
         {
-            var raw = new JavaScriptSerializer().Deserialize<Dictionary<string, object>>(json);
-            var next = new AdConfiguration();
-            object value;
-            if (raw.TryGetValue("partners", out value) && value is object[])
-                foreach (var item in (object[])value) { var ad = Parse(item); if (ad != null && ad.Active) next.Partners.Add(ad); }
-            if (raw.TryGetValue("popup", out value)) next.Popup = Parse(value);
-            if (raw.TryGetValue("bottom", out value)) next.Bottom = Parse(value);
-            Current = next;
-        }
-
-        private static AdCampaign Parse(object value)
-        {
-            var map = value as Dictionary<string, object>;
-            if (map == null) return null;
-            object image, url, active;
-            map.TryGetValue("image", out image); map.TryGetValue("url", out url); map.TryGetValue("active", out active);
-            var ad = new AdCampaign { Image = image as string, Url = SafeUrl(url as string), Active = active == null || Convert.ToBoolean(active) };
-            if (!ad.Active) return null;
-            if (!string.IsNullOrWhiteSpace(ad.Image) && !IsHttps(ad.Image)) ad.Image = null;
-            return ad;
+            var serializer = new DataContractJsonSerializer(typeof(AdConfiguration));
+            using (var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(json)))
+                Current = (AdConfiguration)serializer.ReadObject(stream) ?? new AdConfiguration();
+            if (Current.Partners == null) Current.Partners = new List<AdCampaign>();
+            Current.Partners = Current.Partners.FindAll(x => x != null && x.Active);
+            if (Current.Popup != null && !Current.Popup.Active) Current.Popup = null;
+            if (Current.Bottom != null && !Current.Bottom.Active) Current.Bottom = null;
+            foreach (var item in Current.Partners)
+                if (!string.IsNullOrWhiteSpace(item.Image) && !IsHttps(item.Image)) item.Image = null;
+            if (Current.Popup != null && !string.IsNullOrWhiteSpace(Current.Popup.Image) && !IsHttps(Current.Popup.Image)) Current.Popup.Image = null;
+            if (Current.Bottom != null && !string.IsNullOrWhiteSpace(Current.Bottom.Image) && !IsHttps(Current.Bottom.Image)) Current.Bottom.Image = null;
         }
 
         private static bool IsHttps(string value)
