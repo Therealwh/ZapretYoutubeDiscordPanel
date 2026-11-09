@@ -10,48 +10,31 @@ using System.Windows;
 namespace Ydp.Services
 {
     /// <summary>
-    /// Optional, consent-based, privacy-minimal daily usage analytics.
+    /// Optional daily usage analytics. Enabled by default; users can turn it off in Settings → Metrics.
     /// One installation can create at most one launch row per Moscow calendar day;
     /// the server enforces the same rule with a unique database key.
     /// </summary>
     public static class AnalyticsClient
     {
         private const string Endpoint = "https://status.zapretyoutubediscordpanel.top/api/event.php";
-        private const string ConsentKey = "analyticsConsent";
+        private const string ConsentKey = "analyticsEnabled"; // legacy key, now stores user enabled/disabled preference
         private const string InstallIdKey = "analyticsInstallId";
         private const string LastSentDayKey = "analyticsLastSentMskDay";
         private static int _sending;
 
         public static bool IsEnabled
         {
-            get { return string.Equals(Config.Get(ConsentKey, "no"), "yes", StringComparison.OrdinalIgnoreCase); }
+            get { return string.Equals(Config.Get(ConsentKey, "yes"), "yes", StringComparison.OrdinalIgnoreCase); }
         }
 
-        /// <summary>Ask once before sending anything. No is the safe default.</summary>
+        /// <summary>
+        /// Metrics are enabled on a fresh installation. There is no first-run prompt;
+        /// users can disable collection at any time from Settings → Metrics.
+        /// An explicit stored "no" always wins.
+        /// </summary>
         public static void EnsureConsentAndTrack()
         {
-            string consent = Config.Get(ConsentKey, string.Empty);
-            if (!string.Equals(consent, "yes", StringComparison.OrdinalIgnoreCase)
-                && !string.Equals(consent, "no", StringComparison.OrdinalIgnoreCase))
-            {
-                var answer = MessageBox.Show(
-                    "Разрешить отправку обезличенной статистики Zapret Panel?\n\n"
-                    + "Передаются только случайный ID установки, версия программы и факт активности — "
-                    + "не более одного раза за календарные сутки по московскому времени. "
-                    + "Повторные открытия в тот же день не увеличивают счётчик.\n\n"
-                    + "Имя компьютера, имя пользователя Windows, содержимое логов, посещаемые сайты "
-                    + "и сетевой трафик не собираются. В базе статистики IP-адреса не сохраняются. "
-                    + "Отказ не влияет на работу программы. Настройку можно изменить в разделе «Настройки».",
-                    "Обезличенная статистика Zapret Panel",
-                    MessageBoxButton.YesNo,
-                    MessageBoxImage.Information,
-                    MessageBoxResult.No);
-                consent = answer == MessageBoxResult.Yes ? "yes" : "no";
-                Config.Set(ConsentKey, consent);
-            }
-
-            if (string.Equals(consent, "yes", StringComparison.OrdinalIgnoreCase))
-                TrackDailyLaunch();
+            if (IsEnabled) TrackDailyLaunch();
         }
 
         public static void SetEnabled(bool enabled)
