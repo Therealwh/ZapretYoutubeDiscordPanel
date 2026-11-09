@@ -107,6 +107,9 @@ namespace Ydp.Pages
                 ChkWatchdog.IsChecked = BypassWatchdog.Enabled;
                 ChkNotify.IsChecked = BypassWatchdog.Notify;
                 ChkAnalytics.IsChecked = AnalyticsClient.IsEnabled;
+                AnalyticsNote.Text = AnalyticsClient.IsEnabled
+                    ? "Статистика включена: не более одного учёта этой установки за сутки по Москве."
+                    : "Отправка статистики выключена. Ранее собранные агрегированные данные не удаляются.";
                 ChkHotkey.IsChecked = MainWindow.HotkeyEnabled;
                 ChkServiceMode.IsChecked = !string.Equals(Config.Get(AutoConnect.KeyPreferService, "true"), "false", StringComparison.OrdinalIgnoreCase);
 // Ship pre-filled: a fresh install works immediately, and anyone with their
