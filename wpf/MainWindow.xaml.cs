@@ -169,6 +169,19 @@ namespace Ydp
             _updateTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(30) };
             _updateTimer.Tick += (s, e) => StartUpdateCheck();
             _updateTimer.Start();
+
+            // "Позже" is a snooze, not a permanent dismissal. Re-show the
+            // Windows-corner toast and in-app banner every 30 minutes until
+            // the user installs the release or a newer version supersedes it.
+            _updateReminderTimer = new DispatcherTimer { Interval = TimeSpan.FromMinutes(30) };
+            _updateReminderTimer.Tick += (s, e) =>
+            {
+                var info = PanelUpdater.State;
+                if (info != null && info.available && info.latest == _lastNotifiedVersion)
+                    ShowUpdateNotice(info);
+                else
+                    _updateReminderTimer.Stop();
+            };
             EnsureTelegramDomains();
 
             // Minimizing goes to the tray instead of the taskbar: the panel is a
@@ -355,7 +368,9 @@ case "support":
         /// panel is folded away) and a banner at the top of the window.
         /// </summary>
         private string _lastNotifiedVersion;
+        private UpdateToastWindow _updateToast;
         private readonly DispatcherTimer _updateTimer;
+        private readonly DispatcherTimer _updateReminderTimer;
 
         private void StartUpdateCheck()
         {
@@ -364,22 +379,65 @@ case "support":
                 {
                     if (t.Status != System.Threading.Tasks.TaskStatus.RanToCompletion) return;
                     var info = PanelUpdater.State;
-                    if (!info.available) return;
-                    // Notify once per released version. A panel that has been
-                    // running for days re-checks every 30 minutes and must not
-                    // repeat the same "new version" balloon.
-                    if (info.latest == _lastNotifiedVersion) return;
-                    _lastNotifiedVersion = info.latest;
                     Dispatcher.BeginInvoke(new Action(() =>
                     {
-                        UpdateTitle.Text = "Доступна новая версия панели — v" + info.latest;
-                        UpdateDetails.Text = "У вас v" + info.current + ". Обновление заменит файл панели и перезапустит её автоматически.";
-                        UpdateBanner.Visibility = Visibility.Visible;
-                        App.Tray?.Notify("Доступно обновление панели v" + info.latest,
-                            "Сейчас у вас v" + info.current + ". Откройте панель и нажмите «Обновить».");
+                        if (!info.available)
+                        {
+                            _updateReminderTimer?.Stop();
+                            CloseUpdateToast();
+                            UpdateBanner.Visibility = Visibility.Collapsed;
+                            _lastNotifiedVersion = null;
+                            return;
+                        }
+
+                        // A newly published version is announced immediately.
+                        // A postponed version is shown again by the 30-minute
+                        // reminder timer, even though it is the same release.
+                        if (info.latest == _lastNotifiedVersion) return;
+                        _lastNotifiedVersion = info.latest;
+                        ShowUpdateNotice(info);
                         Logger.Info("Найдено обновление панели: v" + info.current + " → v" + info.latest, "updater");
                     }));
                 });
+        }
+
+        private void ShowUpdateNotice(UpdateInfo info)
+        {
+            if (info == null || !info.available) return;
+
+            UpdateTitle.Text = "Доступна новая версия панели — v" + info.latest;
+            UpdateDetails.Text = "У вас v" + info.current + ". Обновление заменит файл панели и перезапустит её автоматически.";
+            UpdateBanner.Visibility = Visibility.Visible;
+
+            CloseUpdateToast();
+            _updateToast = new UpdateToastWindow(info.latest);
+            _updateToast.UpdateRequested += (s, e) =>
+            {
+                CloseUpdateToast();
+                BtnUpdateNow_Click(this, new RoutedEventArgs());
+            };
+            _updateToast.LaterRequested += (s, e) => PostponeUpdate();
+            _updateToast.Show();
+            Logger.Info("Показано уведомление об обновлении v" + info.latest, "updater");
+        }
+
+        private void CloseUpdateToast()
+        {
+            if (_updateToast == null) return;
+            try { _updateToast.Close(); } catch { }
+            _updateToast = null;
+        }
+
+        private void PostponeUpdate()
+        {
+            CloseUpdateToast();
+            UpdateBanner.Visibility = Visibility.Collapsed;
+            if (_updateReminderTimer != null)
+            {
+                _updateReminderTimer.Stop();
+                _updateReminderTimer.Start();
+            }
+            Logger.Info("Пользователь отложил обновление на 30 минут", "updater");
         }
 
         private async void BtnUpdateNow_Click(object sender, RoutedEventArgs e)
@@ -412,7 +470,7 @@ case "support":
 
         private void BtnBannerClose_Click(object sender, RoutedEventArgs e)
         {
-            UpdateBanner.Visibility = Visibility.Collapsed;
+            PostponeUpdate();
         }
     }
 }
